@@ -4,3 +4,8 @@ export const isSameAddress = (address1: string | undefined, address2: string | u
   if (!address1 || !address2) return false;
   return address1.trim().toLowerCase() === address2.trim().toLowerCase();
 };
+
+export const shortenAddress = (address: string, chars = 4): string => {
+  if (!address) return '';
+  return `${address.slice(0, chars)}...${address.slice(-chars)}`;
+};
