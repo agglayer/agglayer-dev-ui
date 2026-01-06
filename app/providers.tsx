@@ -1,8 +1,11 @@
-import { WalletProvider } from "@/app/context/wallet";
-import { ReactNode } from "react";
+import { WalletProvider } from '@/app/context/wallet';
+import { AggLayerSDKProvider } from '@/app/context/aggLayerSdk';
+import { ReactNode } from 'react';
 
 export const Providers = ({ children }: { children: ReactNode }) => {
   return (
-    <WalletProvider>{children}</WalletProvider>
-  )
-}
+    <WalletProvider>
+      <AggLayerSDKProvider>{children}</AggLayerSDKProvider>
+    </WalletProvider>
+  );
+};
