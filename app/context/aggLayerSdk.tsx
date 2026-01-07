@@ -3,16 +3,7 @@
 import type { PropsWithChildren } from 'react';
 import React, { createContext, useContext, useMemo } from 'react';
 import { AggLayerSDK, SDK_MODES } from '@agglayer/sdk';
-import {
-  mainnet,
-  sepolia,
-  polygon,
-  polygonAmoy,
-  xLayer,
-  polygonZkEvm,
-  katana,
-  ternoa,
-} from 'wagmi/chains';
+import { mainnet, sepolia, polygon, polygonAmoy, xLayer, polygonZkEvm, katana, ternoa } from 'wagmi/chains';
 
 type AggNative = ReturnType<AggLayerSDK['getNative']>;
 
@@ -22,7 +13,6 @@ const forknetChainId = 8338;
 
 export const AggLayerSDKProvider: React.FC<PropsWithChildren> = ({ children }) => {
   const native = useMemo(() => {
-    // Build custom RPC URLs from wagmi chains
     const customRpcUrls: Record<number, string> = {
       [mainnet.id]: mainnet.rpcUrls.default.http[0],
       [sepolia.id]: sepolia.rpcUrls.default.http[0],
@@ -41,6 +31,53 @@ export const AggLayerSDKProvider: React.FC<PropsWithChildren> = ({ children }) =
         defaultNetwork: mainnet.id,
         customRpcUrls,
         chains: [
+          {
+            chainId: polygon.id,
+            networkId: polygon.id,
+            name: polygon.name,
+            rpcUrl: polygon.rpcUrls.default.http[0],
+            nativeCurrency: polygon.nativeCurrency,
+            blockExplorer: polygon.blockExplorers?.default,
+            isTestnet: false,
+          },
+          {
+            chainId: polygonAmoy.id,
+            networkId: polygonAmoy.id,
+            name: polygonAmoy.name,
+            rpcUrl: polygonAmoy.rpcUrls.default.http[0],
+            nativeCurrency: polygonAmoy.nativeCurrency,
+            blockExplorer: polygonAmoy.blockExplorers?.default,
+            isTestnet: true,
+          },
+          {
+            chainId: xLayer.id,
+            networkId: xLayer.id,
+            name: xLayer.name,
+            rpcUrl: xLayer.rpcUrls.default.http[0],
+            nativeCurrency: xLayer.nativeCurrency,
+            blockExplorer: xLayer.blockExplorers?.default,
+            isTestnet: false,
+          },
+          {
+            chainId: polygonZkEvm.id,
+            networkId: polygonZkEvm.id,
+            name: polygonZkEvm.name,
+            rpcUrl: polygonZkEvm.rpcUrls.default.http[0],
+            nativeCurrency: polygonZkEvm.nativeCurrency,
+            blockExplorer: polygonZkEvm.blockExplorers?.default,
+            isTestnet: false,
+          },
+          // Ternoa
+          {
+            chainId: ternoa.id,
+            networkId: ternoa.id,
+            name: ternoa.name,
+            rpcUrl: ternoa.rpcUrls.default.http[0],
+            nativeCurrency: ternoa.nativeCurrency,
+            blockExplorer: ternoa.blockExplorers?.default,
+            isTestnet: false,
+          },
+          // Forknet
           {
             chainId: forknetChainId,
             networkId: forknetChainId,

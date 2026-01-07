@@ -1,0 +1,4 @@
+export const appConfig = {
+  BALANCE_API_MAINNET_URL: process.env.NEXT_PUBLIC_BALANCE_API_ORIGIN_MAINNET || '',
+  BALANCE_API_TESTNET_URL: process.env.NEXT_PUBLIC_BALANCE_API_ORIGIN_TESTNET || '',
+} as const;
