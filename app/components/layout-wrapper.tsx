@@ -12,8 +12,8 @@ export const LayoutWrapper = ({ children }: { children: React.ReactNode }) => {
       <Header onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)} />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
-        <main className="flex-1 overflow-auto bg-gray-50">
-          <div className="max-w-7xl mx-auto px-4 py-6">{children}</div>
+        <main className="flex-1 bg-background overflow-auto">
+          <div className="max-w-7xl mx-auto px-4 py-8">{children}</div>
         </main>
       </div>
     </div>

@@ -33,7 +33,7 @@ export const ConnectButton = () => {
       <div className="relative" ref={popoverRef}>
         <button
           onClick={() => setIsPopoverOpen(!isPopoverOpen)}
-          className="flex items-center gap-2 py-2 px-4 bg-gray-200  rounded-md hover:bg-gray-300 cursor-pointer"
+          className="flex items-center gap-2 py-2 px-4 bg-surface-muted text-black border border-border rounded-xl hover:bg-surface cursor-pointer shadow-xs transition-colors"
         >
           <WalletIcon walletIcon={walletIcon} className="size-5" />
           {shortenAddress(address)}
@@ -41,10 +41,10 @@ export const ConnectButton = () => {
         </button>
 
         {isPopoverOpen && (
-          <div className="absolute top-full right-0 mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+          <div className="absolute top-full right-0 mt-2 w-64 bg-surface border border-border rounded-xl  z-50">
             <div className="p-4">
               <div className="flex items-center justify-between gap-2 mb-3">
-                <div className="text-sm font-mono text-gray-900 break-all">{shortenAddress(address, 8)}</div>
+                <div className="text-sm font-mono text-black break-all">{shortenAddress(address, 8)}</div>
                 <CopyText textToCopy={address} />
               </div>
               <button
@@ -52,7 +52,7 @@ export const ConnectButton = () => {
                   disconnect();
                   setIsPopoverOpen(false);
                 }}
-                className="w-full py-2 px-4 text-sm text-gray-700 hover:bg-gray-50 rounded-md cursor-pointer border border-gray-200"
+                className="w-full py-2 px-4 text-sm text-black hover:bg-surface-muted rounded-lg cursor-pointer border border-border transition-colors"
               >
                 Disconnect
               </button>
@@ -66,7 +66,7 @@ export const ConnectButton = () => {
   return (
     <button
       onClick={connect}
-      className="py-2 px-4 bg-blue-500 text-white rounded-md hover:bg-blue-600 font-bold cursor-pointer"
+      className="py-2.5 px-4 bg-primary text-white rounded-xl hover:brightness-110 font-semibold cursor-pointer shadow-xs transition"
     >
       Connect Wallet
     </button>

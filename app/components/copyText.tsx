@@ -68,7 +68,7 @@ export const CopyText: React.FC<CopyTextProps> = ({ textToCopy, buttonClassName 
         <span
           role="status"
           aria-live="polite"
-          className="absolute -top-8 right-0 w-max max-w-xs rounded-md border border-gray-300 bg-white px-2 py-1 text-xs font-medium shadow-sm"
+          className="absolute -top-8 right-0 w-max max-w-xs rounded-md border border-gray-300 bg-white px-2 py-1 text-xs font-medium shadow-xs"
         >
           Copied
         </span>

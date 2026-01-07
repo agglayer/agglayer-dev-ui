@@ -36,11 +36,11 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
   ];
 
   return (
-    <div className="flex items-center justify-between py-2 px-4 border-b border-gray-200 bg-white">
+    <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-white">
       <div className="flex items-center gap-4">
         <button
           onClick={onMenuClick}
-          className="lg:hidden p-2 hover:bg-gray-100 rounded-md cursor-pointer"
+          className="lg:hidden p-2 rounded-xl border border-border hover:bg-surface-muted cursor-pointer transition-colors"
           aria-label="Toggle menu"
         >
           <Menu size={20} />
@@ -52,12 +52,12 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
         <div ref={popoverRef}>
           <button
             onClick={() => setIsPopoverOpen(!isPopoverOpen)}
-            className="p-2 rounded-md border border-gray-300 hover:bg-gray-50 cursor-pointer"
+            className="p-2 rounded-xl border border-border hover:bg-surface-muted cursor-pointer transition-colors"
           >
             <EllipsisVertical size={20} />
           </button>
           {isPopoverOpen && (
-            <div className="absolute top-full right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+            <div className="absolute top-full right-0 mt-2 w-48 bg-surface border border-border rounded-xl  z-50">
               <div className="py-1">
                 {menuItems.map((item) => (
                   <a
@@ -65,7 +65,7 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
                     href={item.href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer"
+                    className="block px-4 py-2 text-sm text-black hover:bg-surface-muted cursor-pointer"
                     onClick={() => setIsPopoverOpen(false)}
                   >
                     {item.label}

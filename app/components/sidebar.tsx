@@ -34,14 +34,17 @@ export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
       <aside
         className={cn(
           'fixed lg:static top-0 left-0 h-full',
-          'bg-white border-r border-gray-200',
+          'bg-white border-r border-border lg:shadow-none',
           'w-64 z-50 transition-transform duration-300 ease-in-out',
           isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
         )}
       >
         <div className="flex flex-col h-full p-2">
           <div className="lg:hidden flex justify-end">
-            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-md cursor-pointer">
+            <button
+              onClick={onClose}
+              className="p-2 rounded-xl hover:bg-surface-muted cursor-pointer transition-colors"
+            >
               <X size={20} />
             </button>
           </div>
@@ -56,8 +59,8 @@ export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
                       href={item.path}
                       onClick={onClose}
                       className={cn(
-                        'flex items-center gap-3 px-3 py-2 rounded-lg relative cursor-pointer',
-                        isActive ? 'text-gray-900 bg-gray-50' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
+                        'flex items-center gap-3 px-3 py-2 rounded-lg relative cursor-pointer transition-colors',
+                        isActive ? 'text-black bg-surface-muted' : 'text-muted hover:bg-surface-muted hover:text-black',
                       )}
                     >
                       {isActive && <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-500 rounded-l" />}
@@ -74,7 +77,7 @@ export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
               href={EXTERNAL_LINKS.CONTACT_SUPPORT}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-3 px-3 py-2 text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-lg cursor-pointer"
+              className="flex items-center gap-3 px-3 py-2 text-muted hover:bg-surface-muted hover:text-black rounded-lg cursor-pointer transition-colors"
             >
               <CircleUser size={20} />
               <span className="font-medium">Contact Support</span>
