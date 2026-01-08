@@ -3,7 +3,7 @@
 import { Search } from 'lucide-react';
 import { cn } from '@/app/utils/common';
 
-type TextInputProps = {
+interface TextInputProps {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
@@ -11,7 +11,8 @@ type TextInputProps = {
   disabled?: boolean;
   isSearch?: boolean;
   className?: string;
-};
+  isError?: boolean;
+}
 
 export const TextInput = ({
   value,
@@ -21,14 +22,16 @@ export const TextInput = ({
   disabled,
   isSearch,
   className,
+  isError = false,
 }: TextInputProps) => {
   return (
     <label className={cn('flex flex-col gap-2', disabled && 'opacity-60 cursor-not-allowed')}>
       {label && <span className="text-sm font-medium text-muted">{label}</span>}
       <div
         className={cn(
-          'flex items-center gap-3 rounded-xl border border-border bg-surface px-3 py-2 shadow-xs',
+          'flex items-center gap-3 rounded-xl border bg-surface px-3 py-2 shadow-xs',
           disabled ? 'cursor-not-allowed bg-surface-muted' : 'hover:border-slate-300',
+          isError ? 'border-red' : 'border-border',
           className,
         )}
       >

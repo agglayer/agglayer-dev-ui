@@ -11,20 +11,20 @@ export type DropdownOption = {
   description?: string;
 };
 
-type DropdownProps = {
+interface DropdownProps {
   options: DropdownOption[];
   selectedValue?: string;
-  onSelectAction: (option: DropdownOption) => void;
+  onSelect: (option: DropdownOption) => void;
   placeholder?: string;
   label?: string;
   disabled?: boolean;
   className?: string;
-};
+}
 
 export const Dropdown = ({
   options,
   selectedValue,
-  onSelectAction,
+  onSelect,
   placeholder = 'Select',
   label,
   disabled,
@@ -33,10 +33,7 @@ export const Dropdown = ({
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const selected = useMemo(
-    () => options.find((option) => option.value === selectedValue),
-    [options, selectedValue],
-  );
+  const selected = useMemo(() => options.find((option) => option.value === selectedValue), [options, selectedValue]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -70,9 +67,7 @@ export const Dropdown = ({
       >
         <span className="flex items-center gap-2 text-sm">
           {selected?.icon}
-          <span className={cn(selected ? 'text-black' : 'text-grey')}>
-            {selected?.label ?? placeholder}
-          </span>
+          <span className={cn(selected ? 'text-black' : 'text-grey')}>{selected?.label ?? placeholder}</span>
         </span>
         <ChevronDown size={16} className={cn('text-muted transition-transform', open && 'rotate-180')} />
       </button>
@@ -84,7 +79,7 @@ export const Dropdown = ({
                 key={option.value}
                 type="button"
                 onClick={() => {
-                  onSelectAction(option);
+                  onSelect(option);
                   setOpen(false);
                 }}
                 className={cn(
@@ -95,15 +90,11 @@ export const Dropdown = ({
                 {option.icon}
                 <div className="flex flex-col">
                   <span className="text-sm font-medium text-black">{option.label}</span>
-                  {option.description && (
-                    <span className="text-xs text-grey">{option.description}</span>
-                  )}
+                  {option.description && <span className="text-xs text-grey">{option.description}</span>}
                 </div>
               </button>
             ))}
-            {options.length === 0 && (
-              <div className="px-3 py-2 text-sm text-grey">No options available</div>
-            )}
+            {options.length === 0 && <div className="px-3 py-2 text-sm text-grey">No options available</div>}
           </div>
         </div>
       )}

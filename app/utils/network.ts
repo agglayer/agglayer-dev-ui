@@ -1,8 +1,5 @@
-export const isTestnetChain = (chainId: number): boolean => {
-  const testnetChains = [
-    11155111,
-    80002,
-  ];
+import { SUPPORTED_CHAINS } from '@/app/constants/chains';
 
-  return testnetChains.includes(chainId);
+export const isTestnetChain = (chainId: number): boolean => {
+  return SUPPORTED_CHAINS.some((chain) => chain.id === chainId && chain.isTestnet);
 };

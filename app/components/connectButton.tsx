@@ -6,6 +6,7 @@ import { CopyText } from '@/app/components/copyText';
 import { WalletIcon } from '@/app/components/walletIcon';
 import { useState, useRef, useEffect } from 'react';
 import { ChevronDown } from 'lucide-react';
+import { Button } from '@/app/components/ui/button';
 
 export const ConnectButton = () => {
   const { connect, address, status, disconnect, walletIcon } = useWallet();
@@ -63,12 +64,5 @@ export const ConnectButton = () => {
     );
   }
 
-  return (
-    <button
-      onClick={connect}
-      className="py-2.5 px-4 bg-primary text-white rounded-xl hover:brightness-110 font-semibold cursor-pointer shadow-xs transition"
-    >
-      Connect Wallet
-    </button>
-  );
+  return <Button onClick={connect}>Connect Wallet</Button>;
 };

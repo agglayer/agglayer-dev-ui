@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { cn } from '@/app/utils/common';
 
-type ModalProps = {
+interface ModalProps {
   open: boolean;
   onClose: () => void;
   title?: string;
@@ -13,7 +13,7 @@ type ModalProps = {
   className?: string;
   contentClassName?: string;
   showCloseButton?: boolean;
-};
+}
 
 export const Modal = ({
   open,
@@ -49,7 +49,7 @@ export const Modal = ({
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+    <div className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-24">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
       <div
         ref={contentRef}

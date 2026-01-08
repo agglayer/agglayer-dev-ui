@@ -8,7 +8,7 @@ type QuickAction = {
   value: string;
 };
 
-type AmountInputProps = {
+interface AmountInputProps {
   label?: string;
   value: string;
   onChange: (value: string) => void;
@@ -16,11 +16,11 @@ type AmountInputProps = {
   balanceText?: string;
   tokenLabel?: string;
   tokenIcon?: ReactNode;
-  onTokenClick?: () => void;
+  onClick?: () => void;
   quickActions?: QuickAction[];
   disabled?: boolean;
   className?: string;
-};
+}
 
 export const AmountInput = ({
   label,
@@ -30,17 +30,14 @@ export const AmountInput = ({
   balanceText,
   tokenLabel,
   tokenIcon,
-  onTokenClick,
+  onClick,
   quickActions = [],
   disabled,
   className,
 }: AmountInputProps) => {
   return (
     <div className={cn('flex flex-col gap-2', className)}>
-      <div className="flex items-center justify-between text-sm">
-        {label && <span className="font-medium text-muted">{label}</span>}
-        {balanceText && <span className="text-grey">Balance: {balanceText}</span>}
-      </div>
+      {label && <span className="text-sm font-medium text-muted">{label}</span>}
 
       <div
         className={cn(
@@ -63,11 +60,11 @@ export const AmountInput = ({
         {tokenLabel && (
           <button
             type="button"
-            onClick={onTokenClick}
+            onClick={onClick}
             disabled={disabled}
             className={cn(
               'flex items-center gap-2 rounded-xl border border-border bg-surface-muted px-3 py-2 text-sm font-semibold cursor-pointer',
-              disabled ? 'cursor-not-allowed opacity-70' : 'hover:border-slate-300 hover:bg-surface transition-colors',
+              disabled ? 'cursor-not-allowed opacity-70' : 'hover:border-blue hover:bg-surface transition-colors',
             )}
           >
             {tokenIcon}
@@ -76,22 +73,27 @@ export const AmountInput = ({
         )}
       </div>
 
-      {quickActions.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {quickActions.map((action) => (
-            <button
-              key={action.label}
-              type="button"
-              onClick={() => onChange(action.value)}
-              disabled={disabled}
-              className={cn(
-                'rounded-lg border border-border bg-surface px-3 py-1 text-xs font-semibold text-muted cursor-pointer',
-                disabled ? 'cursor-not-allowed opacity-60' : 'hover:border-slate-300 hover:text-black',
-              )}
-            >
-              {action.label}
-            </button>
-          ))}
+      {(balanceText || quickActions.length > 0) && (
+        <div className="flex items-center justify-between text-sm">
+          {balanceText ? <span className="text-grey">Balance: {balanceText}</span> : <span />}
+          {quickActions.length > 0 && (
+            <div className="flex flex-wrap gap-2 justify-end">
+              {quickActions.map((action) => (
+                <button
+                  key={action.label}
+                  type="button"
+                  onClick={() => onChange(action.value)}
+                  disabled={disabled}
+                  className={cn(
+                    'rounded-lg border border-border bg-surface px-3 py-1 text-xs font-semibold text-muted cursor-pointer',
+                    disabled ? 'cursor-not-allowed opacity-60' : 'hover:border-blue hover:text-black',
+                  )}
+                >
+                  {action.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
