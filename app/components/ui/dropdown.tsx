@@ -38,6 +38,7 @@ export const Dropdown = ({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const selected = useMemo(() => options.find((option) => option.value === selectedValue), [options, selectedValue]);
+  const showClearButton = Boolean(clearable && selected && !disabled);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -61,7 +62,7 @@ export const Dropdown = ({
       <div
         className={cn(
           'flex items-center gap-2 rounded-xl border px-3 py-2 shadow-xs transition',
-          selected ? 'border-blue bg-blue/5 text-blue' : 'border-border bg-surface text-black',
+          selected && clearable ? 'border-blue bg-blue/5 text-blue' : 'border-border bg-surface text-black',
           disabled ? 'cursor-not-allowed bg-surface-muted opacity-70' : 'hover:border-blue',
         )}
       >
@@ -75,18 +76,21 @@ export const Dropdown = ({
             {selected?.icon}
             <span className={cn(selected ? 'text-black' : 'text-grey')}>{selected?.label ?? placeholder}</span>
           </span>
-          {!selected && (
-            <ChevronDown size={16} className={cn('text-muted transition-transform', open && 'rotate-180')} />
+          {!showClearButton && (
+            <ChevronDown
+              size={16}
+              className={cn('text-muted transition-transform cursor-pointer', open && 'rotate-180')}
+            />
           )}
         </button>
-        {clearable && selected && !disabled && (
+        {showClearButton && (
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
               onClear?.();
             }}
-            className="p-1 rounded-full hover:bg-surface-muted text-grey"
+            className="p-1 cursor-pointer rounded-full hover:bg-surface-muted text-grey"
             aria-label="Clear selection"
           >
             <X size={14} />

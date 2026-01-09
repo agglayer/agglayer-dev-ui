@@ -74,9 +74,8 @@ export const TokenSelectorListView = ({
               >
                 <div className="flex items-center gap-3">
                   <BadgeImageFallback
-                    variant="token"
                     src={token.logoURI || getTokenLogoBySymbol(token.symbol)}
-                    size="sm"
+                    size="md"
                     fallbackText={token.symbol}
                   />
                   <div className="flex flex-col">
@@ -85,7 +84,7 @@ export const TokenSelectorListView = ({
                   </div>
                   {chain && (
                     <div className="inline-flex items-center gap-1 rounded-full border border-border bg-surface-muted px-2 py-0.75 text-xs text-grey">
-                      <BadgeImageFallback variant="chain" src={chain.icon} size="xs" />
+                      <BadgeImageFallback src={chain.icon} size="xs" />
                       <span>{chain.name}</span>
                     </div>
                   )}

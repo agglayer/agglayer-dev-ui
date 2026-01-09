@@ -55,7 +55,7 @@ export const ManageTokensView: React.FC<ManageTokensViewProps> = ({
       decimals: data.decimals,
       symbol: data.symbol,
       name: data.name,
-      logoURI: data.logoURI,
+      logoURI: data.logoURI || getTokenLogoBySymbol(data.symbol),
       isCustom: true,
     };
     onAddCustomToken(token);
@@ -116,7 +116,6 @@ export const ManageTokensView: React.FC<ManageTokensViewProps> = ({
         <div className="space-y-3 rounded-xl border border-border bg-surface px-3 py-3 shadow-xs">
           <div className="flex items-center gap-3">
             <BadgeImageFallback
-              variant="token"
               src={data.logoURI || getTokenLogoBySymbol(data.symbol)}
               size="lg"
               fallbackText={data.symbol}
@@ -203,30 +202,35 @@ export const ManageTokensView: React.FC<ManageTokensViewProps> = ({
           )}
 
           {filteredCustomTokens.length > 0 && (
-            <div className="space-y-2">
-              {filteredCustomTokens.map((token) => (
-                <div
-                  key={`${token.chainId}-${token.address}`}
-                  className="flex items-center justify-between rounded-xl border border-border bg-surface px-3 py-2 shadow-xs"
-                >
-                  <div className="flex items-center gap-3">
-                    <BadgeImageFallback variant="token" src={token.logoURI} size="sm" fallbackText={token.symbol} />
-                    <div className="flex flex-col">
-                      <span className="text-sm font-semibold text-black">{token.symbol}</span>
-                      <span className="text-xs text-grey">{token.name}</span>
-                      <span className="text-xs text-muted font-mono break-all">{shortenAddress(token.address, 6)}</span>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => onRemoveCustomToken(token.chainId, token.address)}
-                    className="rounded-full border border-border bg-surface-muted cursor-pointer p-2 text-grey hover:text-black hover:border-slate-300 transition-colors"
-                    aria-label={`Delete ${token.symbol}`}
+            <div className="space-y-2 max-h-80 overflow-y-auto py-2">
+              {filteredCustomTokens.map((token) => {
+                const tokenLogo = token.logoURI || getTokenLogoBySymbol(token.symbol);
+                return (
+                  <div
+                    key={`${token.chainId}-${token.address}`}
+                    className="flex items-center justify-between rounded-xl border border-border bg-surface px-3 py-2 shadow-xs"
                   >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              ))}
+                    <div className="flex items-center gap-3">
+                      <BadgeImageFallback src={tokenLogo} size="md" fallbackText={token.symbol} />
+                      <div className="flex flex-col">
+                        <span className="text-sm font-semibold text-black">{token.symbol}</span>
+                        <span className="text-xs text-grey">{token.name}</span>
+                        <span className="text-xs text-muted font-mono break-all">
+                          {shortenAddress(token.address, 6)}
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onRemoveCustomToken(token.chainId, token.address)}
+                      className="rounded-full border border-border bg-surface-muted cursor-pointer p-2 text-grey hover:text-black hover:border-slate-300 transition-colors"
+                      aria-label={`Delete ${token.symbol}`}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

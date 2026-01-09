@@ -68,14 +68,14 @@ export const TransactionListItem = ({ transaction, onClaim }: TransactionListIte
           <div className="flex flex-wrap items-center gap-2 text-sm text-black">
             {sourceChain && (
               <span className="inline-flex items-center gap-2">
-                <BadgeImageFallback variant="chain" src={sourceChain.icon} size="sm" fallbackText={sourceChain.name} />
+                <BadgeImageFallback src={sourceChain.icon} size="sm" fallbackText={sourceChain.name} />
                 <span className="font-medium">{sourceChain.name}</span>
               </span>
             )}
             <ArrowRight size={18} className="text-grey" />
             {destChain && (
               <span className="inline-flex items-center gap-2">
-                <BadgeImageFallback variant="chain" src={destChain.icon} size="sm" fallbackText={destChain.name} />
+                <BadgeImageFallback src={destChain.icon} size="sm" fallbackText={destChain.name} />
                 <span className="font-medium">{destChain.name}</span>
               </span>
             )}
@@ -87,7 +87,7 @@ export const TransactionListItem = ({ transaction, onClaim }: TransactionListIte
 
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            {tokenLogo && <BadgeImageFallback variant="token" src={tokenLogo} size="md" fallbackText={tokenSymbol} />}
+            {tokenLogo && <BadgeImageFallback src={tokenLogo} size="md" fallbackText={tokenSymbol} />}
             <span className="text-3xl font-bold text-black">
               {formattedAmount} {tokenSymbol}
             </span>

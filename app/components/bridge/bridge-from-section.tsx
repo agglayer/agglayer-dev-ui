@@ -63,7 +63,6 @@ export const BridgeFromSection = ({
           tokenIcon={
             selectedToken ? (
               <BadgeImageFallback
-                variant="token"
                 src={selectedToken.logoURI || getTokenLogoBySymbol(selectedToken.symbol)}
                 size="sm"
                 fallbackText={selectedToken.symbol}

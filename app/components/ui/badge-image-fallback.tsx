@@ -1,50 +1,41 @@
-import { cn } from '@/app/utils/common';
 import Image from 'next/image';
 import { useState } from 'react';
+import { cn } from '@/app/utils/common';
 
-type Variant = 'token' | 'chain';
-type Size = 'xs' | 'sm' | 'md' | 'lg';
+type Size = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 
 interface BadgeImageFallbackProps {
   src?: string;
-  variant: Variant;
-  size: Size;
+  size?: Size;
   className?: string;
   fallbackText?: string; // Token symbol or chain name for text fallback
 }
 
-const sizeClassMap: Record<Variant, Record<Size, string>> = {
-  token: {
-    xs: 'size-4',
-    sm: 'size-6',
-    md: 'size-8',
-    lg: 'size-10',
-  },
-  chain: {
-    xs: 'size-4',
-    sm: 'size-6',
-    md: 'size-7',
-    lg: 'size-8',
-  },
+const sizeClassMap: Record<Size, string> = {
+  xs: 'size-4',
+  sm: 'size-6',
+  md: 'size-8',
+  lg: 'size-10',
+  xl: 'size-10',
 };
 
 const textSizeMap: Record<Size, string> = {
   xs: 'text-[10px]',
   sm: 'text-xs',
-  md: 'text-xs',
+  md: 'text-sm',
   lg: 'text-sm',
+  xl: 'text-base',
 };
 
 export const BadgeImageFallback: React.FC<BadgeImageFallbackProps> = ({
   src,
-  variant,
-  size,
+  size = 'md',
   className,
   fallbackText,
 }) => {
   const [imageError, setImageError] = useState(false);
 
-  const classes = cn('rounded-full shrink-0 bg-grey-light', sizeClassMap[variant][size], className);
+  const classes = cn('rounded-full shrink-0 bg-grey-light', sizeClassMap[size], className);
 
   // Show text fallback when image is missing/error and fallbackText is provided
   const shouldShowTextFallback = (!src || imageError) && fallbackText && fallbackText.length > 0;
@@ -57,7 +48,7 @@ export const BadgeImageFallback: React.FC<BadgeImageFallbackProps> = ({
           'flex items-center justify-center bg-blue-subtle text-black font-semibold',
           textSizeMap[size],
         )}
-        aria-label={`${fallbackText} ${variant}`}
+        aria-label={fallbackText}
       >
         {fallbackText.charAt(0).toUpperCase()}
       </div>
@@ -69,6 +60,13 @@ export const BadgeImageFallback: React.FC<BadgeImageFallbackProps> = ({
   }
 
   return (
-    <Image src={src} alt={variant} width={100} height={100} className={classes} onError={() => setImageError(true)} />
+    <Image
+      src={src}
+      alt={fallbackText || 'logo'}
+      width={100}
+      height={100}
+      className={classes}
+      onError={() => setImageError(true)}
+    />
   );
 };

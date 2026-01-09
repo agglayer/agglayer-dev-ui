@@ -21,7 +21,7 @@ const createChainOptions = (excludeChainId?: number): DropdownOption[] => {
   return SUPPORTED_CHAINS.filter((chain) => chain.id !== excludeChainId).map((chain) => ({
     value: chain.id.toString(),
     label: chain.name,
-    icon: <BadgeImageFallback variant="chain" src={chain.icon} size="xs" />,
+    icon: <BadgeImageFallback src={chain.icon} size="sm" />,
   }));
 };
 
