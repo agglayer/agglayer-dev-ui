@@ -62,7 +62,7 @@ export const Dropdown = ({
       <div
         className={cn(
           'flex items-center gap-2 rounded-xl border px-3 py-2 shadow-xs transition',
-          selected && clearable ? 'border-blue bg-blue/5 text-blue' : 'border-border bg-surface text-black',
+          selected && clearable ? 'border-blue bg-blue-subtle text-blue' : 'border-border bg-surface text-black',
           disabled ? 'cursor-not-allowed bg-surface-muted opacity-70' : 'hover:border-blue',
         )}
       >

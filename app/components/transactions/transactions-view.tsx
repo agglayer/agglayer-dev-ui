@@ -12,6 +12,7 @@ import { DEFAULT_FROM_CHAIN_ID } from '@/app/constants/chains';
 import type { TransactionStatus } from '@/app/types/transaction';
 import type { Transaction } from '@/app/types/transaction';
 import { getTransactionInitialStatus } from '@/app/components/transactions/intialStatus';
+import { TransactionDetailsModal } from '@/app/components/transactions/transaction-details-modal';
 
 export const TransactionsView = () => {
   const { address, status, chainId, connect } = useWallet();
@@ -20,6 +21,8 @@ export const TransactionsView = () => {
     status: initialStatus ?? undefined,
   }));
   const statusKey = (initialStatus || filters.status || 'all') as string;
+  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
+  const [isDifferentAddress, setIsDifferentAddress] = useState<boolean>(false);
 
   const queryFilters = useMemo(
     () => ({
@@ -50,6 +53,18 @@ export const TransactionsView = () => {
   const handleClaim = (transaction: Transaction) => {
     console.log('Claiming transaction:', transaction);
     // TODO: Implement claim logic
+  };
+
+  const handleSelectTransaction = (transaction: Transaction) => {
+    setSelectedTransaction(transaction);
+    const walletAddr = address?.toLowerCase();
+    const receiver = transaction.receiverAddress?.toLowerCase();
+    setIsDifferentAddress(Boolean(walletAddr && receiver && walletAddr !== receiver));
+  };
+
+  const handleCloseModal = () => {
+    setSelectedTransaction(null);
+    setIsDifferentAddress(false);
   };
 
   return (
@@ -129,8 +144,17 @@ export const TransactionsView = () => {
           hasNextPage={hasNextPage}
           onLoadMore={() => fetchNextPage()}
           onClaim={handleClaim}
+          onSelect={handleSelectTransaction}
         />
       )}
+
+      <TransactionDetailsModal
+        open={Boolean(selectedTransaction)}
+        onClose={handleCloseModal}
+        transaction={selectedTransaction}
+        isDifferentAddress={isDifferentAddress}
+        onClaim={handleClaim}
+      />
     </Card>
   );
 };

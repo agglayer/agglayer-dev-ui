@@ -16,7 +16,11 @@ export interface Transaction {
   depositCount: number;
   transactionIndex: number;
   transactionHash: string;
+  claimTransactionHash?: string;
+  claimTimestamp?: number;
+  claimBlockNumber?: number;
   blockNumber: number;
+  globalIndex?: string;
   originTokenAddress: string;
   originTokenNetwork: number;
   timestamp: number;

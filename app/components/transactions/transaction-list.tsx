@@ -14,6 +14,7 @@ interface TransactionListProps {
   hasNextPage?: boolean;
   onLoadMore?: () => void;
   onClaim?: (transaction: Transaction) => void;
+  onSelect?: (transaction: Transaction) => void;
 }
 
 export const TransactionList = ({
@@ -23,6 +24,7 @@ export const TransactionList = ({
   hasNextPage,
   onLoadMore,
   onClaim,
+  onSelect,
 }: TransactionListProps) => {
   const sentinelRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -64,7 +66,7 @@ export const TransactionList = ({
           <h3 className="text-xs font-semibold uppercase tracking-wide text-grey">{date}</h3>
           <div className="space-y-2">
             {txs.map((tx) => (
-              <TransactionListItem key={tx.hubUID} transaction={tx} onClaim={onClaim} />
+              <TransactionListItem key={tx.hubUID} transaction={tx} onClaim={onClaim} onSelect={onSelect} />
             ))}
           </div>
         </div>

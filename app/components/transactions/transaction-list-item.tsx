@@ -9,7 +9,7 @@ import { useTokenMetadata } from '@/app/hooks/useTokenMetadata';
 import { getChainByNetworkId } from '@/app/constants/chains';
 import { useTokens } from '@/app/context/token';
 import { shortenAddress } from '@/app/utils/address';
-import { formatTransactionAmount } from '@/app/utils/transaction';
+import { formatTransactionAmount, isNativeToken } from '@/app/utils/transaction';
 import type { Transaction } from '@/app/types/transaction';
 import { cn } from '@/app/utils/common';
 import { getTokenLogoBySymbol } from '@/app/utils/tokens';
@@ -17,13 +17,10 @@ import { getTokenLogoBySymbol } from '@/app/utils/tokens';
 interface TransactionListItemProps {
   transaction: Transaction;
   onClaim?: (transaction: Transaction) => void;
+  onSelect?: (transaction: Transaction) => void;
 }
 
-const isNativeToken = (address: string) => {
-  return address === '0x0000000000000000000000000000000000000000';
-};
-
-export const TransactionListItem = ({ transaction, onClaim }: TransactionListItemProps) => {
+export const TransactionListItem = ({ transaction, onClaim, onSelect }: TransactionListItemProps) => {
   const sourceChain = getChainByNetworkId(transaction.sourceNetwork);
   const destChain = getChainByNetworkId(transaction.destinationNetwork);
   const isClaimable = transaction.status === 'READY_TO_CLAIM';
@@ -59,6 +56,7 @@ export const TransactionListItem = ({ transaction, onClaim }: TransactionListIte
 
   return (
     <div
+      onClick={() => onSelect?.(transaction)}
       className={cn(
         'rounded-2xl border border-border bg-surface shadow-sm transition hover:border-blue hover:shadow-md cursor-pointer',
       )}
@@ -109,7 +107,10 @@ export const TransactionListItem = ({ transaction, onClaim }: TransactionListIte
               {destChain?.explorer && (
                 <button
                   type="button"
-                  onClick={() => window.open(`${destChain.explorer}/address/${transaction.receiverAddress}`, '_blank')}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    window.open(`${destChain.explorer}/address/${transaction.receiverAddress}`, '_blank');
+                  }}
                   className="rounded p-1 hover:bg-surface cursor-pointer"
                 >
                   <ExternalLink size={14} className="text-grey" />
@@ -131,7 +132,10 @@ export const TransactionListItem = ({ transaction, onClaim }: TransactionListIte
               {sourceChain?.explorer && (
                 <button
                   type="button"
-                  onClick={() => window.open(`${sourceChain.explorer}/tx/${transaction.transactionHash}`, '_blank')}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    window.open(`${sourceChain.explorer}/tx/${transaction.transactionHash}`, '_blank');
+                  }}
                   className="rounded p-1 hover:bg-surface cursor-pointer"
                 >
                   <ExternalLink size={14} className="text-grey" />
@@ -142,7 +146,14 @@ export const TransactionListItem = ({ transaction, onClaim }: TransactionListIte
         </div>
 
         {isClaimable && (
-          <Button onClick={() => onClaim?.(transaction)} size="md" className="w-full">
+          <Button
+            onClick={(event) => {
+              event.stopPropagation();
+              onClaim?.(transaction);
+            }}
+            size="md"
+            className="w-full"
+          >
             Claim tokens
           </Button>
         )}

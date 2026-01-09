@@ -2,7 +2,7 @@ import { WagmiAdapter } from '@reown/appkit-adapter-wagmi';
 import type { Chain } from 'wagmi/chains';
 import { mainnet, polygon, xLayer, polygonZkEvm, katana, ternoa, polygonAmoy, sepolia } from 'wagmi/chains';
 
-const forknet: Chain = {
+export const forknet: Chain = {
   id: 8338,
   name: 'Forknet',
   rpcUrls: {

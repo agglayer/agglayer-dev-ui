@@ -127,7 +127,7 @@ export const ManageTokensView: React.FC<ManageTokensViewProps> = ({
               <span className="text-xs text-grey">{shortenAddress(data.tokenAddress)}</span>
             </div>
             {existingToken && (
-              <span className="rounded-full bg-blue/10 text-blue text-xs px-2 py-0.5 font-semibold">Imported</span>
+              <span className="rounded-full bg-blue-light text-blue text-xs px-2 py-0.5 font-semibold">Imported</span>
             )}
           </div>
           <div className="space-y-2 text-sm">

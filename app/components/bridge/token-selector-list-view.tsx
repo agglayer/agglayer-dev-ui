@@ -67,7 +67,7 @@ export const TokenSelectorListView = ({
                 className={cn(
                   'flex items-center justify-between gap-3 rounded-xl border px-3 py-2 transition-colors text-left',
                   isSelected
-                    ? 'border-blue bg-blue/5 shadow-xs'
+                    ? 'border-blue bg-blue-subtle shadow-xs'
                     : 'border-border hover:border-blue/50 hover:bg-surface-muted',
                 )}
                 aria-pressed={isSelected}
@@ -89,7 +89,7 @@ export const TokenSelectorListView = ({
                     </div>
                   )}
                   {token.isCustom && (
-                    <span className="rounded-full bg-blue/10 text-blue text-xs px-2 py-0.5 font-semibold">
+                    <span className="rounded-full bg-blue-light text-blue text-xs px-2 py-0.5 font-semibold">
                       Imported
                     </span>
                   )}

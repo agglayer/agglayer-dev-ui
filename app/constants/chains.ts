@@ -1,4 +1,16 @@
+import { forknet } from '@/app/config/wagmiConfig';
 import type { ChainMetadata } from '@/app/types/chain';
+import type { Chain } from 'wagmi/chains';
+import { mainnet, polygonZkEvm, xLayer, katana, ternoa } from 'wagmi/chains';
+
+export const NETWORK_ID_TO_VIEM_CHAIN: Record<number, Chain> = {
+  0: mainnet,
+  1: polygonZkEvm,
+  3: xLayer,
+  13: ternoa,
+  20: katana,
+  22: forknet,
+};
 
 export const SUPPORTED_CHAINS: ChainMetadata[] = [
   {
@@ -89,6 +101,8 @@ export const getChainById = (chainId: number) => SUPPORTED_CHAINS.find((chain) =
 
 export const getChainByNetworkId = (networkId: number) =>
   SUPPORTED_CHAINS.find((chain) => chain.networkId === networkId);
+
+export const getViemChainByNetworkId = (networkId: number) => NETWORK_ID_TO_VIEM_CHAIN[networkId];
 
 export const mainnetChains = SUPPORTED_CHAINS.filter((chain) => !chain.isTestnet);
 export const testnetChains = SUPPORTED_CHAINS.filter((chain) => chain.isTestnet);
