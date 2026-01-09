@@ -66,7 +66,9 @@ export const TokenSelectorListView = ({
               <div
                 className={cn(
                   'flex items-center justify-between gap-3 rounded-xl border px-3 py-2 transition-colors text-left',
-                  isSelected ? 'border-blue bg-blue/5 shadow-xs' : 'border-border hover:border-blue/50 hover:bg-surface-muted',
+                  isSelected
+                    ? 'border-blue bg-blue/5 shadow-xs'
+                    : 'border-border hover:border-blue/50 hover:bg-surface-muted',
                 )}
                 aria-pressed={isSelected}
               >
@@ -82,13 +84,13 @@ export const TokenSelectorListView = ({
                     <span className="text-xs text-grey">{token.name}</span>
                   </div>
                   {chain && (
-                    <div className="inline-flex items-center gap-1 rounded-full border border-border bg-surface-muted px-2 py-[3px] text-[11px] text-grey">
+                    <div className="inline-flex items-center gap-1 rounded-full border border-border bg-surface-muted px-2 py-0.75 text-xs text-grey">
                       <BadgeImageFallback variant="chain" src={chain.icon} size="xs" />
                       <span>{chain.name}</span>
                     </div>
                   )}
                   {token.isCustom && (
-                    <span className="rounded-full bg-blue/10 text-blue text-[11px] px-2 py-[2px] font-semibold">
+                    <span className="rounded-full bg-blue/10 text-blue text-xs px-2 py-0.5 font-semibold">
                       Imported
                     </span>
                   )}

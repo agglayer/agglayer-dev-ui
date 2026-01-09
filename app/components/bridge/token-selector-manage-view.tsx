@@ -128,7 +128,7 @@ export const ManageTokensView: React.FC<ManageTokensViewProps> = ({
               <span className="text-xs text-grey">{shortenAddress(data.tokenAddress)}</span>
             </div>
             {existingToken && (
-              <span className="rounded-full bg-blue/10 text-blue text-[11px] px-2 py-0.5 font-semibold">Imported</span>
+              <span className="rounded-full bg-blue/10 text-blue text-xs px-2 py-0.5 font-semibold">Imported</span>
             )}
           </div>
           <div className="space-y-2 text-sm">
@@ -214,9 +214,7 @@ export const ManageTokensView: React.FC<ManageTokensViewProps> = ({
                     <div className="flex flex-col">
                       <span className="text-sm font-semibold text-black">{token.symbol}</span>
                       <span className="text-xs text-grey">{token.name}</span>
-                      <span className="text-[11px] text-muted font-mono break-all">
-                        {shortenAddress(token.address, 6)}
-                      </span>
+                      <span className="text-xs text-muted font-mono break-all">{shortenAddress(token.address, 6)}</span>
                     </div>
                   </div>
                   <button

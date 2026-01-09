@@ -75,7 +75,9 @@ export const Dropdown = ({
             {selected?.icon}
             <span className={cn(selected ? 'text-black' : 'text-grey')}>{selected?.label ?? placeholder}</span>
           </span>
-          {!selected && <ChevronDown size={16} className={cn('text-muted transition-transform', open && 'rotate-180')} />}
+          {!selected && (
+            <ChevronDown size={16} className={cn('text-muted transition-transform', open && 'rotate-180')} />
+          )}
         </button>
         {clearable && selected && !disabled && (
           <button

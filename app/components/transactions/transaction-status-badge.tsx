@@ -44,10 +44,16 @@ export const TransactionStatusBadge = ({ status, className }: TransactionStatusB
   const config = STATUS_CONFIG[status];
   const variantStyle = VARIANT_STYLES[config.variant];
 
-  console.log(config)
+  console.log(config);
 
   return (
-    <div className={cn('inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-semibold', variantStyle, className)}>
+    <div
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-semibold',
+        variantStyle,
+        className,
+      )}
+    >
       {config.icon}
       <span>{config.label}</span>
     </div>

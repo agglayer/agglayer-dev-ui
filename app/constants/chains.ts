@@ -87,7 +87,8 @@ export const DEFAULT_TO_CHAIN_ID: number = 1101;
 
 export const getChainById = (chainId: number) => SUPPORTED_CHAINS.find((chain) => chain.id === chainId);
 
-export const getChainByNetworkId = (networkId: number) => SUPPORTED_CHAINS.find((chain) => chain.networkId === networkId);
+export const getChainByNetworkId = (networkId: number) =>
+  SUPPORTED_CHAINS.find((chain) => chain.networkId === networkId);
 
 export const mainnetChains = SUPPORTED_CHAINS.filter((chain) => !chain.isTestnet);
 export const testnetChains = SUPPORTED_CHAINS.filter((chain) => chain.isTestnet);

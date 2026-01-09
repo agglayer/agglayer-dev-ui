@@ -38,7 +38,7 @@ const buildTransactionsUrl = (chainId: number, filters: TransactionFilters = {})
   if (filters.fromAddress) url.searchParams.set('fromAddress', filters.fromAddress);
   if (sourceNetworkIds) url.searchParams.set('sourceNetworkIds', sourceNetworkIds);
   if (destinationNetworkIds) url.searchParams.set('destinationNetworkIds', destinationNetworkIds);
-  if (filters.updatedSince !== undefined) url.searchParams.set('updatedSince', filters.updatedSince.toString())
+  if (filters.updatedSince !== undefined) url.searchParams.set('updatedSince', filters.updatedSince.toString());
   if (filters.status) url.searchParams.set('status', filters.status);
   if (filters.order) url.searchParams.set('order', filters.order);
   if (filters.limit) url.searchParams.set('limit', filters.limit.toString());

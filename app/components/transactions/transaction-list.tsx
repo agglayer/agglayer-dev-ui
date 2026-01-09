@@ -58,10 +58,7 @@ export const TransactionList = ({
   }
 
   return (
-    <div
-      ref={scrollContainerRef}
-      className="space-y-6 max-h-[70vh] overflow-auto pr-1"
-    >
+    <div ref={scrollContainerRef} className="space-y-6 max-h-[70vh] overflow-auto pr-1">
       {Object.entries(groupedTransactions).map(([date, txs]) => (
         <div key={date} className="space-y-3">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-grey">{date}</h3>

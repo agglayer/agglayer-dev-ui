@@ -1,4 +1,4 @@
-import { cn } from "@/app/utils/common";
+import { cn } from '@/app/utils/common';
 
 interface ButtonProps {
   onClick: () => void;
@@ -45,4 +45,4 @@ export const Button: React.FC<ButtonProps> = ({
       {children}
     </button>
   );
-}
+};
