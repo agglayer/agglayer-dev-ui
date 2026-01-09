@@ -37,7 +37,7 @@ export const Checkbox: React.FC<CheckboxProps> = ({
             disabled && 'opacity-50 cursor-not-allowed',
           )}
         >
-          {checked && <Check className="size-3 text-white stroke-[4]" />}
+          {checked && <Check className="size-3 text-white stroke-4" />}
         </div>
       </div>
       {label && <span className={cn('text-sm', labelClassName)}>{label}</span>}

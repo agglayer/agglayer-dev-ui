@@ -1,16 +1,14 @@
 @import 'tailwindcss';
 
 :root {
-    /* Blue - Primary actions, selections, interactive elements */
   --blue: #0071f7;
   --blue-light: #B2D4FD;
   --blue-subtle: #F5F9FE;
-
-  /* Orange - Info/warnings */
   --orange: #ff8e08;
   --orange-light: #FFF3E6;
-
-    /* Red - Errors */
+  --green-dark: #00542C;
+  --green: #5FAF84;
+  --green-light: #EAFFF5;
   --red: #ff3b32;
   --red-light: #dc362e29;
   --grey-light: #f1f3f7;
@@ -34,6 +32,9 @@
   --color-primary: var(--primary);
   --color-blue: var(--blue);
   --color-blue-light: var(--blue-light);
+  --color-blue-subtle: var(--blue-subtle);
+  --color-green: var(--green);
+  --color-green-light: var(--green-light);
   --color-orange: var(--orange);
   --color-orange-light: var(--orange-light);
   --color-red: var(--red);

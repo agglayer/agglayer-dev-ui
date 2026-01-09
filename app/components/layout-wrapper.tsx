@@ -13,7 +13,7 @@ export const LayoutWrapper = ({ children }: { children: React.ReactNode }) => {
       <div className="flex flex-1 overflow-hidden">
         <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
         <main className="flex-1 bg-background overflow-auto">
-          <div className="max-w-7xl mx-auto px-4 py-8">{children}</div>
+          <div className="max-w-5xl mx-auto px-4 py-8">{children}</div>
         </main>
       </div>
     </div>

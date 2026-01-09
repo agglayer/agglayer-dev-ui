@@ -1,11 +1,9 @@
 import { normalize } from './format';
 import type { Token, BalanceTokenItem, BalanceEntry, BalanceIndex } from '@/app/types/token';
 
-
 const generateBalanceKey = (chainId: number, address: string): string => {
   return `${chainId}:${normalize(address)}`;
 };
-
 
 export const toBalanceQueryTokens = (tokens: Token[]): BalanceTokenItem[] => {
   return tokens.map((token) => ({
@@ -15,7 +13,6 @@ export const toBalanceQueryTokens = (tokens: Token[]): BalanceTokenItem[] => {
     originChainId: String(token.originChainId ?? token.chainId),
   }));
 };
-
 
 export const toBalanceIndex = (entries: BalanceEntry[]): BalanceIndex => {
   return Object.fromEntries(
@@ -27,6 +24,6 @@ export const toBalanceIndex = (entries: BalanceEntry[]): BalanceIndex => {
           rawBalance: entry.balance!,
           usdPrice: entry.usd ?? undefined,
         },
-      ])
+      ]),
   );
 };

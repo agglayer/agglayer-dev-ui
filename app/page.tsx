@@ -1,7 +1,9 @@
+import { BridgeCard } from '@/app/components/bridge/bridge-card';
+
 export default function Home() {
   return (
-    <main>
-      <h1>Home page</h1>
+    <main className="flex justify-center">
+      <BridgeCard />
     </main>
   );
 }

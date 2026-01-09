@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, X } from 'lucide-react';
 import { cn } from '@/app/utils/common';
 
 export type DropdownOption = {
@@ -19,6 +19,8 @@ interface DropdownProps {
   label?: string;
   disabled?: boolean;
   className?: string;
+  clearable?: boolean;
+  onClear?: () => void;
 }
 
 export const Dropdown = ({
@@ -29,6 +31,8 @@ export const Dropdown = ({
   label,
   disabled,
   className,
+  clearable = false,
+  onClear,
 }: DropdownProps) => {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -54,23 +58,39 @@ export const Dropdown = ({
   return (
     <div className={cn('relative flex flex-col gap-2', className)} ref={containerRef}>
       {label && <span className="text-sm font-medium text-muted">{label}</span>}
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => setOpen((prev) => !prev)}
+      <div
         className={cn(
-          'flex items-center justify-between gap-3 rounded-xl border border-border bg-surface px-3 py-2 shadow-xs transition cursor-pointer',
-          disabled
-            ? 'cursor-not-allowed bg-surface-muted opacity-70'
-            : 'hover:border-slate-300 focus-visible:outline-none',
+          'flex items-center gap-2 rounded-xl border px-3 py-2 shadow-xs transition',
+          selected ? 'border-blue bg-blue/5 text-blue' : 'border-border bg-surface text-black',
+          disabled ? 'cursor-not-allowed bg-surface-muted opacity-70' : 'hover:border-blue',
         )}
       >
-        <span className="flex items-center gap-2 text-sm">
-          {selected?.icon}
-          <span className={cn(selected ? 'text-black' : 'text-grey')}>{selected?.label ?? placeholder}</span>
-        </span>
-        <ChevronDown size={16} className={cn('text-muted transition-transform', open && 'rotate-180')} />
-      </button>
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => setOpen((prev) => !prev)}
+          className="flex flex-1 items-center justify-between gap-3 text-left"
+        >
+          <span className="flex items-center gap-2 text-sm">
+            {selected?.icon}
+            <span className={cn(selected ? 'text-black' : 'text-grey')}>{selected?.label ?? placeholder}</span>
+          </span>
+          {!selected && <ChevronDown size={16} className={cn('text-muted transition-transform', open && 'rotate-180')} />}
+        </button>
+        {clearable && selected && !disabled && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClear?.();
+            }}
+            className="p-1 rounded-full hover:bg-surface-muted text-grey"
+            aria-label="Clear selection"
+          >
+            <X size={14} />
+          </button>
+        )}
+      </div>
       {open && (
         <div className="absolute z-20 mt-2 w-full rounded-xl border border-border bg-surface  overflow-hidden">
           <div className="py-1 max-h-64 overflow-y-auto">

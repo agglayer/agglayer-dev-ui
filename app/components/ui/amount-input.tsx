@@ -1,7 +1,8 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { cn } from '@/app/utils/common';
+import { bn } from '@/app/utils/big-number';
 
 type QuickAction = {
   label: string;
@@ -20,6 +21,7 @@ interface AmountInputProps {
   quickActions?: QuickAction[];
   disabled?: boolean;
   className?: string;
+  maxDecimals?: number;
 }
 
 export const AmountInput = ({
@@ -34,7 +36,35 @@ export const AmountInput = ({
   quickActions = [],
   disabled,
   className,
+  maxDecimals = 18,
 }: AmountInputProps) => {
+  const decimalsLimit = Math.max(0, Math.trunc(maxDecimals));
+  const decimalRegex = useMemo(
+    () => new RegExp(decimalsLimit === 0 ? '^(?!0\\d|\\.)\\d*$' : `^(?!0\\d|\\.)\\d*(?:\\.\\d{0,${decimalsLimit}})?$`),
+    [decimalsLimit],
+  );
+
+  const handleChange = (inputValue: string) => {
+    // Allow empty string
+    if (inputValue === '') {
+      onChange?.('');
+      return;
+    }
+
+    // Limit decimals and prevent invalid number formats
+    if (!decimalRegex.test(inputValue)) {
+      return;
+    }
+
+    // Validate that it's a valid BigNumber
+    try {
+      bn(inputValue);
+      onChange?.(inputValue);
+    } catch {
+      // Invalid number, don't update
+    }
+  };
+
   return (
     <div className={cn('flex flex-col gap-2', className)}>
       {label && <span className="text-sm font-medium text-muted">{label}</span>}
@@ -49,7 +79,7 @@ export const AmountInput = ({
           type="text"
           inputMode="decimal"
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => handleChange(e.target.value)}
           placeholder={placeholder}
           disabled={disabled}
           className={cn(

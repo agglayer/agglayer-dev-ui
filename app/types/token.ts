@@ -8,6 +8,7 @@ export interface Token {
   isNative?: boolean;
   originChainId?: number;
   originAddress?: string;
+  isCustom?: boolean;
 }
 
 export interface BalanceTokenItem {

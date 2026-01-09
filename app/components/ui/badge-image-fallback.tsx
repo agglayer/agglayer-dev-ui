@@ -22,9 +22,9 @@ const sizeClassMap: Record<Variant, Record<Size, string>> = {
   },
   chain: {
     xs: 'size-4',
-    sm: 'size-4',
-    md: 'size-4',
-    lg: 'size-5',
+    sm: 'size-6',
+    md: 'size-7',
+    lg: 'size-8',
   },
 };
 

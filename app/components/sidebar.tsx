@@ -2,10 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ArrowLeftRight, FileText, X, CircleUser } from 'lucide-react';
+import { ArrowLeftRight, FileText, X, CircleUser, Loader2 } from 'lucide-react';
 import { ROUTES } from '@/app/constants/routes';
 import { EXTERNAL_LINKS } from '@/app/constants/externalLinks';
 import { cn } from '@/app/utils/common';
+import { useWallet } from '@/app/context/wallet';
+import { DEFAULT_FROM_CHAIN_ID } from '@/app/constants/chains';
+import { useReadyToClaimCount } from '@/app/hooks/useReadyToClaimCount';
+import { setTransactionInitialStatus } from '@/app/components/transactions/intialStatus';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -27,6 +31,15 @@ const navItems = [
 
 export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   const pathname = usePathname();
+  const { address, chainId } = useWallet();
+
+  const effectiveChainId = chainId ?? DEFAULT_FROM_CHAIN_ID;
+
+  const { data: readyCount } = useReadyToClaimCount({
+    chainId: effectiveChainId,
+    address,
+    enabled: Boolean(address),
+  });
 
   return (
     <>
@@ -57,15 +70,26 @@ export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
                   <li key={item.path}>
                     <Link
                       href={item.path}
-                      onClick={onClose}
+                      onClick={() => {
+                        if (item.label === 'Transactions' && readyCount && readyCount > 0) {
+                          setTransactionInitialStatus('READY_TO_CLAIM');
+                        }
+                        onClose();
+                      }}
                       className={cn(
                         'flex items-center gap-3 px-3 py-2 rounded-lg relative cursor-pointer transition-colors',
                         isActive ? 'text-black bg-surface-muted' : 'text-muted hover:bg-surface-muted hover:text-black',
                       )}
                     >
-                      {isActive && <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-500 rounded-l" />}
+                      {isActive && <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue rounded-l" />}
                       <Icon size={20} />
                       <span className="font-medium">{item.label}</span>
+                      {item.label === 'Transactions' && typeof readyCount === 'number' && readyCount > 0 && (
+                        <div className="flex items-center gap-1 rounded-full bg-blue-subtle text-blue text-xs font-semibold px-2 py-0.5 ml-auto">
+                          <Loader2 className="animate-spin" size={12} />
+                          <span>{readyCount}</span>
+                        </div>
+                      )}
                     </Link>
                   </li>
                 );

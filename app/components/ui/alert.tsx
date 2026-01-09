@@ -13,7 +13,7 @@ export const Alert: React.FC<AlertProps> = ({ title, message, type = 'warning', 
   const typeToClasses: Record<string, string> = {
     warning: 'bg-orange-light text-black',
     danger: 'bg-red-light text-black',
-    info: 'bg-grey text-black',
+    info: 'bg-grey-light text-black',
   };
 
   const typeToIcon: Record<string, LucideIcon> = {
