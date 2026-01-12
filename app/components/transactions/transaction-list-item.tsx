@@ -30,11 +30,11 @@ export const TransactionListItem = ({ transaction, onClaim, onSelect }: Transact
   // Get the origin chain to map networkId to chainId
   const originChain = getChainByNetworkId(transaction.originTokenNetwork);
 
-  // Look up token in TOKEN_LIST first
+  // Look up token in the local token list first
   const { getToken } = useTokens();
   const localToken = originChain ? getToken(originChain.id, transaction.originTokenAddress) : undefined;
 
-  // Only fetch from API if not found in TOKEN_LIST and not native
+  // Only fetch from API if not found locally and not native
   const { data: tokenMetadata } = useTokenMetadata({
     chainId: originChain?.id || 0,
     tokenAddress: transaction.originTokenAddress,
@@ -64,19 +64,9 @@ export const TransactionListItem = ({ transaction, onClaim, onSelect }: Transact
       <div className="p-4 space-y-3">
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap items-center gap-2 text-sm text-black">
-            {sourceChain && (
-              <span className="inline-flex items-center gap-2">
-                <BadgeImageFallback src={sourceChain.icon} size="sm" fallbackText={sourceChain.name} />
-                <span className="font-medium">{sourceChain.name}</span>
-              </span>
-            )}
+            {sourceChain && <span className="font-medium">{sourceChain.name}</span>}
             <ArrowRight size={18} className="text-grey" />
-            {destChain && (
-              <span className="inline-flex items-center gap-2">
-                <BadgeImageFallback src={destChain.icon} size="sm" fallbackText={destChain.name} />
-                <span className="font-medium">{destChain.name}</span>
-              </span>
-            )}
+            {destChain && <span className="font-medium">{destChain.name}</span>}
           </div>
           <div className="flex justify-end sm:justify-start">
             <TransactionStatusBadge status={transaction.status} className="text-xs sm:text-sm" />
@@ -160,4 +150,4 @@ export const TransactionListItem = ({ transaction, onClaim, onSelect }: Transact
       </div>
     </div>
   );
-};
+};;;

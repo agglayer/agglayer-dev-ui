@@ -1,30 +1,22 @@
 import BigNumber from 'bignumber.js';
 import { normalize } from '@/app/utils/format';
-import type { Token, BalanceIndex } from '@/app/types/token';
+import { fromWei } from '@/app/utils/big-number';
+import type { Token } from '@/app/types/token';
 
-const toDecimals = (raw: string, decimals: number): BigNumber => {
-  const divisor = new BigNumber(10).pow(decimals);
-  return new BigNumber(raw).dividedBy(divisor);
+export const getTokenBalance = (token: Token, rawBalance?: string | bigint | null) => {
+  if (!rawBalance) return undefined;
+  return fromWei(rawBalance, token.decimals);
 };
 
-export const balanceKey = (token: Token) => `${token.chainId}:${normalize(token.address)}`;
-
-export const getTokenBalance = (token: Token, balances?: BalanceIndex) => {
-  if (!balances) return undefined;
-  const entry = balances[balanceKey(token)];
-  if (!entry?.rawBalance) return undefined;
-  return toDecimals(entry.rawBalance, token.decimals);
-};
-
-export const formatTokenBalance = (token: Token, balances?: BalanceIndex) => {
-  const value = getTokenBalance(token, balances);
+export const formatTokenBalance = (token: Token, rawBalance?: string | bigint | null) => {
+  const value = getTokenBalance(token, rawBalance);
   if (!value || value.isZero()) return '0';
   const decimalPlaces = value.gte(1) ? 4 : 6;
   return value.decimalPlaces(decimalPlaces, BigNumber.ROUND_FLOOR).toString();
 };
 
-export const portionOfBalance = (token: Token, balances: BalanceIndex | undefined, fraction: number) => {
-  const value = getTokenBalance(token, balances);
+export const portionOfBalance = (token: Token, rawBalance: string | bigint | null | undefined, fraction: number) => {
+  const value = getTokenBalance(token, rawBalance);
   if (!value) return '';
   if (fraction === 1) return value.toString();
   return value.multipliedBy(fraction).decimalPlaces(token.decimals, BigNumber.ROUND_FLOOR).toString();

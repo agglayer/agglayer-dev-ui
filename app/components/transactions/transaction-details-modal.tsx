@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { ArrowRight, ExternalLink } from 'lucide-react';
 import { Modal } from '@/app/components/ui/modal';
 import { BadgeImageFallback } from '@/app/components/ui/badge-image-fallback';
@@ -10,13 +10,64 @@ import { useTokens } from '@/app/context/token';
 import { useTokenMetadata } from '@/app/hooks/useTokenMetadata';
 import type { Transaction } from '@/app/types/transaction';
 import { shortenAddress } from '@/app/utils/address';
-import { formatTransactionAmount, isNativeToken, getTransactionFeesForBridgeAndClaim } from '@/app/utils/transaction';
+import { formatTransactionAmount, isNativeToken } from '@/app/utils/transaction';
 import { getTokenLogoBySymbol } from '@/app/utils/tokens';
-import { formatTokenAmount } from '@/app/utils/format';
-import { formatUnits } from 'viem';
 import { Alert } from '@/app/components/ui/alert';
 import { Button } from '@/app/components/ui/button';
 import { formatDateTime } from '@/app/utils/date';
+
+interface TxFlowHeaderProps {
+  sourceChain?: { name: string; icon?: string };
+  destChain?: { name: string; icon?: string };
+  tokenLogo?: string;
+  tokenSymbol: string;
+  formattedAmount: string;
+}
+
+const TxFlowHeader = ({ sourceChain, destChain, tokenLogo, tokenSymbol, formattedAmount }: TxFlowHeaderProps) => {
+  return (
+    <div className="w-full rounded-xl border border-border bg-surface-muted px-4 py-4 shadow-xs">
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-muted/80">From</div>
+          <div className="mt-1 flex min-w-0 items-center gap-2">
+            {sourceChain?.icon && (
+              <BadgeImageFallback
+                src={sourceChain.icon}
+                size="sm"
+                fallbackText={sourceChain.name}
+                className="shrink-0"
+              />
+            )}
+            <span className="truncate font-semibold text-black">{sourceChain?.name ?? '-'}</span>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="h-2 w-2 rounded-full bg-border" />
+          <span className="h-px w-12 bg-border" />
+          <ArrowRight className="size-6 text-muted" />
+          <span className="h-px w-12 bg-border" />
+          <span className="h-2 w-2 rounded-full bg-border" />
+        </div>
+        <div className="min-w-0 flex-1 text-right">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-muted/80">To</div>
+          <div className="mt-1 flex min-w-0 items-center justify-end gap-2">
+            <span className="truncate font-semibold text-black">{destChain?.name ?? '-'}</span>
+            {destChain?.icon && (
+              <BadgeImageFallback src={destChain.icon} size="sm" fallbackText={destChain.name} className="shrink-0" />
+            )}
+          </div>
+        </div>
+      </div>
+      <div className="flex items-center justify-center gap-2">
+        {tokenLogo && <BadgeImageFallback src={tokenLogo} size="md" fallbackText={tokenSymbol} />}
+        <div className="text-2xl font-bold text-black">
+          {formattedAmount} {tokenSymbol}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 interface TransactionDetailsModalProps {
   open: boolean;
@@ -25,19 +76,6 @@ interface TransactionDetailsModalProps {
   isDifferentAddress?: boolean;
   onClaim?: (transaction: Transaction) => void;
 }
-
-type FeesState = {
-  bridgeFeeWei?: bigint | null;
-  claimFeeWei?: bigint | null;
-  loading: boolean;
-};
-
-const formatFee = (fee: bigint | null | undefined, decimals: number, loading: boolean) => {
-  if (loading) return 'Fetching...';
-  if (fee === undefined) return '-';
-  if (fee === null) return '0';
-  return formatTokenAmount(formatUnits(fee, decimals));
-};
 
 export const TransactionDetailsModal = ({
   open,
@@ -76,37 +114,6 @@ export const TransactionDetailsModal = ({
     : localToken?.logoURI || tokenMetadata?.logoURI || getTokenLogoBySymbol(tokenSymbol);
   const formattedAmount = tx ? formatTransactionAmount(tx.amount, decimals) : '-';
 
-  const [fees, setFees] = useState<FeesState>({ loading: false });
-
-
-
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!open || !tx) return undefined;
-
-    const fetchFees = async () => {
-      // Defer state update to avoid synchronous setState warnings inside effects
-      await Promise.resolve();
-      if (cancelled) return;
-      setFees((prev) => ({ ...prev, loading: true }));
-      try {
-        const data = await getTransactionFeesForBridgeAndClaim(tx);
-        if (cancelled) return;
-        setFees({ ...data, loading: false });
-      } catch {
-        if (cancelled) return;
-        setFees({ bridgeFeeWei: null, claimFeeWei: null, loading: false });
-      }
-    };
-
-    void fetchFees();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [open, tx]);
-
   if (!tx) return null;
 
   const isClaimable = tx.status === 'READY_TO_CLAIM';
@@ -114,32 +121,21 @@ export const TransactionDetailsModal = ({
   return (
     <Modal open={open} onClose={onClose} title="Transaction Details" contentClassName="space-y-6">
       <div className="space-y-4">
-        <div className="rounded-xl border border-border bg-surface-muted px-4 py-5 text-center space-y-3">
-          <div className="flex items-center justify-center gap-3">
-            {sourceChain && <BadgeImageFallback src={sourceChain.icon} size="md" fallbackText={sourceChain.name} />}
-            <ArrowRight size={18} className="text-grey" />
-            {destChain && <BadgeImageFallback src={destChain.icon} size="md" fallbackText={destChain.name} />}
-          </div>
-          <div className="space-y-1">
-            <div className="text-3xl font-bold text-black flex items-center justify-center gap-2">
-              {tokenLogo && <BadgeImageFallback src={tokenLogo} size="xl" fallbackText={tokenSymbol} />}
-              <span>
-                {formattedAmount} {tokenSymbol}
-              </span>
-            </div>
-            <div className="text-sm text-grey">
-              $ --
-            </div>
-          </div>
-        </div>
+        <TxFlowHeader
+          sourceChain={sourceChain ? { name: sourceChain.name, icon: sourceChain.icon } : undefined}
+          destChain={destChain ? { name: destChain.name, icon: destChain.icon } : undefined}
+          tokenLogo={tokenLogo}
+          tokenSymbol={tokenSymbol}
+          formattedAmount={`${formattedAmount}`}
+        />
 
         <div className="space-y-3">
-          <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm bg-grey-light">
+          <div className="flex items-center justify-between px-3 py-2 text-sm border-border border-b">
             <span className="text-grey font-medium">Date &amp; Time</span>
             <span className="font-semibold text-black">{formatDateTime(tx.timestamp)}</span>
           </div>
 
-          <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm bg-grey-light">
+          <div className="flex items-center justify-between px-3 py-2 text-sm border-border border-b">
             <span className="text-grey font-medium">{`${sourceChain?.name ?? 'Source'} Tx. Hash`}</span>
             <div className="flex items-center gap-px">
               <span className="font-mono text-black">{shortenAddress(tx.transactionHash, 6)}</span>
@@ -163,7 +159,7 @@ export const TransactionDetailsModal = ({
             </div>
           </div>
 
-          <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm bg-grey-light">
+          <div className="flex items-center justify-between px-3 py-2 text-sm border-border border-b">
             <span className="text-grey font-medium">{`${destChain?.name ?? 'Destination'} Tx. Hash`}</span>
             <div className="flex items-center gap-2">
               <span className="font-mono text-black">
@@ -190,31 +186,6 @@ export const TransactionDetailsModal = ({
                   )}
                 </>
               )}
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-3">
-          <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm bg-grey-light">
-            <span className="text-grey font-medium">{`Step 1 Fee (${sourceChain?.name ?? 'Source'})`}</span>
-            <div className="text-right">
-              <div className="font-semibold text-black">
-                {formatFee(fees.bridgeFeeWei, sourceChain?.nativeCurrency?.decimals ?? 18, fees.loading)}{' '}
-                {sourceChain?.nativeCurrency?.symbol ?? 'ETH'}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm bg-grey-light">
-            <span className="text-grey font-medium">{`Step 2 Fee (${destChain?.name ?? 'Destination'})`}</span>
-            <div className="text-right">
-              <div className="font-semibold text-black">
-                {tx.claimTransactionHash
-                  ? `${formatFee(fees.claimFeeWei, destChain?.nativeCurrency?.decimals ?? 18, fees.loading)} ${
-                      destChain?.nativeCurrency?.symbol ?? 'ETH'
-                    }`
-                  : '-'}
-              </div>
             </div>
           </div>
         </div>

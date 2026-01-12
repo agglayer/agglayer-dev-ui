@@ -1,16 +1,4 @@
-import { forknet } from '@/app/config/wagmiConfig';
 import type { ChainMetadata } from '@/app/types/chain';
-import type { Chain } from 'wagmi/chains';
-import { mainnet, polygonZkEvm, xLayer, katana, ternoa } from 'wagmi/chains';
-
-export const NETWORK_ID_TO_VIEM_CHAIN: Record<number, Chain> = {
-  0: mainnet,
-  1: polygonZkEvm,
-  3: xLayer,
-  13: ternoa,
-  20: katana,
-  22: forknet,
-};
 
 export const SUPPORTED_CHAINS: ChainMetadata[] = [
   {
@@ -20,6 +8,7 @@ export const SUPPORTED_CHAINS: ChainMetadata[] = [
     explorer: 'https://etherscan.io',
     networkId: 0,
     nativeCurrency: {
+      address: '0x0000000000000000000000000000000000000000',
       decimals: 18,
       name: 'Ether',
       symbol: 'ETH',
@@ -33,6 +22,7 @@ export const SUPPORTED_CHAINS: ChainMetadata[] = [
     explorer: 'https://www.oklink.com/polygon-zkevm',
     networkId: 1,
     nativeCurrency: {
+      address: '0x0000000000000000000000000000000000000000',
       decimals: 18,
       name: 'Ether',
       symbol: 'ETH',
@@ -46,6 +36,7 @@ export const SUPPORTED_CHAINS: ChainMetadata[] = [
     explorer: 'https://www.oklink.com/x-layer',
     networkId: 3,
     nativeCurrency: {
+      address: '0x0000000000000000000000000000000000000000',
       decimals: 18,
       name: 'OKB',
       symbol: 'OKB',
@@ -59,6 +50,7 @@ export const SUPPORTED_CHAINS: ChainMetadata[] = [
     explorer: 'https://katanascan.com',
     networkId: 20,
     nativeCurrency: {
+      address: '0x0000000000000000000000000000000000000000',
       decimals: 18,
       name: 'Ether',
       symbol: 'ETH',
@@ -72,6 +64,7 @@ export const SUPPORTED_CHAINS: ChainMetadata[] = [
     explorer: 'https://explorer-mainnet.zkevm.ternoa.network',
     networkId: 13,
     nativeCurrency: {
+      address: '0x0000000000000000000000000000000000000000',
       decimals: 18,
       name: 'Capsule Coin',
       symbol: 'CAPS',
@@ -86,6 +79,7 @@ export const SUPPORTED_CHAINS: ChainMetadata[] = [
     explorer: 'https://forkscan.org',
     networkId: 22,
     nativeCurrency: {
+      address: '0x0000000000000000000000000000000000000000',
       decimals: 18,
       name: 'Ether',
       symbol: 'ETH',
@@ -101,8 +95,3 @@ export const getChainById = (chainId: number) => SUPPORTED_CHAINS.find((chain) =
 
 export const getChainByNetworkId = (networkId: number) =>
   SUPPORTED_CHAINS.find((chain) => chain.networkId === networkId);
-
-export const getViemChainByNetworkId = (networkId: number) => NETWORK_ID_TO_VIEM_CHAIN[networkId];
-
-export const mainnetChains = SUPPORTED_CHAINS.filter((chain) => !chain.isTestnet);
-export const testnetChains = SUPPORTED_CHAINS.filter((chain) => chain.isTestnet);

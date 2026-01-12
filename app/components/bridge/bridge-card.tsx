@@ -10,7 +10,7 @@ import { DestinationAddressModal } from '@/app/components/bridge/destination-add
 import { BridgeFromSection } from '@/app/components/bridge/bridge-from-section';
 import { BridgeToSection } from '@/app/components/bridge/bridge-to-section';
 import { useTokens } from '@/app/context/token';
-import { useTokenBalances } from '@/app/hooks/useBalances';
+import { useTokenBalance } from '@/app/hooks/useTokenBalance';
 import { useWallet } from '@/app/context/wallet';
 import { DEFAULT_FROM_CHAIN_ID, DEFAULT_TO_CHAIN_ID, SUPPORTED_CHAINS, getChainById } from '@/app/constants/chains';
 import { normalize } from '@/app/utils/format';
@@ -51,10 +51,10 @@ export const BridgeCard = () => {
   const fromChain = getChainById(fromChainId);
   const toChain = getChainById(toChainId);
 
-  const { balanceIndex, isLoading: balancesLoading } = useTokenBalances({
+  const { rawBalance, isLoading: balancesLoading } = useTokenBalance({
+    token: selectedToken,
     userAddress: address as Hex | undefined,
-    chainId: fromChainId,
-    enabled: status === 'connected',
+    enabled: status === 'connected' && Boolean(selectedToken),
   });
 
   const fromChainOptions = useMemo(() => createChainOptions(), []);
@@ -112,7 +112,7 @@ export const BridgeCard = () => {
           onSelectChain={handleSelectFromChain}
           amount={amount}
           onAmountChange={setAmount}
-          balanceIndex={balanceIndex}
+          rawBalance={rawBalance}
           balancesLoading={balancesLoading}
           selectedToken={selectedToken}
           onOpenTokenSelector={() => setTokenModalOpen(true)}
@@ -157,7 +157,6 @@ export const BridgeCard = () => {
         onSelect={(token) => setSelectedTokenAddress(token.address)}
         chainId={fromChainId}
         chainName={fromChain?.name}
-        balances={balanceIndex}
       />
 
       {destinationModalOpen && !hasDestinationAddress && (

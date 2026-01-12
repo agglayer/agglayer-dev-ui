@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { normalize } from '@/app/utils/format';
-import { TOKEN_LIST } from '@/app/constants/tokens';
+import { SUPPORTED_CHAINS } from '@/app/constants/chains';
 import type { Token } from '@/app/types/token';
 import { StorageUtils, STORAGE_KEYS } from '@/app/utils/storage';
 
@@ -50,16 +50,28 @@ export const TokenProvider = ({ children }: { children: ReactNode }) => {
     setCustomTokens([]);
   }, []);
 
+  const baseTokens = useMemo<Token[]>(() => {
+    return SUPPORTED_CHAINS.map((chain) => ({
+      chainId: chain.id,
+      address: chain.nativeCurrency?.address ?? '0x0000000000000000000000000000000000000000',
+      decimals: chain.nativeCurrency?.decimals ?? 18,
+      symbol: chain.nativeCurrency?.symbol ?? 'ETH',
+      name: chain.nativeCurrency?.name ?? 'Native',
+      logoURI: chain.nativeCurrency?.logoURI ?? chain.icon,
+      isNative: true,
+    }));
+  }, []);
+
   const tokens = useMemo(() => {
     const map = new Map<string, Token>();
-    TOKEN_LIST.forEach((token) => {
+    baseTokens.forEach((token) => {
       map.set(generateTokenKey(token.chainId, token.address), token);
     });
     customTokens.forEach((token) => {
       map.set(generateTokenKey(token.chainId, token.address), { ...token, isCustom: true });
     });
     return Array.from(map.values());
-  }, [customTokens]);
+  }, [baseTokens, customTokens]);
 
   const tokenMap = useMemo(() => {
     const map = new Map<string, Token>();

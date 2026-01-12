@@ -6,6 +6,7 @@ export type ChainMetadata = {
   icon?: string;
   networkId?: number;
   nativeCurrency?: {
+    address: string;
     decimals: number;
     name: string;
     symbol: string;

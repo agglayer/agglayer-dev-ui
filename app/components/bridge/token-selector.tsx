@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Modal } from '@/app/components/ui/modal';
-import type { BalanceIndex, Token } from '@/app/types/token';
+import type { Token } from '@/app/types/token';
 import { TokenSelectorListView } from '@/app/components/bridge/token-selector-list-view';
 import { ManageTokensView } from '@/app/components/bridge/token-selector-manage-view';
 import { useTokens } from '@/app/context/token';
@@ -14,7 +14,6 @@ interface TokenSelectorProps {
   onSelect: (token: Token) => void;
   chainId: number;
   chainName?: string;
-  balances?: BalanceIndex;
 }
 
 export const TokenSelector = ({
@@ -24,7 +23,6 @@ export const TokenSelector = ({
   onSelect,
   chainId,
   chainName,
-  balances,
 }: TokenSelectorProps) => {
   const { listTokens, customTokens, addCustomToken, removeCustomToken } = useTokens();
   const [search, setSearch] = useState('');
@@ -67,7 +65,6 @@ export const TokenSelector = ({
           <TokenSelectorListView
             tokens={tokens}
             selectedToken={selectedToken}
-            balances={balances}
             chainName={chainName}
             search={search}
             onSearchChange={setSearch}

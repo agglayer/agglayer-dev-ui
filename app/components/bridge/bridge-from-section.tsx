@@ -5,7 +5,7 @@ import { Dropdown, type DropdownOption } from '@/app/components/ui/dropdown';
 import { AmountInput } from '@/app/components/ui/amount-input';
 import { BadgeImageFallback } from '@/app/components/ui/badge-image-fallback';
 import { formatTokenBalance, getTokenLogoBySymbol, portionOfBalance } from '@/app/utils/tokens';
-import type { BalanceIndex, Token } from '@/app/types/token';
+import type { Token } from '@/app/types/token';
 
 interface BridgeFromSectionProps {
   chainOptions: DropdownOption[];
@@ -13,7 +13,7 @@ interface BridgeFromSectionProps {
   onSelectChain: (chainId: number) => void;
   amount: string;
   onAmountChange: (value: string) => void;
-  balanceIndex?: BalanceIndex;
+  rawBalance?: string;
   balancesLoading: boolean;
   selectedToken?: Token;
   onOpenTokenSelector: () => void;
@@ -25,21 +25,21 @@ export const BridgeFromSection = ({
   onSelectChain,
   amount,
   onAmountChange,
-  balanceIndex,
+  rawBalance,
   balancesLoading,
   selectedToken,
   onOpenTokenSelector,
 }: BridgeFromSectionProps) => {
-  const balanceText = selectedToken ? formatTokenBalance(selectedToken, balanceIndex) : '0';
+  const balanceText = selectedToken ? formatTokenBalance(selectedToken, rawBalance) : '0';
 
   const quickActions = useMemo(() => {
     if (!selectedToken) return [];
     return [
-      { label: '25%', value: portionOfBalance(selectedToken, balanceIndex, 0.25) },
-      { label: '50%', value: portionOfBalance(selectedToken, balanceIndex, 0.5) },
-      { label: 'MAX', value: portionOfBalance(selectedToken, balanceIndex, 1) },
+      { label: '25%', value: portionOfBalance(selectedToken, rawBalance, 0.25) },
+      { label: '50%', value: portionOfBalance(selectedToken, rawBalance, 0.5) },
+      { label: 'MAX', value: portionOfBalance(selectedToken, rawBalance, 1) },
     ];
-  }, [balanceIndex, selectedToken]);
+  }, [rawBalance, selectedToken]);
 
   return (
     <section className="space-y-2">
