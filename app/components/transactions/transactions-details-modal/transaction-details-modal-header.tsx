@@ -1,5 +1,5 @@
-import { BadgeImageFallback } from "@/app/components/ui/badge-image-fallback";
-import { ArrowRight } from "lucide-react";
+import { BadgeImageFallback } from '@/app/components/ui/badge-image-fallback';
+import { ArrowRight } from 'lucide-react';
 
 interface TxDetailsHeaderProps {
   sourceChain?: { name: string; icon?: string };
@@ -9,7 +9,13 @@ interface TxDetailsHeaderProps {
   formattedAmount: string;
 }
 
-export const TxDetailsHeader = ({ sourceChain, destChain, tokenLogo, tokenSymbol, formattedAmount }: TxDetailsHeaderProps) => {
+export const TxDetailsHeader = ({
+  sourceChain,
+  destChain,
+  tokenLogo,
+  tokenSymbol,
+  formattedAmount,
+}: TxDetailsHeaderProps) => {
   return (
     <div className="w-full rounded-xl border border-border bg-surface-muted px-4 py-4 shadow-xs">
       <div className="flex items-center gap-3">

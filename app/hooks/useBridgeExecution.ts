@@ -104,13 +104,11 @@ export const useBridgeExecution = (params: { fromChainId: number }) => {
               },
               args.userAddress,
             )
-          : await native.erc20(tokenAddressValue, fromChainId).bridgeTo(
-              destNetworkId,
-              recipient,
-              args.amountWei.toString(),
-              args.userAddress,
-              { forceUpdateGlobalExitRoot: true },
-            );
+          : await native
+              .erc20(tokenAddressValue, fromChainId)
+              .bridgeTo(destNetworkId, recipient, args.amountWei.toString(), args.userAddress, {
+                forceUpdateGlobalExitRoot: true,
+              });
 
         localBridgeHash = await sendTransactionAsync({
           ...mapTransactionRequest(bridgeTx, args.userAddress),

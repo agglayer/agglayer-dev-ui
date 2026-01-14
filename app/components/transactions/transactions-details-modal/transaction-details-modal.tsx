@@ -15,8 +15,7 @@ import { Button } from '@/app/components/ui/button';
 import { formatDateTime } from '@/app/utils/date';
 import { useAppMode } from '@/app/context/app-mode';
 import { getChainByNetworkId } from '@/app/utils/chains';
-import { TxDetailsHeader } from '@/app/components/transactions/transactions-details-modal/header';
-
+import { TxDetailsHeader } from '@/app/components/transactions/transactions-details-modal/transaction-details-modal-header';
 
 interface TransactionDetailsModalProps {
   open: boolean;

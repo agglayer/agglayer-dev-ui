@@ -16,11 +16,7 @@ import { isPositive, toWei } from '@/app/utils/big-number';
 import { getChainById } from '@/app/utils/chains';
 import { normalize } from '@/app/utils/format';
 
-const resolveInitialToChainId = (
-  chains: { id: number }[],
-  fromChainId: number,
-  defaultToChainId: number,
-): number => {
+const resolveInitialToChainId = (chains: { id: number }[], fromChainId: number, defaultToChainId: number): number => {
   if (defaultToChainId !== fromChainId) return defaultToChainId;
   const alternative = chains.find((chain) => chain.id !== fromChainId);
   return alternative?.id ?? fromChainId;

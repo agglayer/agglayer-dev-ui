@@ -42,7 +42,6 @@ export const customRpcUrls = {
   'eip155:1101': polygonZkEvmRpcEndpoints.map((url) => ({ url })),
 };
 
-
 const createChain = (
   chain: Chain,
   networkId: number,

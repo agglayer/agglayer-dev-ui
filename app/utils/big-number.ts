@@ -80,4 +80,3 @@ export function toNumber(value: BigNumber): number {
   if (!value.isFinite()) return 0;
   return value.toNumber();
 }
-

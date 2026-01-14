@@ -16,14 +16,7 @@ interface TokenSelectorProps {
   chainName?: string;
 }
 
-export const TokenSelector = ({
-  open,
-  onClose,
-  selectedToken,
-  onSelect,
-  chainId,
-  chainName,
-}: TokenSelectorProps) => {
+export const TokenSelector = ({ open, onClose, selectedToken, onSelect, chainId, chainName }: TokenSelectorProps) => {
   const { listTokens, customTokens, addCustomToken, removeCustomToken } = useTokens();
   const [search, setSearch] = useState('');
   const [customTokenAddress, setCustomTokenAddress] = useState('');

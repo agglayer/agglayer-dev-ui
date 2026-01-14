@@ -168,4 +168,4 @@ export const TransactionListItem = ({
       </div>
     </div>
   );
-};;
+};

@@ -39,7 +39,8 @@ export const BridgeFromSection = ({
   const quickActions = useMemo(() => {
     if (!selectedToken) return [];
     const isNativeToken = selectedToken.isNative || normalize(selectedToken.address) === normalize(ZERO_ADDRESS);
-    const maxValue = isNativeToken && maxNativeAmount ? maxNativeAmount : portionOfBalance(selectedToken, rawBalance, 1);
+    const maxValue =
+      isNativeToken && maxNativeAmount ? maxNativeAmount : portionOfBalance(selectedToken, rawBalance, 1);
     return [
       { label: '25%', value: portionOfBalance(selectedToken, rawBalance, 0.25) },
       { label: '50%', value: portionOfBalance(selectedToken, rawBalance, 0.5) },

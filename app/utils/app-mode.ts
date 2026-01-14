@@ -1,5 +1,5 @@
-import { APP_MODE_CONFIG } from "@/app/config";
-import { AppMode } from "@/app/types/app-mode";
+import { APP_MODE_CONFIG } from '@/app/config';
+import { AppMode } from '@/app/types/app-mode';
 
 export const getEnabledModes = (): AppMode[] =>
   (Object.keys(APP_MODE_CONFIG) as AppMode[]).filter((mode) => APP_MODE_CONFIG[mode].chains.length > 0);
