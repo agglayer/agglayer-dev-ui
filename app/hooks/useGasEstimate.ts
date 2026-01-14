@@ -16,6 +16,11 @@ export const useGasEstimate = (params: { chainId: number; enabled?: boolean }) =
     queryKey: ['gas-price', chainId],
     enabled: canFetch,
     staleTime: 15_000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+    retryOnMount: false,
+    retry: 0,
     queryFn: async () => {
       if (!publicClient) throw new Error('MISSING_CLIENT');
       return publicClient.getGasPrice();

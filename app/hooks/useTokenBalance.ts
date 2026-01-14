@@ -18,7 +18,8 @@ export const useTokenBalance = ({ token, userAddress, enabled = true }: UseToken
   const chainId = token?.chainId;
   const tokenAddress = token?.address ?? ZERO_ADDRESS;
   const isNative = Boolean(token && (token.isNative || normalize(tokenAddress) === normalize(ZERO_ADDRESS)));
-  const canFetch = Boolean(enabled && token && userAddress && chainId);
+  const isTokenAddressValid = Boolean(isNative || isValidEthereumAddress(tokenAddress));
+  const canFetch = Boolean(enabled && token && userAddress && chainId && isTokenAddressValid);
 
   const {
     data: rawBalance,
@@ -27,6 +28,12 @@ export const useTokenBalance = ({ token, userAddress, enabled = true }: UseToken
   } = useQuery({
     queryKey: ['token-balance', mode, chainId, tokenAddress, userAddress],
     enabled: canFetch,
+    staleTime: 15_000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+    retryOnMount: false,
+    retry: 0,
     queryFn: async () => {
       if (!token || !userAddress || !chainId) {
         throw new Error('MISSING_PARAMS');
