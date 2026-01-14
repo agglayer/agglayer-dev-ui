@@ -7,9 +7,10 @@ import { ROUTES } from '@/app/constants/routes';
 import { EXTERNAL_LINKS } from '@/app/constants/externalLinks';
 import { cn } from '@/app/utils/common';
 import { useWallet } from '@/app/context/wallet';
-import { DEFAULT_FROM_CHAIN_ID } from '@/app/constants/chains';
+import { useAppMode } from '@/app/context/app-mode';
 import { useReadyToClaimCount } from '@/app/hooks/useReadyToClaimCount';
 import { setTransactionInitialStatus } from '@/app/components/transactions/intialStatus';
+import { ModeSwitch } from '@/app/components/mode-switch';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -32,8 +33,9 @@ const navItems = [
 export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   const pathname = usePathname();
   const { address, chainId } = useWallet();
+  const { defaultFromChainId } = useAppMode();
 
-  const effectiveChainId = chainId ?? DEFAULT_FROM_CHAIN_ID;
+  const effectiveChainId = chainId ?? defaultFromChainId;
 
   const { data: readyCount } = useReadyToClaimCount({
     chainId: effectiveChainId,
@@ -96,7 +98,8 @@ export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
               })}
             </ul>
           </nav>
-          <div>
+          <div className="space-y-3">
+            <ModeSwitch />
             <a
               href={EXTERNAL_LINKS.CONTACT_SUPPORT}
               target="_blank"

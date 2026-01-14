@@ -13,6 +13,7 @@ interface ModalProps {
   className?: string;
   contentClassName?: string;
   showCloseButton?: boolean;
+  dismissible?: boolean;
 }
 
 export const Modal = ({
@@ -23,14 +24,15 @@ export const Modal = ({
   className,
   contentClassName,
   showCloseButton = true,
+  dismissible = true,
 }: ModalProps) => {
   const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose();
-      }
+      if (event.key !== 'Escape') return;
+      if (!dismissible) return;
+      onClose();
     };
 
     if (open) {
@@ -42,7 +44,7 @@ export const Modal = ({
       document.removeEventListener('keydown', handleEscape);
       document.body.style.overflow = '';
     };
-  }, [open, onClose]);
+  }, [open, onClose, dismissible]);
 
   if (!open) {
     return null;
@@ -50,7 +52,7 @@ export const Modal = ({
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-24">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/60" onClick={dismissible ? onClose : undefined} />
       <div
         ref={contentRef}
         role="dialog"

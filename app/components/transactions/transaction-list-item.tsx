@@ -6,13 +6,14 @@ import { Button } from '@/app/components/ui/button';
 import { CopyText } from '@/app/components/copyText';
 import { TransactionStatusBadge } from '@/app/components/transactions/transaction-status-badge';
 import { useTokenMetadata } from '@/app/hooks/useTokenMetadata';
-import { getChainByNetworkId } from '@/app/constants/chains';
+import { getChainByNetworkId } from '@/app/utils/chains';
 import { useTokens } from '@/app/context/token';
 import { shortenAddress } from '@/app/utils/address';
 import { formatTransactionAmount, isNativeToken } from '@/app/utils/transaction';
 import type { Transaction } from '@/app/types/transaction';
 import { cn } from '@/app/utils/common';
 import { getTokenLogoBySymbol } from '@/app/utils/tokens';
+import { useAppMode } from '@/app/context/app-mode';
 
 interface TransactionListItemProps {
   transaction: Transaction;
@@ -21,14 +22,15 @@ interface TransactionListItemProps {
 }
 
 export const TransactionListItem = ({ transaction, onClaim, onSelect }: TransactionListItemProps) => {
-  const sourceChain = getChainByNetworkId(transaction.sourceNetwork);
-  const destChain = getChainByNetworkId(transaction.destinationNetwork);
+  const { chains } = useAppMode();
+  const sourceChain = getChainByNetworkId(chains, transaction.sourceNetwork);
+  const destChain = getChainByNetworkId(chains, transaction.destinationNetwork);
   const isClaimable = transaction.status === 'READY_TO_CLAIM';
 
   const isNative = isNativeToken(transaction.originTokenAddress);
 
   // Get the origin chain to map networkId to chainId
-  const originChain = getChainByNetworkId(transaction.originTokenNetwork);
+  const originChain = getChainByNetworkId(chains, transaction.originTokenNetwork);
 
   // Look up token in the local token list first
   const { getToken } = useTokens();

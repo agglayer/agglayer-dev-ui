@@ -41,8 +41,8 @@ export interface TransactionsResponse {
 
 export interface TransactionFilters {
   fromAddress?: string;
-  sourceNetworkIds?: string;
-  destinationNetworkIds?: string;
+  sourceNetworkIds?: number[];
+  destinationNetworkIds?: number[];
   updatedSince?: number;
   status?: TransactionStatus;
   order?: 'asc' | 'desc';

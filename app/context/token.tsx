@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { normalize } from '@/app/utils/format';
-import { SUPPORTED_CHAINS } from '@/app/constants/chains';
+import { useAppMode } from '@/app/context/app-mode';
 import type { Token } from '@/app/types/token';
 import { StorageUtils, STORAGE_KEYS } from '@/app/utils/storage';
 
@@ -19,7 +19,9 @@ interface TokenContextValue {
 const TokenContext = createContext<TokenContextValue | null>(null);
 
 const generateTokenKey = (chainId: number, address: string) => `${chainId}:${normalize(address)}`;
+
 export const TokenProvider = ({ children }: { children: ReactNode }) => {
+  const { chains } = useAppMode();
   const [customTokens, setCustomTokens] = useState<Token[]>(() => {
     const stored = StorageUtils.getItem<Token[]>(STORAGE_KEYS.CUSTOM_TOKENS, []);
     if (stored && Array.isArray(stored)) {
@@ -50,36 +52,28 @@ export const TokenProvider = ({ children }: { children: ReactNode }) => {
     setCustomTokens([]);
   }, []);
 
-  const baseTokens = useMemo<Token[]>(() => {
-    return SUPPORTED_CHAINS.map((chain) => ({
-      chainId: chain.id,
-      address: chain.nativeCurrency?.address ?? '0x0000000000000000000000000000000000000000',
-      decimals: chain.nativeCurrency?.decimals ?? 18,
-      symbol: chain.nativeCurrency?.symbol ?? 'ETH',
-      name: chain.nativeCurrency?.name ?? 'Native',
-      logoURI: chain.nativeCurrency?.logoURI ?? chain.icon,
-      isNative: true,
-    }));
-  }, []);
-
-  const tokens = useMemo(() => {
+  const { tokens, tokenMap } = useMemo(() => {
     const map = new Map<string, Token>();
-    baseTokens.forEach((token) => {
-      map.set(generateTokenKey(token.chainId, token.address), token);
-    });
-    customTokens.forEach((token) => {
-      map.set(generateTokenKey(token.chainId, token.address), { ...token, isCustom: true });
-    });
-    return Array.from(map.values());
-  }, [baseTokens, customTokens]);
 
-  const tokenMap = useMemo(() => {
-    const map = new Map<string, Token>();
-    for (const token of tokens) {
+    for (const chain of chains) {
+      const token: Token = {
+        chainId: chain.id,
+        address: chain.nativeCurrency.address,
+        decimals: chain.nativeCurrency.decimals,
+        symbol: chain.nativeCurrency.symbol,
+        name: chain.nativeCurrency.name,
+        logoURI: chain.nativeCurrency.logoURI || chain.icon,
+        isNative: true,
+      };
       map.set(generateTokenKey(token.chainId, token.address), token);
     }
-    return map;
-  }, [tokens]);
+
+    for (const token of customTokens) {
+      map.set(generateTokenKey(token.chainId, token.address), token);
+    }
+
+    return { tokens: Array.from(map.values()), tokenMap: map };
+  }, [chains, customTokens]);
 
   const listTokens = useCallback(
     (chainId?: number) => {

@@ -44,8 +44,6 @@ export const TransactionStatusBadge = ({ status, className }: TransactionStatusB
   const config = STATUS_CONFIG[status];
   const variantStyle = VARIANT_STYLES[config.variant];
 
-  console.log(config);
-
   return (
     <div
       className={cn(

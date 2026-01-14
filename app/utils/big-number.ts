@@ -81,13 +81,3 @@ export function toNumber(value: BigNumber): number {
   return value.toNumber();
 }
 
-/**
- * Apply slippage tolerance to amount.
- * @param slippageFraction Slippage as a fraction (e.g., 0.005 for 0.5%), not a percentage.
- */
-export function withSlippage(amount: NumericInput, slippageFraction: NumericInput, isMinimum = true): BigNumber {
-  const amountBN = bn(amount);
-  const slippageAmount = amountBN.multipliedBy(bn(slippageFraction));
-
-  return isMinimum ? amountBN.minus(slippageAmount) : amountBN.plus(slippageAmount);
-}

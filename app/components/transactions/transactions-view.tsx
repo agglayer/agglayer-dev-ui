@@ -8,7 +8,7 @@ import { TransactionFilters } from '@/app/components/transactions/transaction-fi
 import { TransactionList } from '@/app/components/transactions/transaction-list';
 import { useTransactions } from '@/app/hooks/useTransactions';
 import { useWallet } from '@/app/context/wallet';
-import { DEFAULT_FROM_CHAIN_ID } from '@/app/constants/chains';
+import { useAppMode } from '@/app/context/app-mode';
 import type { TransactionStatus } from '@/app/types/transaction';
 import type { Transaction } from '@/app/types/transaction';
 import { getTransactionInitialStatus } from '@/app/components/transactions/intialStatus';
@@ -16,6 +16,7 @@ import { TransactionDetailsModal } from '@/app/components/transactions/transacti
 
 export const TransactionsView = () => {
   const { address, status, chainId, connect } = useWallet();
+  const { defaultFromChainId } = useAppMode();
   const initialStatus = getTransactionInitialStatus();
   const [filters, setFilters] = useState<{ status?: TransactionStatus; updatedSince?: number }>(() => ({
     status: initialStatus ?? undefined,
@@ -35,7 +36,7 @@ export const TransactionsView = () => {
     [address, filters],
   );
 
-  const effectiveChainId = chainId ?? DEFAULT_FROM_CHAIN_ID;
+  const effectiveChainId = chainId ?? defaultFromChainId;
   const isConnected = status === 'connected' && Boolean(address);
 
   const { data, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage, error, refetch } = useTransactions({

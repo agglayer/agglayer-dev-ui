@@ -5,7 +5,6 @@ import { ArrowRight, ExternalLink } from 'lucide-react';
 import { Modal } from '@/app/components/ui/modal';
 import { BadgeImageFallback } from '@/app/components/ui/badge-image-fallback';
 import { CopyText } from '@/app/components/copyText';
-import { getChainByNetworkId } from '@/app/constants/chains';
 import { useTokens } from '@/app/context/token';
 import { useTokenMetadata } from '@/app/hooks/useTokenMetadata';
 import type { Transaction } from '@/app/types/transaction';
@@ -15,6 +14,8 @@ import { getTokenLogoBySymbol } from '@/app/utils/tokens';
 import { Alert } from '@/app/components/ui/alert';
 import { Button } from '@/app/components/ui/button';
 import { formatDateTime } from '@/app/utils/date';
+import { useAppMode } from '@/app/context/app-mode';
+import { getChainByNetworkId } from '@/app/utils/chains';
 
 interface TxFlowHeaderProps {
   sourceChain?: { name: string; icon?: string };
@@ -86,10 +87,11 @@ export const TransactionDetailsModal = ({
 }: TransactionDetailsModalProps) => {
   const tx = transaction;
   const { getToken } = useTokens();
+  const { chains } = useAppMode();
 
-  const sourceChain = tx ? getChainByNetworkId(tx.sourceNetwork) : undefined;
-  const destChain = tx ? getChainByNetworkId(tx.destinationNetwork) : undefined;
-  const originChain = tx ? getChainByNetworkId(tx.originTokenNetwork) : undefined;
+  const sourceChain = tx ? getChainByNetworkId(chains, tx.sourceNetwork) : undefined;
+  const destChain = tx ? getChainByNetworkId(chains, tx.destinationNetwork) : undefined;
+  const originChain = tx ? getChainByNetworkId(chains, tx.originTokenNetwork) : undefined;
 
   const isNative = tx ? isNativeToken(tx.originTokenAddress) : false;
   const localToken = useMemo(

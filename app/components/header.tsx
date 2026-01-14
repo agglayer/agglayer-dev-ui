@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { EllipsisVertical, Menu } from 'lucide-react';
 import { EXTERNAL_LINKS } from '@/app/constants/externalLinks';
 import { ConnectButton } from '@/app/components/connectButton';
+import { Logo } from '@/app/components/ui/logo';
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -45,7 +46,7 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
         >
           <Menu size={20} />
         </button>
-        <h1 className="text-2xl font-bold">Bridge Hub</h1>
+        <Logo />
       </div>
       <div className="flex gap-1 items-center relative">
         <ConnectButton />

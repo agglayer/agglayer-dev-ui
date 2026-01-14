@@ -1,57 +1,44 @@
-import { appConfig } from '@/app/config';
-import { SUPPORTED_CHAINS } from '@/app/constants/chains';
-import { isTestnetChain } from '@/app/utils/network';
+import { APP_MODE_CONFIG } from '@/app/config';
+import { AppMode } from '@/app/types/app-mode';
 import type { TransactionsResponse, TransactionFilters } from '@/app/types/transaction';
+import { getBridgeHubApiBaseUrl } from '@/app/utils/app-mode';
 
-const getEnvironmentNetworkIds = (chainId: number): number[] => {
-  const isTestnet = isTestnetChain(chainId);
-  return SUPPORTED_CHAINS.filter((chain) => (isTestnet ? chain.isTestnet : !chain.isTestnet))
-    .map((chain) => chain.networkId)
-    .filter((id): id is number => typeof id === 'number');
+const getEnvironmentNetworkIds = (mode: AppMode): number[] =>
+  APP_MODE_CONFIG[mode].chains.map((chain) => chain.networkId).filter((id): id is number => Number.isFinite(id));
+
+const formatAllowedNetworkIds = (requestedIds: number[] | undefined, allowedIds: number[]): string | undefined => {
+  if (!requestedIds?.length) return undefined;
+  const filtered = requestedIds.filter((id) => allowedIds.includes(id));
+  if (!filtered.length) return undefined;
+  return [...new Set(filtered)].join(',');
 };
 
-const coerceNetworkIds = (networkIds: string | undefined, allowedIds: number[]): string | undefined => {
-  const requestedIds = networkIds
-    ?.split(',')
-    .map((id) => Number(id.trim()))
-    .filter((id) => Number.isFinite(id));
+const buildTransactionsUrl = (params: { mode: AppMode; filters?: TransactionFilters }): string => {
+  const url = new URL(`${getBridgeHubApiBaseUrl(params.mode)}/transactions`);
+  const allowedNetworkIds = getEnvironmentNetworkIds(params.mode);
 
-  const base = requestedIds?.length ? requestedIds : allowedIds;
-  const filtered = base.filter((id) => allowedIds.includes(id));
-  if (filtered.length === 0) return allowedIds.length ? allowedIds.join(',') : undefined;
-  return Array.from(new Set(filtered)).join(',');
-};
+  // TODO: restore once we move to mongo
+  const sourceNetworkIds = formatAllowedNetworkIds(params.filters?.sourceNetworkIds, allowedNetworkIds);
+  const destinationNetworkIds = formatAllowedNetworkIds(params.filters?.destinationNetworkIds, allowedNetworkIds);
 
-const buildTransactionsUrl = (chainId: number, filters: TransactionFilters = {}): string => {
-  const origin = appConfig.BRIDGE_HUB_API;
-  if (!origin) {
-    throw new Error('BRIDGE_HUB_API missing');
-  }
-
-  const network = isTestnetChain(chainId) ? 'testnet' : 'mainnet';
-  const url = new URL(`${origin}/${network}/transactions`);
-  const allowedNetworkIds = getEnvironmentNetworkIds(chainId);
-
-  const sourceNetworkIds = coerceNetworkIds(filters.sourceNetworkIds, allowedNetworkIds);
-  const destinationNetworkIds = coerceNetworkIds(filters.destinationNetworkIds, allowedNetworkIds);
-
-  if (filters.fromAddress) url.searchParams.set('fromAddress', filters.fromAddress);
-  if (sourceNetworkIds) url.searchParams.set('sourceNetworkIds', sourceNetworkIds);
-  if (destinationNetworkIds) url.searchParams.set('destinationNetworkIds', destinationNetworkIds);
-  if (filters.updatedSince !== undefined) url.searchParams.set('updatedSince', filters.updatedSince.toString());
-  if (filters.status) url.searchParams.set('status', filters.status);
-  if (filters.order) url.searchParams.set('order', filters.order);
-  if (filters.limit) url.searchParams.set('limit', filters.limit.toString());
-  if (filters.startAfter) url.searchParams.set('startAfter', filters.startAfter);
+  if (params.filters?.fromAddress) url.searchParams.set('fromAddress', params.filters.fromAddress);
+  // if (sourceNetworkIds) url.searchParams.set('sourceNetworkIds', sourceNetworkIds);
+  // if (destinationNetworkIds) url.searchParams.set('destinationNetworkIds', destinationNetworkIds);
+  if (params.filters?.updatedSince !== undefined)
+    url.searchParams.set('updatedSince', params.filters.updatedSince.toString());
+  if (params.filters?.status) url.searchParams.set('status', params.filters.status);
+  if (params.filters?.order) url.searchParams.set('order', params.filters.order);
+  if (params.filters?.limit) url.searchParams.set('limit', params.filters.limit.toString());
+  if (params.filters?.startAfter) url.searchParams.set('startAfter', params.filters.startAfter);
 
   return url.toString();
 };
 
-export const fetchTransactions = async (
-  chainId: number,
-  filters: TransactionFilters = {},
-): Promise<TransactionsResponse> => {
-  const url = buildTransactionsUrl(chainId, filters);
+export const fetchTransactions = async (params: {
+  mode: AppMode;
+  filters?: TransactionFilters;
+}): Promise<TransactionsResponse> => {
+  const url = buildTransactionsUrl({ mode: params.mode, filters: params.filters });
   const res = await fetch(url, {
     headers: { accept: 'application/json' },
   });

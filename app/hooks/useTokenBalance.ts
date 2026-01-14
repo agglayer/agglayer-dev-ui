@@ -1,52 +1,45 @@
-import { useBalance, useReadContract } from 'wagmi';
-import type { Hex } from 'viem';
+import { ZERO_ADDRESS } from './../types/bridge';
+import { useQuery } from '@tanstack/react-query';
+import { useAggNative } from '@/app/context/aggLayerSdk';
+import { useAppMode } from '@/app/context/app-mode';
 import { normalize } from '@/app/utils/format';
+import { isValidEthereumAddress } from '@/app/utils/address';
 import type { Token } from '@/app/types/token';
-
-const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
-
-const erc20BalanceOfAbi = [
-  {
-    type: 'function',
-    name: 'balanceOf',
-    stateMutability: 'view',
-    inputs: [{ name: 'owner', type: 'address' }],
-    outputs: [{ name: 'balance', type: 'uint256' }],
-  },
-] as const;
 
 type UseTokenBalanceParams = {
   token?: Token;
-  userAddress?: Hex;
+  userAddress?: string;
   enabled?: boolean;
 };
 
 export const useTokenBalance = ({ token, userAddress, enabled = true }: UseTokenBalanceParams) => {
-  const isNative = Boolean(token && (token.isNative || normalize(token.address) === ZERO_ADDRESS));
-  const canFetch = Boolean(enabled && token && userAddress);
-  const contractAddress = (token?.address ?? ZERO_ADDRESS) as Hex;
+  const native = useAggNative();
+  const { mode } = useAppMode();
+  const chainId = token?.chainId;
+  const tokenAddress = token?.address ?? ZERO_ADDRESS;
+  const isNative = Boolean(token && (token.isNative || normalize(tokenAddress) === normalize(ZERO_ADDRESS)));
+  const canFetch = Boolean(enabled && token && userAddress && chainId);
 
-  const nativeBalance = useBalance({
-    address: userAddress,
-    chainId: token?.chainId,
-    query: { enabled: canFetch && isNative },
-  });
-
-  const erc20Balance = useReadContract({
-    abi: erc20BalanceOfAbi,
-    address: contractAddress,
-    functionName: 'balanceOf',
-    args: userAddress ? [userAddress] : undefined,
-    chainId: token?.chainId,
-    query: { enabled: canFetch && !isNative },
-  });
-
-  const rawBalance = isNative ? nativeBalance.data?.value?.toString() : erc20Balance.data?.toString();
-  const isLoading = isNative ? nativeBalance.isLoading : erc20Balance.isLoading;
-
-  return {
-    rawBalance,
+  const {
+    data: rawBalance,
     isLoading,
-    isError: isNative ? nativeBalance.isError : erc20Balance.isError,
-  };
+    isError,
+  } = useQuery({
+    queryKey: ['token-balance', mode, chainId, tokenAddress, userAddress],
+    enabled: canFetch,
+    queryFn: async () => {
+      if (!token || !userAddress || !chainId) {
+        throw new Error('MISSING_PARAMS');
+      }
+      if (isNative) {
+        return native.getNativeBalance(userAddress, chainId);
+      }
+      if (!isValidEthereumAddress(tokenAddress)) {
+        throw new Error('INVALID_TOKEN_ADDRESS');
+      }
+      return native.erc20(tokenAddress, chainId).getBalance(userAddress);
+    },
+  });
+
+  return { rawBalance, isLoading, isError };
 };

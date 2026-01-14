@@ -3,103 +3,45 @@
 import type { PropsWithChildren } from 'react';
 import React, { createContext, useContext, useMemo } from 'react';
 import { AggLayerSDK, SDK_MODES } from '@agglayer/sdk';
-import { mainnet, sepolia, polygon, polygonAmoy, xLayer, polygonZkEvm, katana, ternoa } from 'wagmi/chains';
+import { useAppMode } from '@/app/context/app-mode';
+import { AppChain } from '@/app/types/app-mode';
 
 type AggNative = ReturnType<AggLayerSDK['getNative']>;
 
 const AggLayerNativeContext = createContext<AggNative | null>(null);
 
-const forknetChainId = 8338;
+const toSdkChainConfig = (chain: AppChain, bridgeAddress: string, proofApiUrl: string) => ({
+  chainId: chain.id,
+  networkId: chain.networkId,
+  name: chain.name,
+  rpcUrl: chain.rpcUrl,
+  nativeCurrency: {
+    name: chain.nativeCurrency.name,
+    symbol: chain.nativeCurrency.symbol,
+    decimals: chain.nativeCurrency.decimals,
+  },
+  blockExplorer: chain.explorer ? { name: chain.name, url: chain.explorer } : undefined,
+  bridgeAddress,
+  proofApiUrl,
+  isTestnet: chain.isTestnet,
+});
 
 export const AggLayerSDKProvider: React.FC<PropsWithChildren> = ({ children }) => {
-  const native = useMemo(() => {
-    const customRpcUrls: Record<number, string> = {
-      [mainnet.id]: mainnet.rpcUrls.default.http[0],
-      [sepolia.id]: sepolia.rpcUrls.default.http[0],
-      [polygon.id]: polygon.rpcUrls.default.http[0],
-      [polygonAmoy.id]: polygonAmoy.rpcUrls.default.http[0],
-      [xLayer.id]: xLayer.rpcUrls.default.http[0],
-      [polygonZkEvm.id]: polygonZkEvm.rpcUrls.default.http[0],
-      [katana.id]: katana.rpcUrls.default.http[0],
-      [ternoa.id]: ternoa.rpcUrls.default.http[0],
-      [forknetChainId]: 'https://rpc-forknet.t.conduit.xyz',
-    };
+  const { config } = useAppMode();
 
+  const native = useMemo(() => {
     const sdk = new AggLayerSDK({
       mode: [SDK_MODES.NATIVE],
       native: {
-        defaultNetwork: mainnet.id,
-        customRpcUrls,
-        chains: [
-          {
-            chainId: polygon.id,
-            networkId: polygon.id,
-            name: polygon.name,
-            rpcUrl: polygon.rpcUrls.default.http[0],
-            nativeCurrency: polygon.nativeCurrency,
-            blockExplorer: polygon.blockExplorers?.default,
-            isTestnet: false,
-          },
-          {
-            chainId: polygonAmoy.id,
-            networkId: polygonAmoy.id,
-            name: polygonAmoy.name,
-            rpcUrl: polygonAmoy.rpcUrls.default.http[0],
-            nativeCurrency: polygonAmoy.nativeCurrency,
-            blockExplorer: polygonAmoy.blockExplorers?.default,
-            isTestnet: true,
-          },
-          {
-            chainId: xLayer.id,
-            networkId: xLayer.id,
-            name: xLayer.name,
-            rpcUrl: xLayer.rpcUrls.default.http[0],
-            nativeCurrency: xLayer.nativeCurrency,
-            blockExplorer: xLayer.blockExplorers?.default,
-            isTestnet: false,
-          },
-          {
-            chainId: polygonZkEvm.id,
-            networkId: polygonZkEvm.id,
-            name: polygonZkEvm.name,
-            rpcUrl: polygonZkEvm.rpcUrls.default.http[0],
-            nativeCurrency: polygonZkEvm.nativeCurrency,
-            blockExplorer: polygonZkEvm.blockExplorers?.default,
-            isTestnet: false,
-          },
-          // Ternoa
-          {
-            chainId: ternoa.id,
-            networkId: ternoa.id,
-            name: ternoa.name,
-            rpcUrl: ternoa.rpcUrls.default.http[0],
-            nativeCurrency: ternoa.nativeCurrency,
-            blockExplorer: ternoa.blockExplorers?.default,
-            isTestnet: false,
-          },
-          // Forknet
-          {
-            chainId: forknetChainId,
-            networkId: forknetChainId,
-            name: 'Forknet',
-            rpcUrl: 'https://rpc-forknet.t.conduit.xyz',
-            nativeCurrency: {
-              name: 'Ether',
-              symbol: 'ETH',
-              decimals: 18,
-            },
-            blockExplorer: {
-              name: 'Forkscan',
-              url: 'https://forkscan.org/',
-            },
-            isTestnet: true,
-          },
-        ],
+        defaultNetwork: config.defaultFromChainId,
+        chains: config.chains.map((chain: AppChain) =>
+          toSdkChainConfig(chain, config.bridgeAddress, config.proofApiUrl),
+        ),
       },
     });
 
     return sdk.getNative();
-  }, []);
+  }, [config]);
 
   return <AggLayerNativeContext.Provider value={native}>{children}</AggLayerNativeContext.Provider>;
 };

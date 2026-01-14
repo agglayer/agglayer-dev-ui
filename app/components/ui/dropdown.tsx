@@ -70,7 +70,7 @@ export const Dropdown = ({
           type="button"
           disabled={disabled}
           onClick={() => setOpen((prev) => !prev)}
-          className="flex flex-1 items-center justify-between gap-3 text-left"
+          className="flex flex-1 items-center justify-between gap-3 text-left cursor-pointer"
         >
           <span className="flex items-center gap-2 text-sm">
             {selected?.icon}

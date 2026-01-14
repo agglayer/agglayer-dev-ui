@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { Trash2, ArrowLeft, ExternalLink } from 'lucide-react';
+import { Trash2, ArrowLeft, ExternalLink, Loader2 } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { TextInput } from '@/app/components/ui/text-input';
 import { Alert } from '@/app/components/ui/alert';
@@ -9,9 +9,9 @@ import { isValidEthereumAddress, shortenAddress } from '@/app/utils/address';
 import { useTokenMetadata } from '@/app/hooks/useTokenMetadata';
 import { BadgeImageFallback } from '@/app/components/ui/badge-image-fallback';
 import type { Token } from '@/app/types/token';
-import { Spinner } from '@/app/components/ui/spinner';
 import { CopyText } from '@/app/components/copyText';
-import { getChainById } from '@/app/constants/chains';
+import { getChainById } from '@/app/utils/chains';
+import { useAppMode } from '@/app/context/app-mode';
 import { getTokenLogoBySymbol } from '@/app/utils/tokens';
 
 interface ManageTokensViewProps {
@@ -35,10 +35,11 @@ export const ManageTokensView: React.FC<ManageTokensViewProps> = ({
   onRemoveCustomToken,
   customTokens,
 }) => {
+  const { chains } = useAppMode();
   const trimmedAddress = customTokenAddress.trim();
   const isValidInput = isValidEthereumAddress(trimmedAddress);
   const effectiveQueryAddress = isValidInput ? trimmedAddress : null;
-  const chain = chainId ? getChainById(chainId) : undefined;
+  const chain = chainId ? getChainById(chains, chainId) : undefined;
   const explorerBase = chain?.explorer;
 
   const { data, isFetching, isError, error, isSuccess } = useTokenMetadata({
@@ -99,7 +100,7 @@ export const ManageTokensView: React.FC<ManageTokensViewProps> = ({
 
       {isFetching && (
         <div className="flex items-center gap-2 rounded-xl border border-border bg-surface px-3 py-3 shadow-xs text-sm text-muted">
-          <Spinner size="sm" />
+          <Loader2 className="size-5 text-muted animate-spin" />
           <span>Fetching token metadata...</span>
         </div>
       )}

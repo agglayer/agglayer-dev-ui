@@ -1,4 +1,6 @@
-export const isValidEthereumAddress = (address: string): boolean => /^0x[a-fA-F0-9]{40}$/.test(address);
+import type { Hex } from 'viem';
+
+export const isValidEthereumAddress = (address: string): address is Hex => /^0x[a-fA-F0-9]{40}$/.test(address);
 
 export const isSameAddress = (address1: string | undefined, address2: string | undefined): boolean => {
   if (!address1 || !address2) return false;

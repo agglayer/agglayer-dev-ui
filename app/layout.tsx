@@ -11,7 +11,7 @@ const interTight = Inter_Tight({
 });
 
 export const metadata: Metadata = {
-  title: 'Bridge Hub UI',
+  title: 'Agglayer UI',
   description: '',
 };
 

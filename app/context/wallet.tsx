@@ -4,49 +4,24 @@ import type { ReactNode } from 'react';
 import { createContext, useContext, useMemo } from 'react';
 import { useChainId, useChains, useSwitchChain, WagmiProvider } from 'wagmi';
 import type { Chain } from 'viem';
-import {
-  mainnet,
-  sepolia,
-  polygon,
-  polygonZkEvm,
-  polygonAmoy,
-  xLayer,
-  katana,
-  ternoa,
-  type AppKitNetwork,
-} from '@reown/appkit/networks';
+import { WagmiAdapter } from '@reown/appkit-adapter-wagmi';
+import { sepolia } from '@reown/appkit/networks';
 import type { ConnectedWalletInfo } from '@reown/appkit/react';
 import { createAppKit, useAppKit, useAppKitAccount, useDisconnect, useWalletInfo } from '@reown/appkit/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { wagmiAdapter, projectId } from '@/app/config/wagmiConfig';
+import { ALL_WAGMI_CHAINS } from '@/app/config';
 import { EXTERNAL_LINKS } from '@/app/constants/externalLinks';
 
 const queryClient = new QueryClient();
+const projectId = process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID!;
 
-// Custom network definitions
-const forknet: AppKitNetwork = {
-  id: 8338,
-  name: 'Forknet',
-  nativeCurrency: {
-    name: 'Ether',
-    symbol: 'ETH',
-    decimals: 18,
-  },
-  rpcUrls: {
-    default: {
-      http: ['https://rpc-forknet.t.conduit.xyz'],
-    },
-  },
-  blockExplorers: {
-    default: {
-      name: 'Forkscan',
-      url: 'https://forkscan.org/',
-    },
-  },
-};
+const wagmiAdapter = new WagmiAdapter({
+  ssr: true,
+  projectId,
+  networks: [...ALL_WAGMI_CHAINS],
+});
 
-// walletIds
-// https://docs.reown.com/cloud/wallets/wallet-list
+// walletIds - https://docs.reown.com/cloud/wallets/wallet-list
 const walletIds = {
   METAMASK: 'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96',
   COINBASE: 'fd20dc426fb37566d803205b19bbc1d4096b248ac04548e3cfb6b3a38bd033aa',
@@ -56,12 +31,12 @@ const walletIds = {
 createAppKit({
   adapters: [wagmiAdapter],
   projectId,
-  networks: [mainnet, polygon, polygonAmoy, sepolia, xLayer, polygonZkEvm, katana, ternoa, forknet],
-  defaultNetwork: mainnet,
+  networks: [...ALL_WAGMI_CHAINS],
+  defaultNetwork: sepolia,
   metadata: {
     name: 'bridge-hub-ui',
     description: 'Bridge Hub UI',
-    url: 'https://ui.agglayer.dev',
+    url: 'https://ui-testnet.agglayer.dev/',
     icons: ['https://avatars.githubusercontent.com/u/179229932'],
   },
   features: {

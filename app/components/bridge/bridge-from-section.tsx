@@ -6,6 +6,8 @@ import { AmountInput } from '@/app/components/ui/amount-input';
 import { BadgeImageFallback } from '@/app/components/ui/badge-image-fallback';
 import { formatTokenBalance, getTokenLogoBySymbol, portionOfBalance } from '@/app/utils/tokens';
 import type { Token } from '@/app/types/token';
+import { normalize } from '@/app/utils/format';
+import { ZERO_ADDRESS } from '@/app/types/bridge';
 
 interface BridgeFromSectionProps {
   chainOptions: DropdownOption[];
@@ -17,6 +19,7 @@ interface BridgeFromSectionProps {
   balancesLoading: boolean;
   selectedToken?: Token;
   onOpenTokenSelector: () => void;
+  maxNativeAmount?: string;
 }
 
 export const BridgeFromSection = ({
@@ -29,17 +32,20 @@ export const BridgeFromSection = ({
   balancesLoading,
   selectedToken,
   onOpenTokenSelector,
+  maxNativeAmount,
 }: BridgeFromSectionProps) => {
   const balanceText = selectedToken ? formatTokenBalance(selectedToken, rawBalance) : '0';
 
   const quickActions = useMemo(() => {
     if (!selectedToken) return [];
+    const isNativeToken = selectedToken.isNative || normalize(selectedToken.address) === normalize(ZERO_ADDRESS);
+    const maxValue = isNativeToken && maxNativeAmount ? maxNativeAmount : portionOfBalance(selectedToken, rawBalance, 1);
     return [
       { label: '25%', value: portionOfBalance(selectedToken, rawBalance, 0.25) },
       { label: '50%', value: portionOfBalance(selectedToken, rawBalance, 0.5) },
-      { label: 'MAX', value: portionOfBalance(selectedToken, rawBalance, 1) },
+      { label: 'MAX', value: maxValue },
     ];
-  }, [rawBalance, selectedToken]);
+  }, [rawBalance, selectedToken, maxNativeAmount]);
 
   return (
     <section className="space-y-2">

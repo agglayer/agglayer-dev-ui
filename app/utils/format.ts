@@ -34,3 +34,12 @@ export const formatTokenAmount = (amount: number | string | BigNumber) => {
     return '-';
   }
 };
+
+export const toBigInt = (value?: string) => {
+  if (!value) return undefined;
+  try {
+    return BigInt(value);
+  } catch {
+    return undefined;
+  }
+};
