@@ -91,7 +91,7 @@ export const useBridgeExecution = (params: { fromChainId: number }) => {
 
           setState((prev) => ({ ...prev, currentStep: 'bridging' }));
         }
-        console.log('Bridge', fromChainId, destNetworkId)
+
         // Bridge step
         const bridgeTx = args.isNative
           ? await native.bridge(bridgeAddress, fromChainId).buildBridgeAsset(

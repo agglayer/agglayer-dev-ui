@@ -10,6 +10,7 @@ const getBrowserStorage = (): Storage | null => {
 const createStorageKey = (key: string): string => `${APP_PREFIX}:${key}`;
 
 export const STORAGE_KEYS = {
+  APP_MODE: createStorageKey('appMode'),
   CUSTOM_TOKENS: createStorageKey('customTokens'),
 } as const;
 

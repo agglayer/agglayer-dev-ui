@@ -65,7 +65,7 @@ export const APP_MODE_CONFIG: Record<AppMode, AppModeConfig> = {
     defaultToChainId: polygonZkEvmCardona.id,
     chains: [
       createChain(sepolia, 0, ICONS.ethereum, ICONS.ethereum, 'https://ethereum-sepolia-rpc.publicnode.com'),
-      createChain(polygonZkEvmCardona, 0, ICONS.zkevm, ICONS.ethereum),
+      createChain(polygonZkEvmCardona, 1, ICONS.zkevm, ICONS.ethereum),
     ],
   },
   devnet: {

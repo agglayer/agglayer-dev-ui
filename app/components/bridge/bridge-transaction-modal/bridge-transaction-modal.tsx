@@ -73,7 +73,7 @@ const resolveModalContent = (state: BridgeExecutionState, context: ModalContext)
   if (currentStep === 'success') {
     return {
       mode: 'success',
-      headline: 'Bridge initiated',
+      headline: 'Transaction successful',
       subheadline: 'Your assets are on the way.',
       showLoader: false,
       shouldAlternateHeadline: false,
