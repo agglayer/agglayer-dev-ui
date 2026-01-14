@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowRight, ExternalLink } from 'lucide-react';
+import { ArrowRight, ExternalLink, Loader2 } from 'lucide-react';
 import { BadgeImageFallback } from '@/app/components/ui/badge-image-fallback';
 import { Button } from '@/app/components/ui/button';
 import { CopyText } from '@/app/components/copyText';
@@ -10,7 +10,7 @@ import { getChainByNetworkId } from '@/app/utils/chains';
 import { useTokens } from '@/app/context/token';
 import { shortenAddress } from '@/app/utils/address';
 import { formatTransactionAmount, isNativeToken } from '@/app/utils/transaction';
-import type { Transaction } from '@/app/types/transaction';
+import type { ClaimStep, Transaction } from '@/app/types/transaction';
 import { cn } from '@/app/utils/common';
 import { getTokenLogoBySymbol } from '@/app/utils/tokens';
 import { useAppMode } from '@/app/context/app-mode';
@@ -19,9 +19,17 @@ interface TransactionListItemProps {
   transaction: Transaction;
   onClaim?: (transaction: Transaction) => void;
   onSelect?: (transaction: Transaction) => void;
+  claimStep?: ClaimStep;
+  isAnyClaiming?: boolean;
 }
 
-export const TransactionListItem = ({ transaction, onClaim, onSelect }: TransactionListItemProps) => {
+export const TransactionListItem = ({
+  transaction,
+  onClaim,
+  onSelect,
+  claimStep,
+  isAnyClaiming,
+}: TransactionListItemProps) => {
   const { chains } = useAppMode();
   const sourceChain = getChainByNetworkId(chains, transaction.sourceNetwork);
   const destChain = getChainByNetworkId(chains, transaction.destinationNetwork);
@@ -145,11 +153,19 @@ export const TransactionListItem = ({ transaction, onClaim, onSelect }: Transact
             }}
             size="md"
             className="w-full"
+            disabled={isAnyClaiming}
           >
-            Claim tokens
+            {claimStep === 'claiming' ? (
+              <>
+                <Loader2 className="animate-spin size-4 mr-2" />
+                Claiming...
+              </>
+            ) : (
+              'Claim tokens'
+            )}
           </Button>
         )}
       </div>
     </div>
   );
-};;;
+};;

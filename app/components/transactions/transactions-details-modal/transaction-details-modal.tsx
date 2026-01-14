@@ -1,13 +1,12 @@
 'use client';
 
 import { useMemo } from 'react';
-import { ArrowRight, ExternalLink } from 'lucide-react';
+import { ExternalLink, Loader2 } from 'lucide-react';
 import { Modal } from '@/app/components/ui/modal';
-import { BadgeImageFallback } from '@/app/components/ui/badge-image-fallback';
 import { CopyText } from '@/app/components/copyText';
 import { useTokens } from '@/app/context/token';
 import { useTokenMetadata } from '@/app/hooks/useTokenMetadata';
-import type { Transaction } from '@/app/types/transaction';
+import type { ClaimStep, Transaction } from '@/app/types/transaction';
 import { shortenAddress } from '@/app/utils/address';
 import { formatTransactionAmount, isNativeToken } from '@/app/utils/transaction';
 import { getTokenLogoBySymbol } from '@/app/utils/tokens';
@@ -16,59 +15,8 @@ import { Button } from '@/app/components/ui/button';
 import { formatDateTime } from '@/app/utils/date';
 import { useAppMode } from '@/app/context/app-mode';
 import { getChainByNetworkId } from '@/app/utils/chains';
+import { TxDetailsHeader } from '@/app/components/transactions/transactions-details-modal/header';
 
-interface TxFlowHeaderProps {
-  sourceChain?: { name: string; icon?: string };
-  destChain?: { name: string; icon?: string };
-  tokenLogo?: string;
-  tokenSymbol: string;
-  formattedAmount: string;
-}
-
-const TxFlowHeader = ({ sourceChain, destChain, tokenLogo, tokenSymbol, formattedAmount }: TxFlowHeaderProps) => {
-  return (
-    <div className="w-full rounded-xl border border-border bg-surface-muted px-4 py-4 shadow-xs">
-      <div className="flex items-center gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-muted/80">From</div>
-          <div className="mt-1 flex min-w-0 items-center gap-2">
-            {sourceChain?.icon && (
-              <BadgeImageFallback
-                src={sourceChain.icon}
-                size="sm"
-                fallbackText={sourceChain.name}
-                className="shrink-0"
-              />
-            )}
-            <span className="truncate font-semibold text-black">{sourceChain?.name ?? '-'}</span>
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <span className="h-2 w-2 rounded-full bg-border" />
-          <span className="h-px w-12 bg-border" />
-          <ArrowRight className="size-6 text-muted" />
-          <span className="h-px w-12 bg-border" />
-          <span className="h-2 w-2 rounded-full bg-border" />
-        </div>
-        <div className="min-w-0 flex-1 text-right">
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-muted/80">To</div>
-          <div className="mt-1 flex min-w-0 items-center justify-end gap-2">
-            <span className="truncate font-semibold text-black">{destChain?.name ?? '-'}</span>
-            {destChain?.icon && (
-              <BadgeImageFallback src={destChain.icon} size="sm" fallbackText={destChain.name} className="shrink-0" />
-            )}
-          </div>
-        </div>
-      </div>
-      <div className="flex items-center justify-center gap-2">
-        {tokenLogo && <BadgeImageFallback src={tokenLogo} size="md" fallbackText={tokenSymbol} />}
-        <div className="text-2xl font-bold text-black">
-          {formattedAmount} {tokenSymbol}
-        </div>
-      </div>
-    </div>
-  );
-};
 
 interface TransactionDetailsModalProps {
   open: boolean;
@@ -76,6 +24,8 @@ interface TransactionDetailsModalProps {
   transaction: Transaction | null;
   isDifferentAddress?: boolean;
   onClaim?: (transaction: Transaction) => void;
+  claimStep?: ClaimStep;
+  isAnyClaiming?: boolean;
 }
 
 export const TransactionDetailsModal = ({
@@ -84,6 +34,8 @@ export const TransactionDetailsModal = ({
   transaction,
   isDifferentAddress,
   onClaim,
+  claimStep,
+  isAnyClaiming,
 }: TransactionDetailsModalProps) => {
   const tx = transaction;
   const { getToken } = useTokens();
@@ -123,7 +75,7 @@ export const TransactionDetailsModal = ({
   return (
     <Modal open={open} onClose={onClose} title="Transaction Details" contentClassName="space-y-6">
       <div className="space-y-4">
-        <TxFlowHeader
+        <TxDetailsHeader
           sourceChain={sourceChain ? { name: sourceChain.name, icon: sourceChain.icon } : undefined}
           destChain={destChain ? { name: destChain.name, icon: destChain.icon } : undefined}
           tokenLogo={tokenLogo}
@@ -202,14 +154,21 @@ export const TransactionDetailsModal = ({
 
         {isClaimable && (
           <Button
-            disabled={!isClaimable}
+            disabled={isAnyClaiming}
             onClick={() => {
               onClaim?.(tx);
             }}
             size="md"
             className="w-full"
           >
-            Claim tokens
+            {claimStep === 'claiming' ? (
+              <>
+                <Loader2 className="animate-spin size-4 mr-2" />
+                Claiming...
+              </>
+            ) : (
+              'Claim tokens'
+            )}
           </Button>
         )}
       </div>

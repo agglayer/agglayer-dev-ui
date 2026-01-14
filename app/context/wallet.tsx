@@ -9,7 +9,7 @@ import { sepolia } from '@reown/appkit/networks';
 import type { ConnectedWalletInfo } from '@reown/appkit/react';
 import { createAppKit, useAppKit, useAppKitAccount, useDisconnect, useWalletInfo } from '@reown/appkit/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ALL_WAGMI_CHAINS } from '@/app/config';
+import { ALL_WAGMI_CHAINS, customRpcUrls } from '@/app/config';
 import { EXTERNAL_LINKS } from '@/app/constants/externalLinks';
 
 const queryClient = new QueryClient();
@@ -18,6 +18,7 @@ const projectId = process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID!;
 const wagmiAdapter = new WagmiAdapter({
   ssr: true,
   projectId,
+  customRpcUrls,
   networks: [...ALL_WAGMI_CHAINS],
 });
 
@@ -33,6 +34,7 @@ createAppKit({
   projectId,
   networks: [...ALL_WAGMI_CHAINS],
   defaultNetwork: sepolia,
+  customRpcUrls,
   metadata: {
     name: 'bridge-hub-ui',
     description: 'Bridge Hub UI',

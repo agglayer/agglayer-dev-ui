@@ -1,3 +1,5 @@
+import { Hex } from 'viem';
+
 export type TransactionStatus = 'BRIDGED' | 'LEAF_INCLUDED' | 'READY_TO_CLAIM' | 'CLAIMED';
 
 export interface Transaction {
@@ -25,7 +27,7 @@ export interface Transaction {
   originTokenNetwork: number;
   timestamp: number;
   leafIndex: number;
-  leafIndexForProof: number;
+  leafIndexForProof?: number;
 }
 
 export interface TransactionsResponse {
@@ -49,3 +51,22 @@ export interface TransactionFilters {
   limit?: number;
   startAfter?: string;
 }
+
+export type ClaimStep = 'idle' | 'claiming' | 'success' | 'error';
+
+export interface ClaimExecutionState {
+  isExecuting: boolean;
+  currentStep: ClaimStep;
+  claimTxHash?: Hex;
+  error?: { message: string; txHash?: Hex };
+  transactionId?: string;
+  destinationChainId?: number;
+}
+
+export type ClaimExecutionResult = {
+  status: 'success' | 'error';
+  transactionId: string;
+  destinationChainId: number;
+  claimTxHash?: Hex;
+  error?: { message: string; txHash?: Hex };
+};

@@ -5,7 +5,7 @@ import { Loader2 } from 'lucide-react';
 import { TransactionListItem } from '@/app/components/transactions/transaction-list-item';
 import { useInfiniteScroll } from '@/app/hooks/useInfiniteScroll';
 import { groupTransactionsByDate } from '@/app/utils/date';
-import type { Transaction } from '@/app/types/transaction';
+import type { ClaimStep, Transaction } from '@/app/types/transaction';
 
 interface TransactionListProps {
   transactions: Transaction[];
@@ -15,6 +15,9 @@ interface TransactionListProps {
   onLoadMore?: () => void;
   onClaim?: (transaction: Transaction) => void;
   onSelect?: (transaction: Transaction) => void;
+  claimingTxId?: string;
+  claimStep?: ClaimStep;
+  isAnyClaiming?: boolean;
 }
 
 export const TransactionList = ({
@@ -25,6 +28,9 @@ export const TransactionList = ({
   onLoadMore,
   onClaim,
   onSelect,
+  claimingTxId,
+  claimStep,
+  isAnyClaiming,
 }: TransactionListProps) => {
   const sentinelRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -66,7 +72,14 @@ export const TransactionList = ({
           <h3 className="text-xs font-semibold uppercase tracking-wide text-grey">{date}</h3>
           <div className="space-y-2">
             {txs.map((tx) => (
-              <TransactionListItem key={tx.hubUID} transaction={tx} onClaim={onClaim} onSelect={onSelect} />
+              <TransactionListItem
+                key={tx.hubUID}
+                transaction={tx}
+                onClaim={onClaim}
+                onSelect={onSelect}
+                claimStep={tx.hubUID === claimingTxId ? claimStep : undefined}
+                isAnyClaiming={isAnyClaiming}
+              />
             ))}
           </div>
         </div>

@@ -16,6 +16,33 @@ export const forknet: Chain = {
   nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
 };
 
+// zkevm rpc urls current issue with walletconnect rpc always failing
+export const polygonZkEvmRpcEndpoints = [
+  'https://zkevm-rpc.com',
+  'https://endpoints.omniatech.io/v1/polygon-zkevm/mainnet/public',
+  'https://polygon-zkevm.drpc.org',
+  'https://polygon-zkevm-public.nodies.app',
+  'https://1rpc.io/polygon/zkevm',
+];
+
+// add custom chains
+export const polygonZkEvmWithFallbackRpcs: Chain = {
+  ...polygonZkEvm,
+  rpcUrls: {
+    default: {
+      http: polygonZkEvmRpcEndpoints,
+    },
+    public: {
+      http: polygonZkEvmRpcEndpoints,
+    },
+  },
+};
+
+export const customRpcUrls = {
+  'eip155:1101': polygonZkEvmRpcEndpoints.map((url) => ({ url })),
+};
+
+
 const createChain = (
   chain: Chain,
   networkId: number,
@@ -50,7 +77,7 @@ export const APP_MODE_CONFIG: Record<AppMode, AppModeConfig> = {
     defaultToChainId: katana.id,
     chains: [
       createChain(mainnet, 0, ICONS.ethereum, ICONS.ethereum),
-      createChain(polygonZkEvm, 1, ICONS.zkevm, ICONS.ethereum),
+      createChain(polygonZkEvmWithFallbackRpcs, 1, ICONS.zkevm, ICONS.ethereum),
       createChain(xLayer, 3, ICONS.xlayer, ICONS.xlayerToken),
       createChain(katana, 20, ICONS.katana, ICONS.ethereum),
       createChain(ternoa, 13, ICONS.ternoa, ICONS.ternoa),
@@ -80,7 +107,7 @@ export const APP_MODE_CONFIG: Record<AppMode, AppModeConfig> = {
 
 export const ALL_WAGMI_CHAINS: readonly [Chain, ...Chain[]] = [
   mainnet,
-  polygonZkEvm,
+  polygonZkEvmWithFallbackRpcs,
   xLayer,
   katana,
   ternoa,

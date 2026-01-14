@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import { type Hex, isHex } from 'viem';
+import type { Hex } from 'viem';
 import { usePublicClient, useSendTransaction } from 'wagmi';
 import { useAggNative } from '@/app/context/aggLayerSdk';
 import { useAppMode } from '@/app/context/app-mode';
@@ -10,7 +10,7 @@ import { ZERO_ADDRESS } from '@/app/types/bridge';
 import type { Token } from '@/app/types/token';
 import { isValidEthereumAddress } from '@/app/utils/address';
 import { getNetworkId } from '@/app/utils/chains';
-import type { TransactionParams } from '@agglayer/sdk';
+import { mapTransactionRequest } from '@/app/utils/transaction';
 
 export const useBridgeExecution = (params: { fromChainId: number }) => {
   const { fromChainId } = params;
@@ -157,32 +157,4 @@ export const useBridgeExecution = (params: { fromChainId: number }) => {
   }, []);
 
   return { state, execute, reset };
-};
-
-const mapTransactionRequest = (params: TransactionParams, account: Hex) => {
-  const to = isValidEthereumAddress(params.to) ? params.to : undefined;
-  if (!to) {
-    throw new Error('Invalid transaction recipient');
-  }
-
-  const data = isHex(params.data) ? params.data : undefined;
-  if (!data) {
-    throw new Error('Invalid transaction data');
-  }
-
-  return {
-    account,
-    to,
-    data,
-    value: toBigInt(params.value),
-  };
-};
-
-const toBigInt = (value?: string) => {
-  if (!value) return undefined;
-  try {
-    return BigInt(value);
-  } catch {
-    return undefined;
-  }
 };

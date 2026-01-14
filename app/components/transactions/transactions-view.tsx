@@ -1,22 +1,29 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { AlertTriangle, Plug } from 'lucide-react';
+import { useCallback, useMemo, useState } from 'react';
+import type { Hex } from 'viem';
+import { useQueryClient } from '@tanstack/react-query';
+import { AlertTriangle, Plug, RotateCw } from 'lucide-react';
 import { Card } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { TransactionFilters } from '@/app/components/transactions/transaction-filters';
 import { TransactionList } from '@/app/components/transactions/transaction-list';
+import { ClaimResultModal } from '@/app/components/transactions/claim-result-modal';
 import { useTransactions } from '@/app/hooks/useTransactions';
+import { useClaimExecution } from '@/app/hooks/useClaimExecution';
+import { useEnforceCorrectChain } from '@/app/hooks/useEnforceCorrectChain';
 import { useWallet } from '@/app/context/wallet';
 import { useAppMode } from '@/app/context/app-mode';
-import type { TransactionStatus } from '@/app/types/transaction';
-import type { Transaction } from '@/app/types/transaction';
+import type { TransactionStatus, Transaction } from '@/app/types/transaction';
 import { getTransactionInitialStatus } from '@/app/components/transactions/intialStatus';
-import { TransactionDetailsModal } from '@/app/components/transactions/transaction-details-modal';
+import { TransactionDetailsModal } from '@/app/components/transactions/transactions-details-modal/transaction-details-modal';
+import { getChainById, getChainByNetworkId } from '@/app/utils/chains';
+import { cn } from '@/app/utils/common';
 
 export const TransactionsView = () => {
   const { address, status, chainId, connect } = useWallet();
-  const { defaultFromChainId } = useAppMode();
+  const { defaultFromChainId, chains, bridgeAddress } = useAppMode();
+  const queryClient = useQueryClient();
   const initialStatus = getTransactionInitialStatus();
   const [filters, setFilters] = useState<{ status?: TransactionStatus; updatedSince?: number }>(() => ({
     status: initialStatus ?? undefined,
@@ -39,11 +46,30 @@ export const TransactionsView = () => {
   const effectiveChainId = chainId ?? defaultFromChainId;
   const isConnected = status === 'connected' && Boolean(address);
 
-  const { data, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage, error, refetch } = useTransactions({
-    chainId: effectiveChainId,
-    filters: queryFilters,
-    enabled: isConnected,
+  const { data, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage, error, refetch, isRefetching } =
+    useTransactions({
+      chainId: effectiveChainId,
+      filters: queryFilters,
+      enabled: isConnected,
+    });
+
+  const handleClaimComplete = useCallback(() => {
+    refetch();
+    queryClient.invalidateQueries({ queryKey: ['ready-to-claim-count'] });
+  }, [queryClient, refetch]);
+
+  const ensureCorrectChain = useEnforceCorrectChain();
+  const claimExecution = useClaimExecution({
+    bridgeAddress,
+    chains,
+    address: address as Hex | undefined,
+    onComplete: handleClaimComplete,
   });
+
+  const claimingTxId = claimExecution.state.transactionId;
+  const isAnyClaiming = claimExecution.state.isExecuting;
+  const claimStep = claimExecution.state.currentStep;
+  const claimResultOpen = claimStep === 'success' || claimStep === 'error';
 
   const allTransactions = useMemo(() => {
     return data?.pages.flatMap((page) => page.data) ?? [];
@@ -51,9 +77,26 @@ export const TransactionsView = () => {
 
   const totalCount = data?.pages[0]?.pagination.total ?? 0;
 
-  const handleClaim = (transaction: Transaction) => {
-    console.log('Claiming transaction:', transaction);
-    // TODO: Implement claim logic
+  const destChain = claimExecution.state.destinationChainId
+    ? getChainById(chains, claimExecution.state.destinationChainId)
+    : undefined;
+
+  const handleClaim = async (transaction: Transaction) => {
+    if (!address) return;
+    if (transaction.status !== 'READY_TO_CLAIM') return;
+
+    const targetChain = getChainByNetworkId(chains, transaction.destinationNetwork);
+    if (!targetChain) return;
+    await ensureCorrectChain(targetChain.id);
+
+    await claimExecution.execute({
+      transaction,
+      destinationChainId: targetChain.id,
+    });
+  };
+
+  const handleCloseClaimResult = () => {
+    claimExecution.reset();
   };
 
   const handleSelectTransaction = (transaction: Transaction) => {
@@ -66,6 +109,10 @@ export const TransactionsView = () => {
   const handleCloseModal = () => {
     setSelectedTransaction(null);
     setIsDifferentAddress(false);
+  };
+
+  const handleManualRefetch = () => {
+    void refetch();
   };
 
   return (
@@ -83,24 +130,38 @@ export const TransactionsView = () => {
           )}
         </div>
 
-        <TransactionFilters
-          key={statusKey}
-          initialStatus={(filters.status as TransactionStatus | undefined) ?? null}
-          onFilterChange={setFilters}
-          onStatusChange={(nextStatus) =>
-            setFilters((prev) => ({
-              ...prev,
-              status: nextStatus || undefined,
-            }))
-          }
-          onStatusClear={() =>
-            setFilters((prev) => ({
-              ...prev,
-              status: undefined,
-            }))
-          }
-          disabled={!isConnected}
-        />
+        <div className="flex items-center justify-between">
+          <TransactionFilters
+            key={statusKey}
+            initialStatus={(filters.status as TransactionStatus | undefined) ?? null}
+            onFilterChange={setFilters}
+            onStatusChange={(nextStatus) =>
+              setFilters((prev) => ({
+                ...prev,
+                status: nextStatus || undefined,
+              }))
+            }
+            onStatusClear={() =>
+              setFilters((prev) => ({
+                ...prev,
+                status: undefined,
+              }))
+            }
+            disabled={!isConnected}
+          />
+          <button
+            type="button"
+            aria-label="Refresh activity"
+            onClick={handleManualRefetch}
+            disabled={isRefetching || isLoading}
+            className={cn(
+              'bg-transparent text-black',
+              isRefetching ? 'cursor-not-allowed text-grey' : 'hover:text-grey cursor-pointer',
+            )}
+          >
+            <RotateCw aria-hidden="true" className={cn('size-4', isRefetching && 'animate-spin')} />
+          </button>
+        </div>
       </div>
 
       {!isConnected && (
@@ -146,6 +207,9 @@ export const TransactionsView = () => {
           onLoadMore={() => fetchNextPage()}
           onClaim={handleClaim}
           onSelect={handleSelectTransaction}
+          claimingTxId={claimingTxId}
+          claimStep={claimStep}
+          isAnyClaiming={isAnyClaiming}
         />
       )}
 
@@ -155,6 +219,17 @@ export const TransactionsView = () => {
         transaction={selectedTransaction}
         isDifferentAddress={isDifferentAddress}
         onClaim={handleClaim}
+        claimStep={selectedTransaction?.hubUID === claimingTxId ? claimStep : undefined}
+        isAnyClaiming={isAnyClaiming}
+      />
+
+      <ClaimResultModal
+        open={claimResultOpen}
+        onClose={handleCloseClaimResult}
+        status={claimStep === 'success' ? 'success' : claimStep === 'error' ? 'error' : null}
+        claimTxHash={claimExecution.state.claimTxHash}
+        explorerUrl={destChain?.explorer}
+        errorMessage={claimExecution.state.error?.message}
       />
     </Card>
   );
