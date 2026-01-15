@@ -1,9 +1,10 @@
 import { type Hex, isHex } from 'viem';
-import type { TransactionParams } from '@agglayer/sdk';
+import type { ClaimAssetParams, TransactionParams } from '@agglayer/sdk';
 import { formatTokenAmount, toBigInt } from './format';
 import { fromWei } from '@/app/utils/big-number';
 import { isValidEthereumAddress } from '@/app/utils/address';
 import { Transaction } from '@/app/types/transaction';
+import type { ClaimProof } from '@/app/services/claim-proof';
 
 export const formatTransactionAmount = (amount: string, decimals: number): string => {
   try {
@@ -35,3 +36,34 @@ export const mapTransactionRequest = (params: TransactionParams, account: Hex) =
 
 export const resolveLeafIndex = (tx: Transaction): number =>
   tx.leafIndexForProof != null ? tx.leafIndexForProof : tx.leafIndex;
+
+const mainnetFlag = BigInt(2) ** BigInt(64);
+const networkOffset = BigInt(2) ** BigInt(32);
+const emptyMetadata: Hex = '0x';
+
+export const computeGlobalIndex = (depositCount: number, sourceNetworkId: number): bigint =>
+  sourceNetworkId === 0
+    ? BigInt(depositCount) + mainnetFlag
+    : BigInt(depositCount) + BigInt(sourceNetworkId - 1) * networkOffset;
+
+export const buildClaimAssetParams = (params: {
+  transaction: Transaction;
+  proof: ClaimProof;
+}): ClaimAssetParams => {
+  const { transaction, proof } = params;
+  const metadata = isHex(transaction.metadata) ? transaction.metadata : emptyMetadata;
+
+  return {
+    smtProofLocalExitRoot: proof.proof_local_exit_root,
+    smtProofRollupExitRoot: proof.proof_rollup_exit_root,
+    globalIndex: computeGlobalIndex(transaction.depositCount, transaction.sourceNetwork),
+    mainnetExitRoot: proof.l1_info_tree_leaf.mainnet_exit_root,
+    rollupExitRoot: proof.l1_info_tree_leaf.rollup_exit_root,
+    originNetwork: transaction.originTokenNetwork,
+    originTokenAddress: transaction.originTokenAddress,
+    destinationNetwork: transaction.destinationNetwork,
+    destinationAddress: transaction.receiverAddress,
+    amount: BigInt(transaction.amount),
+    metadata,
+  };
+};
