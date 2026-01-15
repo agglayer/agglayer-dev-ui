@@ -14,16 +14,17 @@ import { useClaimExecution } from '@/app/hooks/useClaimExecution';
 import { useEnforceCorrectChain } from '@/app/hooks/useEnforceCorrectChain';
 import { useWallet } from '@/app/context/wallet';
 import { useAppMode } from '@/app/context/app-mode';
+import { useRefetch } from '@/app/context/refetch';
 import type { TransactionStatus, Transaction } from '@/app/types/transaction';
 import { getTransactionInitialStatus } from '@/app/components/transactions/intialStatus';
 import { TransactionDetailsModal } from '@/app/components/transactions/transactions-details-modal/transaction-details-modal';
 import { getChainById, getChainByNetworkId } from '@/app/utils/chains';
 import { cn } from '@/app/utils/common';
-import { consumeAggressiveRefetch } from '@/app/utils/refetchTrigger';
 
 export const TransactionsView = () => {
   const { address, status, chainId, connect } = useWallet();
   const { defaultFromChainId, chains, bridgeAddress } = useAppMode();
+  const { aggressiveRefetch, triggerAggressiveRefetch, clearAggressiveRefetch } = useRefetch();
   const queryClient = useQueryClient();
   const initialStatus = getTransactionInitialStatus();
   const [filters, setFilters] = useState<{ status?: TransactionStatus; updatedSince?: number }>(() => ({
@@ -32,7 +33,6 @@ export const TransactionsView = () => {
   const statusKey = (initialStatus || filters.status || 'all') as string;
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [isDifferentAddress, setIsDifferentAddress] = useState<boolean>(false);
-  const [aggressiveRefetch, setAggressiveRefetch] = useState(() => consumeAggressiveRefetch());
 
   const queryFilters = useMemo(
     () => ({
@@ -59,15 +59,15 @@ export const TransactionsView = () => {
   // Auto-disable aggressive mode after burst completes (~7s buffer)
   useEffect(() => {
     if (!aggressiveRefetch) return;
-    const timeout = setTimeout(() => setAggressiveRefetch(false), 7000);
+    const timeout = setTimeout(clearAggressiveRefetch, 7000);
     return () => clearTimeout(timeout);
-  }, [aggressiveRefetch]);
+  }, [aggressiveRefetch, clearAggressiveRefetch]);
 
   const handleClaimComplete = useCallback(() => {
-    setAggressiveRefetch(true);
+    triggerAggressiveRefetch();
     refetch();
     queryClient.invalidateQueries({ queryKey: ['ready-to-claim-count'] });
-  }, [queryClient, refetch]);
+  }, [queryClient, refetch, triggerAggressiveRefetch]);
 
   const ensureCorrectChain = useEnforceCorrectChain();
   const claimExecution = useClaimExecution({

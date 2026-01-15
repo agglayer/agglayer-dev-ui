@@ -37,21 +37,22 @@ export const mapTransactionRequest = (params: TransactionParams, account: Hex) =
 export const resolveLeafIndex = (tx: Transaction): number =>
   tx.leafIndexForProof != null ? tx.leafIndexForProof : tx.leafIndex;
 
-const mainnetFlag = BigInt(2) ** BigInt(64);
-const networkOffset = BigInt(2) ** BigInt(32);
-const emptyMetadata: Hex = '0x';
+const GLOBAL_INDEX_MAINNET_FLAG = BigInt(2) ** BigInt(64);
+const GLOBAL_INDEX_NETWORK_OFFSET = BigInt(2) ** BigInt(32);
+const ZERO_HEX: Hex = '0x';
 
+// See https://github.com/agglayer/sdk/blob/main/src/native/bridge/util.ts
 export const computeGlobalIndex = (depositCount: number, sourceNetworkId: number): bigint =>
   sourceNetworkId === 0
-    ? BigInt(depositCount) + mainnetFlag
-    : BigInt(depositCount) + BigInt(sourceNetworkId - 1) * networkOffset;
+    ? BigInt(depositCount) + GLOBAL_INDEX_MAINNET_FLAG
+    : BigInt(depositCount) + BigInt(sourceNetworkId - 1) * GLOBAL_INDEX_NETWORK_OFFSET;
 
 export const buildClaimAssetParams = (params: {
   transaction: Transaction;
   proof: ClaimProof;
 }): ClaimAssetParams => {
   const { transaction, proof } = params;
-  const metadata = isHex(transaction.metadata) ? transaction.metadata : emptyMetadata;
+  const metadata = isHex(transaction.metadata) ? transaction.metadata : ZERO_HEX;
 
   return {
     smtProofLocalExitRoot: proof.proof_local_exit_root,
