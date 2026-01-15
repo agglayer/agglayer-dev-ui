@@ -13,7 +13,7 @@ import { ALL_WAGMI_CHAINS, customRpcUrls } from '@/app/config';
 import { EXTERNAL_LINKS } from '@/app/constants/externalLinks';
 
 const queryClient = new QueryClient();
-const projectId = process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID!;
+const projectId = process.env.NEXT_PUBLIC_PROJECT_ID!;
 
 const wagmiAdapter = new WagmiAdapter({
   ssr: true,
