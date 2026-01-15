@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Hex } from 'viem';
 import { useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Plug, RotateCw } from 'lucide-react';
@@ -19,6 +19,7 @@ import { getTransactionInitialStatus } from '@/app/components/transactions/intia
 import { TransactionDetailsModal } from '@/app/components/transactions/transactions-details-modal/transaction-details-modal';
 import { getChainById, getChainByNetworkId } from '@/app/utils/chains';
 import { cn } from '@/app/utils/common';
+import { consumeAggressiveRefetch } from '@/app/utils/refetchTrigger';
 
 export const TransactionsView = () => {
   const { address, status, chainId, connect } = useWallet();
@@ -31,6 +32,7 @@ export const TransactionsView = () => {
   const statusKey = (initialStatus || filters.status || 'all') as string;
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [isDifferentAddress, setIsDifferentAddress] = useState<boolean>(false);
+  const [aggressiveRefetch, setAggressiveRefetch] = useState(() => consumeAggressiveRefetch());
 
   const queryFilters = useMemo(
     () => ({
@@ -51,9 +53,18 @@ export const TransactionsView = () => {
       chainId: effectiveChainId,
       filters: queryFilters,
       enabled: isConnected,
+      aggressiveRefetch,
     });
 
+  // Auto-disable aggressive mode after burst completes (~7s buffer)
+  useEffect(() => {
+    if (!aggressiveRefetch) return;
+    const timeout = setTimeout(() => setAggressiveRefetch(false), 7000);
+    return () => clearTimeout(timeout);
+  }, [aggressiveRefetch]);
+
   const handleClaimComplete = useCallback(() => {
+    setAggressiveRefetch(true);
     refetch();
     queryClient.invalidateQueries({ queryKey: ['ready-to-claim-count'] });
   }, [queryClient, refetch]);

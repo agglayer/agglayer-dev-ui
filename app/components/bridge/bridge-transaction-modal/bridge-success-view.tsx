@@ -7,6 +7,7 @@ import { Button } from '@/app/components/ui/button';
 import { CopyText } from '@/app/components/copyText';
 import { ROUTES } from '@/app/constants/routes';
 import { shortenAddress } from '@/app/utils/address';
+import { triggerAggressiveRefetch } from '@/app/utils/refetchTrigger';
 
 interface BridgeSuccessViewProps {
   hash: string;
@@ -18,6 +19,7 @@ export const BridgeSuccessView = ({ hash, explorerUrl, onClose }: BridgeSuccessV
   const router = useRouter();
 
   const handleGoToTransactions = useCallback(() => {
+    triggerAggressiveRefetch();
     onClose();
     router.push(ROUTES.TRANSACTIONS);
   }, [onClose, router]);
