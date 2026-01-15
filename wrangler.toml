@@ -1,0 +1,20 @@
+name = "bridge-hub-ui"
+compatibility_date = "2024-07-04"
+placement = { mode = "smart" }
+workers_dev = false
+preview_urls = false
+send_metrics = false
+
+[assets]
+directory = "./out"
+
+[build]
+command = "npm run build:production"
+
+[env.production]
+routes = [
+  { pattern = "ui-testnet.agglayer.dev", custom_domain = true }
+]
+
+[env.production.build]
+command = "npm run build:production"
