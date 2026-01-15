@@ -25,7 +25,6 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
-      - run: npm install -g wrangler
       - run: npx wrangler deploy --env production
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_WORKER_ACCOUNT_ID }}
