@@ -21,8 +21,7 @@ export const ModeSwitch = () => {
         .map((value) => ({
           value,
           label: APP_MODE_CONFIG[value].label,
-        }))
-        .slice(0, 2),
+        })),
     [enabledModes, mode],
   );
 
