@@ -9,7 +9,7 @@ import { Button } from '@/app/components/ui/button';
 import { TransactionFilters } from '@/app/components/transactions/transaction-filters';
 import { TransactionList } from '@/app/components/transactions/transaction-list';
 import { ClaimResultModal } from '@/app/components/transactions/claim-result-modal';
-import { useTransactions } from '@/app/hooks/useTransactions';
+import { TOTAL_REFETCH_TIME, useTransactions } from '@/app/hooks/useTransactions';
 import { useClaimExecution } from '@/app/hooks/useClaimExecution';
 import { useEnforceCorrectChain } from '@/app/hooks/useEnforceCorrectChain';
 import { useWallet } from '@/app/context/wallet';
@@ -56,10 +56,10 @@ export const TransactionsView = () => {
       aggressiveRefetch,
     });
 
-  // Auto-disable aggressive mode after burst completes (~7s buffer)
+  // Auto-disable aggressive mode after burst completes
   useEffect(() => {
     if (!aggressiveRefetch) return;
-    const timeout = setTimeout(clearAggressiveRefetch, 7000);
+    const timeout = setTimeout(clearAggressiveRefetch, TOTAL_REFETCH_TIME);
     return () => clearTimeout(timeout);
   }, [aggressiveRefetch, clearAggressiveRefetch]);
 

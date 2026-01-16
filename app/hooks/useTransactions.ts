@@ -7,6 +7,7 @@ import type { TransactionFilters, TransactionsResponse } from '@/app/types/trans
 import { useAppMode } from '@/app/context/app-mode';
 
 const REFETCH_INTERVALS = [500, 1000, 2000, 3000];
+export const TOTAL_REFETCH_TIME = REFETCH_INTERVALS.reduce((acc, curr) => acc + curr, 0);
 
 export const useTransactions = (params: {
   chainId?: number;
