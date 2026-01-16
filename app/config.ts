@@ -47,6 +47,7 @@ const createChain = (
   networkId: number,
   icon: string,
   nativeLogo: string,
+  eta: number,
   rpcOverride?: string,
 ): AppChain => ({
   id: chain.id,
@@ -56,6 +57,7 @@ const createChain = (
   networkId,
   isTestnet: (chain as { testnet?: boolean }).testnet ?? false,
   rpcUrl: rpcOverride ?? chain.rpcUrls.default.http[0],
+  eta,
   nativeCurrency: {
     address: ZERO_ADDRESS,
     decimals: chain.nativeCurrency.decimals,
@@ -75,12 +77,12 @@ export const APP_MODE_CONFIG: Record<AppMode, AppModeConfig> = {
     defaultFromChainId: mainnet.id,
     defaultToChainId: katana.id,
     chains: [
-      createChain(mainnet, 0, ICONS.ethereum, ICONS.ethereum),
-      createChain(polygonZkEvmWithFallbackRpcs, 1, ICONS.zkevm, ICONS.ethereum),
-      createChain(xLayer, 3, ICONS.xlayer, ICONS.xlayerToken),
-      createChain(katana, 20, ICONS.katana, ICONS.ethereum),
-      createChain(ternoa, 13, ICONS.ternoa, ICONS.ternoa),
-      createChain(forknet, 22, ICONS.forknet, ICONS.ethereum),
+      createChain(mainnet, 0, ICONS.ethereum, ICONS.ethereum, 20),
+      createChain(polygonZkEvmWithFallbackRpcs, 1, ICONS.zkevm, ICONS.ethereum, 180),
+      createChain(xLayer, 3, ICONS.xlayer, ICONS.xlayerToken, 180),
+      createChain(katana, 20, ICONS.katana, ICONS.ethereum, 180),
+      createChain(ternoa, 13, ICONS.ternoa, ICONS.ternoa, 180),
+      createChain(forknet, 22, ICONS.forknet, ICONS.ethereum, 180),
     ],
   },
   testnet: {
@@ -90,8 +92,8 @@ export const APP_MODE_CONFIG: Record<AppMode, AppModeConfig> = {
     defaultFromChainId: sepolia.id,
     defaultToChainId: polygonZkEvmCardona.id,
     chains: [
-      createChain(sepolia, 0, ICONS.ethereum, ICONS.ethereum, 'https://ethereum-sepolia-rpc.publicnode.com'),
-      createChain(polygonZkEvmCardona, 1, ICONS.zkevm, ICONS.ethereum),
+      createChain(sepolia, 0, ICONS.ethereum, ICONS.ethereum, 20, 'https://ethereum-sepolia-rpc.publicnode.com'),
+      createChain(polygonZkEvmCardona, 1, ICONS.zkevm, ICONS.ethereum, 180),
     ],
   },
   devnet: {

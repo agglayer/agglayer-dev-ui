@@ -5,6 +5,7 @@ import { BadgeImageFallback } from '@/app/components/ui/badge-image-fallback';
 import { Button } from '@/app/components/ui/button';
 import { CopyText } from '@/app/components/copyText';
 import { TransactionStatusBadge } from '@/app/components/transactions/transaction-status-badge';
+import { TransactionETA } from '@/app/components/transactions/transactionEta';
 import { useTokenMetadata } from '@/app/hooks/useTokenMetadata';
 import { getChainByNetworkId } from '@/app/utils/chains';
 import { useTokens } from '@/app/context/token';
@@ -34,6 +35,7 @@ export const TransactionListItem = ({
   const sourceChain = getChainByNetworkId(chains, transaction.sourceNetwork);
   const destChain = getChainByNetworkId(chains, transaction.destinationNetwork);
   const isClaimable = transaction.status === 'READY_TO_CLAIM';
+  const isPending = transaction.status === 'BRIDGED' || transaction.status === 'LEAF_INCLUDED';
 
   const isNative = isNativeToken(transaction.originTokenAddress);
 
@@ -82,7 +84,6 @@ export const TransactionListItem = ({
             <TransactionStatusBadge status={transaction.status} className="text-xs sm:text-sm" />
           </div>
         </div>
-
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
             {tokenLogo && <BadgeImageFallback src={tokenLogo} size="md" fallbackText={tokenSymbol} />}
@@ -91,7 +92,6 @@ export const TransactionListItem = ({
             </span>
           </div>
         </div>
-
         <div className="flex flex-col md:flex-row items-center gap-2">
           <div className="flex items-center justify-between rounded-lg bg-surface-muted px-3 py-2 text-sm text-grey w-full md:w-1/2">
             <div className="flex items-center gap-1">
@@ -144,7 +144,9 @@ export const TransactionListItem = ({
             </div>
           </div>
         </div>
-
+        {isPending && sourceChain?.eta && (
+          <TransactionETA timestamp={transaction.timestamp} etaMinutes={sourceChain.eta} />
+        )}
         {isClaimable && (
           <Button
             onClick={(event) => {
