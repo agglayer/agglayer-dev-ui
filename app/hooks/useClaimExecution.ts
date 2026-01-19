@@ -5,9 +5,11 @@ import type { Hex } from 'viem';
 import { useConfig, useSendTransaction } from 'wagmi';
 import { getPublicClient } from '@wagmi/core';
 import { useAggNative } from '@/app/context/aggLayerSdk';
+import { useAppMode } from '@/app/context/app-mode';
+import { fetchClaimProof } from '@/app/services/claim-proof';
 import type { ClaimExecutionResult, ClaimExecutionState, Transaction } from '@/app/types/transaction';
 import type { AppChain } from '@/app/types/app-mode';
-import { mapTransactionRequest, resolveLeafIndex } from '@/app/utils/transaction';
+import { buildClaimAssetParams, mapTransactionRequest, resolveLeafIndex } from '@/app/utils/transaction';
 
 interface UseClaimExecutionParams {
   bridgeAddress?: string;
@@ -20,6 +22,7 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
   const { bridgeAddress, address, onComplete } = params;
   const native = useAggNative();
   const config = useConfig();
+  const { mode } = useAppMode();
   const { sendTransactionAsync } = useSendTransaction();
 
   const [state, setState] = useState<ClaimExecutionState>({
@@ -85,13 +88,15 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
           return;
         }
 
-        const claimTx = await bridge.buildClaimAssetFromHash(
-          transaction.transactionHash,
-          transaction.sourceNetwork,
+        const proof = await fetchClaimProof({
+          mode,
+          sourceNetworkId: transaction.sourceNetwork,
           leafIndex,
-          0,
-          address,
-        );
+          depositCount: transaction.depositCount,
+        });
+
+        const claimParams = buildClaimAssetParams({ transaction, proof });
+        const claimTx = await bridge.buildClaimAsset(claimParams, address);
 
         localClaimHash = await sendTransactionAsync({
           ...mapTransactionRequest(claimTx, address),
@@ -160,7 +165,7 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
         });
       }
     },
-    [address, bridgeAddress, native, config, sendTransactionAsync, onComplete],
+    [address, bridgeAddress, native, config, sendTransactionAsync, onComplete, mode],
   );
 
   const reset = useCallback(() => {
