@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Hex } from 'viem';
 import { useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Plug, RotateCw } from 'lucide-react';
@@ -9,11 +9,12 @@ import { Button } from '@/app/components/ui/button';
 import { TransactionFilters } from '@/app/components/transactions/transaction-filters';
 import { TransactionList } from '@/app/components/transactions/transaction-list';
 import { ClaimResultModal } from '@/app/components/transactions/claim-result-modal';
-import { useTransactions } from '@/app/hooks/useTransactions';
+import { TOTAL_REFETCH_TIME, useTransactions } from '@/app/hooks/useTransactions';
 import { useClaimExecution } from '@/app/hooks/useClaimExecution';
 import { useEnforceCorrectChain } from '@/app/hooks/useEnforceCorrectChain';
 import { useWallet } from '@/app/context/wallet';
 import { useAppMode } from '@/app/context/app-mode';
+import { useRefetch } from '@/app/context/refetch';
 import type { TransactionStatus, Transaction } from '@/app/types/transaction';
 import { getTransactionInitialStatus } from '@/app/components/transactions/intialStatus';
 import { TransactionDetailsModal } from '@/app/components/transactions/transactions-details-modal/transaction-details-modal';
@@ -23,6 +24,7 @@ import { cn } from '@/app/utils/common';
 export const TransactionsView = () => {
   const { address, status, chainId, connect } = useWallet();
   const { defaultFromChainId, chains, bridgeAddress } = useAppMode();
+  const { aggressiveRefetch, triggerAggressiveRefetch, clearAggressiveRefetch } = useRefetch();
   const queryClient = useQueryClient();
   const initialStatus = getTransactionInitialStatus();
   const [filters, setFilters] = useState<{ status?: TransactionStatus; updatedSince?: number }>(() => ({
@@ -51,12 +53,21 @@ export const TransactionsView = () => {
       chainId: effectiveChainId,
       filters: queryFilters,
       enabled: isConnected,
+      aggressiveRefetch,
     });
 
+  // Auto-disable aggressive mode after burst completes
+  useEffect(() => {
+    if (!aggressiveRefetch) return;
+    const timeout = setTimeout(clearAggressiveRefetch, TOTAL_REFETCH_TIME);
+    return () => clearTimeout(timeout);
+  }, [aggressiveRefetch, clearAggressiveRefetch]);
+
   const handleClaimComplete = useCallback(() => {
+    triggerAggressiveRefetch();
     refetch();
     queryClient.invalidateQueries({ queryKey: ['ready-to-claim-count'] });
-  }, [queryClient, refetch]);
+  }, [queryClient, refetch, triggerAggressiveRefetch]);
 
   const ensureCorrectChain = useEnforceCorrectChain();
   const claimExecution = useClaimExecution({

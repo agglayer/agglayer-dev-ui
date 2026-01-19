@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/app/components/ui/button';
 import { CopyText } from '@/app/components/copyText';
 import { ROUTES } from '@/app/constants/routes';
+import { useRefetch } from '@/app/context/refetch';
 import { shortenAddress } from '@/app/utils/address';
 
 interface BridgeSuccessViewProps {
@@ -16,11 +17,13 @@ interface BridgeSuccessViewProps {
 
 export const BridgeSuccessView = ({ hash, explorerUrl, onClose }: BridgeSuccessViewProps) => {
   const router = useRouter();
+  const { triggerAggressiveRefetch } = useRefetch();
 
   const handleGoToTransactions = useCallback(() => {
+    triggerAggressiveRefetch();
     onClose();
     router.push(ROUTES.TRANSACTIONS);
-  }, [onClose, router]);
+  }, [onClose, router, triggerAggressiveRefetch]);
 
   return (
     <div className="flex flex-col gap-3">
