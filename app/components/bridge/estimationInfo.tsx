@@ -21,7 +21,7 @@ export const EstimationInfo = ({ etaMinutes, fee, nativeSymbol, isLoading, class
 
   return (
     <div className={cn('flex items-center justify-between text-sm text-grey px-1', className)}>
-      {hasEta && etaMinutes !== undefined && (
+      {hasEta && (
         <div className="flex items-center gap-1.5">
           <Clock size={14} className="text-grey" />
           <span>Est. time: {formatDuration(etaMinutes)}</span>
