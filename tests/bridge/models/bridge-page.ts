@@ -1,9 +1,15 @@
 import type { Page } from '@playwright/test';
 
-export const BridgePage = ({ page }: { page: Page }) => {
-  const navigate = async () => {
-    await page.goto('/');
-  };
+class BridgePage {
+  private readonly page: Page;
 
-  return { navigate };
-};
+  constructor({ page }: { page: Page }) {
+    this.page = page;
+  }
+
+  async navigate(): Promise<void> {
+    await this.page.goto('/');
+  }
+}
+
+export { BridgePage };
