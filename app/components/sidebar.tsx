@@ -6,7 +6,7 @@ import { ArrowLeftRight, FileText, X, CircleUser, Loader2 } from 'lucide-react';
 import { ROUTES } from '@/app/constants/routes';
 import { EXTERNAL_LINKS } from '@/app/constants/externalLinks';
 import { cn } from '@/app/utils/common';
-import { useWallet } from '@/app/context/wallet';
+import { useWallet } from '@/app/context/wallet-context';
 import { useAppMode } from '@/app/context/app-mode';
 import { useReadyToClaimCount } from '@/app/hooks/useReadyToClaimCount';
 import { setTransactionInitialStatus } from '@/app/components/transactions/intialStatus';

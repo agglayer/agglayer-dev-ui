@@ -1,26 +1,15 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { createContext, useContext, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useChainId, useChains, useSwitchChain, WagmiProvider } from 'wagmi';
-import type { Chain } from 'viem';
-import { WagmiAdapter } from '@reown/appkit-adapter-wagmi';
 import { sepolia } from '@reown/appkit/networks';
-import type { ConnectedWalletInfo } from '@reown/appkit/react';
 import { createAppKit, useAppKit, useAppKitAccount, useDisconnect, useWalletInfo } from '@reown/appkit/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { ALL_WAGMI_CHAINS, customRpcUrls } from '@/app/config';
 import { EXTERNAL_LINKS } from '@/app/constants/externalLinks';
-
-const queryClient = new QueryClient();
-const projectId = process.env.NEXT_PUBLIC_PROJECT_ID!;
-
-const wagmiAdapter = new WagmiAdapter({
-  ssr: true,
-  projectId,
-  customRpcUrls,
-  networks: [...ALL_WAGMI_CHAINS],
-});
+import { WalletContext, type WalletContextValue } from '@/app/context/wallet-context';
+import { projectId, queryClient, wagmiAdapter } from '@/app/context/wagmi-config';
 
 // walletIds - https://docs.reown.com/cloud/wallets/wallet-list
 const walletIds = {
@@ -58,30 +47,6 @@ createAppKit({
   termsConditionsUrl: EXTERNAL_LINKS.POLYGON_TERMS_OF_USE,
   privacyPolicyUrl: EXTERNAL_LINKS.POLYGON_PRIVACY_POLICY,
   featuredWalletIds: [walletIds.METAMASK],
-});
-
-type WalletContextValue = {
-  address: string;
-  status: 'connected' | 'disconnected' | 'reconnecting' | 'connecting';
-  chainId?: number;
-  chain?: Chain;
-  walletInfo?: ConnectedWalletInfo;
-  walletIcon?: string;
-  connect: () => void;
-  disconnect: () => void;
-  switchNetwork: (chainId: number) => void;
-};
-
-const WalletContext = createContext<WalletContextValue>({
-  address: '',
-  status: 'disconnected',
-  chainId: undefined,
-  chain: undefined,
-  walletInfo: undefined,
-  walletIcon: undefined,
-  connect: () => {},
-  disconnect: () => {},
-  switchNetwork: () => {},
 });
 
 function WalletProviderInternal({ children }: { readonly children: ReactNode }) {
@@ -128,6 +93,4 @@ const WalletProvider = ({ children }: { children: ReactNode }) => (
   </WagmiProvider>
 );
 
-const useWallet = () => useContext(WalletContext);
-
-export { useWallet, WalletContext, WalletProvider };
+export { WalletProvider };

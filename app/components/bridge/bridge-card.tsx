@@ -9,7 +9,7 @@ import { BridgeFromSection } from '@/app/components/bridge/bridge-from-section';
 import { BridgeToSection } from '@/app/components/bridge/bridge-to-section';
 import { BridgeTransactionModal } from '@/app/components/bridge/bridge-transaction-modal/bridge-transaction-modal';
 import { useAppMode } from '@/app/context/app-mode';
-import { useWallet } from '@/app/context/wallet';
+import { useWallet } from '@/app/context/wallet-context';
 import { useBridge } from '@/app/hooks/useBridge';
 import { useBridgeExecution } from '@/app/hooks/useBridgeExecution';
 import { useEnforceCorrectChain } from '@/app/hooks/useEnforceCorrectChain';

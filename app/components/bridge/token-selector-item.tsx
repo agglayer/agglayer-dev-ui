@@ -5,7 +5,7 @@ import { cn } from '@/app/utils/common';
 import { getChainById } from '@/app/utils/chains';
 import { normalize } from '@/app/utils/format';
 import { formatTokenBalance, getTokenLogoBySymbol } from '@/app/utils/tokens';
-import { useWallet } from '@/app/context/wallet';
+import { useWallet } from '@/app/context/wallet-context';
 import { useTokenBalance } from '@/app/hooks/useTokenBalance';
 import { useAppMode } from '@/app/context/app-mode';
 import type { Token } from '@/app/types/token';

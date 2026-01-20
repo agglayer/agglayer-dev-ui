@@ -1,4 +1,6 @@
+import { ANVIL_PORT } from '@/app/constants/e2e';
 import { defineConfig, devices } from '@playwright/test';
+
 
 export default defineConfig({
   // Look for test files in the "tests" directory, relative to this configuration file.
@@ -36,9 +38,19 @@ export default defineConfig({
     },
   ],
   // Run your local dev server before starting the tests.
-  webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:3000',
-    reuseExistingServer: !process.env.CI,
-  },
+  webServer: [
+    {
+      command: `anvil --port ${ANVIL_PORT}`,
+      port: ANVIL_PORT,
+      reuseExistingServer: !process.env.CI,
+    },
+    {
+      command: 'npm run dev',
+      env: {
+        NEXT_PUBLIC_E2E_ENABLED: 'true',
+      },
+      url: 'http://localhost:3000',
+      reuseExistingServer: !process.env.CI,
+    },
+  ],
 });

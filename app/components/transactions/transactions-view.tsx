@@ -12,7 +12,7 @@ import { ClaimResultModal } from '@/app/components/transactions/claim-result-mod
 import { TOTAL_REFETCH_TIME, useTransactions } from '@/app/hooks/useTransactions';
 import { useClaimExecution } from '@/app/hooks/useClaimExecution';
 import { useEnforceCorrectChain } from '@/app/hooks/useEnforceCorrectChain';
-import { useWallet } from '@/app/context/wallet';
+import { useWallet } from '@/app/context/wallet-context';
 import { useAppMode } from '@/app/context/app-mode';
 import { useRefetch } from '@/app/context/refetch';
 import type { TransactionStatus, Transaction } from '@/app/types/transaction';
