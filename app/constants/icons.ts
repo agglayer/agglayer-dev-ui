@@ -1,3 +1,4 @@
+
 export const ICONS = {
   ethereum: 'https://raw.githubusercontent.com/lifinance/types/main/src/assets/icons/chains/ethereum.svg',
   zkevm: 'https://raw.githubusercontent.com/lifinance/types/main/src/assets/icons/chains/zkevm.svg',
@@ -6,4 +7,5 @@ export const ICONS = {
   katana: 'https://raw.githubusercontent.com/lifinance/types/main/src/assets/icons/chains/katana.svg',
   ternoa: 'https://assets.polygon.technology/tokenAssets/caps.svg',
   forknet: 'https://explorer-forknet.t.conduit.xyz/assets/configs/network_icon_dark.svg',
+  bokuto: 'https://raw.githubusercontent.com/lifinance/types/main/src/assets/icons/chains/katana.svg',
 };
