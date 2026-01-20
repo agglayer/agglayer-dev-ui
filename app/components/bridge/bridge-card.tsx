@@ -89,7 +89,7 @@ const BridgeCardContent = () => {
 
   return (
     <>
-      <Card title="Bridge" className="w-full max-w-lg mx-auto space-y-3">
+      <Card title="Bridge" className="w-full max-w-lg mx-auto space-y-3" data-test-id="bridge-card">
         <BridgeFromSection
           chainOptions={fromChainOptions}
           selectedChainId={form.fromChainId}
