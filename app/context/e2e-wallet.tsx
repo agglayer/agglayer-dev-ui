@@ -16,8 +16,6 @@ type Disconnectors = ReturnType<typeof useDisconnect>['disconnect'];
 type SwitchChainFn = ReturnType<typeof useSwitchChain>['switchChain'];
 
 const e2eAccount = privateKeyToAccount(ANVIL_DEFAULT_PRIVATE_KEY);
-const isE2EWalletEnabled = process.env.NEXT_PUBLIC_E2E_ENABLED === 'true';
-
 const e2eConfig = createConfig({
   chains: [foundry],
   connectors: [mock({ accounts: [e2eAccount.address] })],
@@ -80,7 +78,7 @@ const E2EWalletProviderInternal = ({ children }: { readonly children: ReactNode 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
 }
 
-const E2EWalletProvider = ({ children }: { children: ReactNode }) => {
+export const E2EWalletProvider = ({ children }: { children: ReactNode }) => {
   return (
     <WagmiProvider config={e2eConfig}>
       <QueryClientProvider client={queryClient}>
@@ -90,4 +88,3 @@ const E2EWalletProvider = ({ children }: { children: ReactNode }) => {
   );
 };
 
-export { E2EWalletProvider, isE2EWalletEnabled };

@@ -35,9 +35,17 @@ export const TokenSelectorItem = ({ token, selectedToken, onSelect }: TokenSelec
 
   const chain = getChainById(chains, token.chainId);
   const balanceText = isLoading ? '...' : formatTokenBalance(token, rawBalance);
+  const tokenTestId = `token-item-${token.symbol.toLowerCase()}`;
+  const balanceTestId = `token-balance-${token.symbol.toLowerCase()}`;
 
   return (
-    <button type="button" onClick={() => onSelect(token)} className="w-full cursor-pointer" aria-pressed={isSelected}>
+    <button
+      type="button"
+      onClick={() => onSelect(token)}
+      className="w-full cursor-pointer"
+      aria-pressed={isSelected}
+      data-test-id={tokenTestId}
+    >
       <div
         className={cn(
           'flex items-center justify-between gap-3 rounded-xl border px-3 py-2 transition-colors text-left',
@@ -67,7 +75,7 @@ export const TokenSelectorItem = ({ token, selectedToken, onSelect }: TokenSelec
           )}
         </div>
         <div className="flex items-center gap-2 text-sm text-muted">
-          <span>{balanceText}</span>
+          <span data-test-id={balanceTestId}>{balanceText}</span>
         </div>
       </div>
     </button>

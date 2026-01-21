@@ -10,6 +10,24 @@ class BridgePage {
   async navigate(): Promise<void> {
     await this.page.goto('/');
   }
+
+  async connectWallet(): Promise<void> {
+    await this.page.getByTestId('connect-wallet').click();
+    await this.page.getByTestId('wallet-connected').waitFor();
+  }
+
+  async openTokenSelector(): Promise<void> {
+    await this.page.getByTestId('token-selector-trigger').click();
+    await this.page.getByTestId('token-selector-list').waitFor();
+  }
+
+  getTokenRow(symbol: string) {
+    return this.page.getByTestId(`token-item-${symbol.toLowerCase()}`);
+  }
+
+  getTokenBalance(symbol: string) {
+    return this.page.getByTestId(`token-balance-${symbol.toLowerCase()}`);
+  }
 }
 
 export { BridgePage };

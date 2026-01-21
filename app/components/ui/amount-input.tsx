@@ -22,6 +22,7 @@ interface AmountInputProps {
   disabled?: boolean;
   className?: string;
   maxDecimals?: number;
+  tokenButtonTestId?: string;
 }
 
 export const AmountInput = ({
@@ -37,6 +38,7 @@ export const AmountInput = ({
   disabled,
   className,
   maxDecimals = 18,
+  tokenButtonTestId,
 }: AmountInputProps) => {
   const decimalsLimit = Math.max(0, Math.trunc(maxDecimals));
   const decimalRegex = useMemo(
@@ -92,6 +94,7 @@ export const AmountInput = ({
             type="button"
             onClick={onClick}
             disabled={disabled}
+            data-test-id={tokenButtonTestId}
             className={cn(
               'flex items-center gap-2 rounded-xl border border-border bg-surface-muted px-3 py-2 text-sm font-semibold cursor-pointer',
               disabled ? 'cursor-not-allowed opacity-70' : 'hover:border-blue hover:bg-surface transition-colors',

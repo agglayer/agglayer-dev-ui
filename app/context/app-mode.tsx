@@ -6,7 +6,7 @@ import { getEnabledModes, isValidAppMode } from '@/app/utils/app-mode';
 import { APP_MODE_CONFIG, DEFAULT_APP_MODE } from '@/app/config';
 import { StorageUtils, STORAGE_KEYS } from '@/app/utils/storage';
 
-type AppModeContextValue = {
+export type AppModeContextValue = {
   mode: AppMode;
   setMode: (mode: AppMode) => void;
   enabledModes: AppMode[];
@@ -17,7 +17,7 @@ type AppModeContextValue = {
   defaultToChainId: number;
 };
 
-const AppModeContext = createContext<AppModeContextValue | null>(null);
+export const AppModeContext = createContext<AppModeContextValue | null>(null);
 
 const MODE_EVENT = 'app-mode-change' as const;
 

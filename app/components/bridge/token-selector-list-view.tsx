@@ -32,7 +32,7 @@ export const TokenSelectorListView = ({
   }, [search, tokens]);
 
   return (
-    <div className="relative pb-14 space-y-3">
+    <div className="relative pb-14 space-y-3" data-test-id="token-selector-list">
       <TextInput
         value={search}
         onChange={onSearchChange}
