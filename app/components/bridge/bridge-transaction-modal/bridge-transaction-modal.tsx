@@ -178,7 +178,7 @@ export const BridgeTransactionModal = ({
     <Modal
       open={open}
       onClose={handleClose}
-      title="Bridge transaction"
+      title="Bridge assets"
       showCloseButton={!isPending}
       dismissible={!isPending}
       contentClassName="space-y-6"

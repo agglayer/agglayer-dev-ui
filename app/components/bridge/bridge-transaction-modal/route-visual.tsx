@@ -1,6 +1,6 @@
 'use client';
 
-import { BadgeImageFallback } from '@/app/components/ui/badge-image-fallback';
+import { ArrowRight } from 'lucide-react';
 import Image from 'next/image';
 
 interface RouteVisualProps {
@@ -12,42 +12,30 @@ interface RouteVisualProps {
   tokenSymbol: string;
 }
 
+const ChainCard = ({ icon, name }: { icon?: string; name: string }) => (
+  <div className="flex flex-1 flex-col items-center gap-2 rounded-lg bg-surface-muted p-4 border-2 border-border">
+    {icon ? (
+      <Image alt={`${name} logo`} height={100} width={100} className="size-10 rounded-sm" src={icon} />
+    ) : (
+      <div className="size-10 rounded-sm bg-grey" />
+    )}
+    <span className="text-lg font-bold">{name}</span>
+  </div>
+);
+
 export const RouteVisual = ({
   fromChainIcon,
   toChainIcon,
-  tokenLogo,
   fromChainName,
   toChainName,
-  tokenSymbol,
 }: RouteVisualProps) => {
-  const dashes = Array.from({ length: 6 }).map((_, idx) => (
-    <span className="flex-1 flex items-center justify-center" key={idx}>
-      <span className="h-0.5 w-4 rounded-sm bg-grey" />
-    </span>
-  ));
-
   return (
-    <div className="w-full rounded-xl bg-surface-muted p-6 flex items-center">
-      {fromChainIcon ? (
-        <Image
-          alt={`${fromChainName} logo`}
-          height={100}
-          width={100}
-          className="size-12 rounded-sm"
-          src={fromChainIcon}
-        />
-      ) : (
-        <div className="size-12 rounded-sm bg-grey" />
-      )}
-      <span className="w-2 h-0.5 bg-grey rounded-sm" />
-      <BadgeImageFallback src={tokenLogo} size="md" fallbackText={tokenSymbol} />
-      <span className="w-2 h-0.5 bg-grey rounded-sm" />
-      {dashes}
-      {toChainIcon ? (
-        <Image alt={`${toChainName} logo`} height={100} width={100} className="size-12 rounded-sm" src={toChainIcon} />
-      ) : (
-        <div className="size-12 rounded-sm bg-grey" />
-      )}
+    <div className="flex w-full items-center gap-3">
+      <ChainCard icon={fromChainIcon} name={fromChainName} />
+      <div className="flex items-center justify-center">
+        <ArrowRight className="size-5 text-grey" />
+      </div>
+      <ChainCard icon={toChainIcon} name={toChainName} />
     </div>
   );
 };
