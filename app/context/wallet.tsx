@@ -36,9 +36,9 @@ createAppKit({
   defaultNetwork: sepolia,
   customRpcUrls,
   metadata: {
-    name: 'bridge-hub-ui',
-    description: 'Bridge Hub UI',
-    url: 'https://ui-testnet.agglayer.dev/',
+    name: 'agglayer-dev-ui',
+    description: 'Agglayer Dev UI',
+    url: 'https://dev-ui.agglayer.dev/',
     icons: ['https://avatars.githubusercontent.com/u/179229932'],
   },
   features: {

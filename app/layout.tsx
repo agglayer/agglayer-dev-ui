@@ -11,7 +11,7 @@ const interTight = Inter_Tight({
 });
 
 export const metadata: Metadata = {
-  title: 'Agglayer UI',
+  title: 'Agglayer Dev UI',
   description: '',
 };
 
