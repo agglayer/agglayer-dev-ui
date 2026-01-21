@@ -5,6 +5,7 @@ import { EllipsisVertical, Menu } from 'lucide-react';
 import { EXTERNAL_LINKS } from '@/app/constants/externalLinks';
 import { ConnectButton } from '@/app/components/connectButton';
 import { Logo } from '@/app/components/ui/logo';
+import Link from 'next/link';
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -46,7 +47,9 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
         >
           <Menu size={20} />
         </button>
-        <Logo />
+        <Link href="/">
+          <Logo />
+        </Link>
       </div>
       <div className="flex gap-1 items-center relative">
         <ConnectButton />
