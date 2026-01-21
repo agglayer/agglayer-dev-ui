@@ -130,14 +130,26 @@ export const useBridge = () => {
     chainId: fromChainId,
   });
 
-  const { reserveWithBuffer } = useGasEstimate({ chainId: fromChainId, enabled: isNative });
+  const feeNeedsApproval = isNative ? false : (needsApproval ?? true);
+
+  const {
+    maxAmount,
+    feeFormatted,
+    isLoading: isGasLoading,
+  } = useGasEstimate({
+    chainId: fromChainId,
+    networkId: fromChain?.networkId ?? 0,
+    decimals: fromChain?.nativeCurrency.decimals ?? 18,
+    needsApproval: feeNeedsApproval,
+    enabled: true,
+  });
 
   const maxNativeAmount = useMemo(() => {
     if (!isNative || !rawBalance) return '';
     const balance = BigInt(rawBalance);
-    const max = balance > reserveWithBuffer ? balance - reserveWithBuffer : BigInt(0);
+    const max = balance > maxAmount ? balance - maxAmount : BigInt(0);
     return formatUnits(max, selectedToken?.decimals ?? 18);
-  }, [isNative, rawBalance, reserveWithBuffer, selectedToken]);
+  }, [isNative, rawBalance, maxAmount, selectedToken]);
 
   const validationError = useMemo((): BridgeValidationError | null => {
     if (!walletAddress) return 'NOT_CONNECTED';
@@ -187,6 +199,10 @@ export const useBridge = () => {
       amountWei,
       maxNativeAmount,
       refetchAllowance,
+    },
+    gasEstimate: {
+      feeFormatted,
+      isLoading: isGasLoading,
     },
   };
 };

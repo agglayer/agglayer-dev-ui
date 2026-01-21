@@ -35,6 +35,7 @@ const MAINNET: ChainEntry = {
     networkId: 0,
     isTestnet: false,
     rpcUrl: mainnet.rpcUrls.default.http[0],
+    eta: 20,
     nativeCurrency: {
       address: ZERO_ADDRESS,
       decimals: mainnet.nativeCurrency.decimals,
@@ -65,6 +66,7 @@ const POLYGON_ZKEVM: ChainEntry = {
     networkId: 1,
     isTestnet: false,
     rpcUrl: polygonZkEvmRpcEndpoints[0],
+    eta: 180,
     nativeCurrency: {
       address: ZERO_ADDRESS,
       decimals: polygonZkEvm.nativeCurrency.decimals,
@@ -85,6 +87,7 @@ const XLAYER: ChainEntry = {
     networkId: 3,
     isTestnet: false,
     rpcUrl: xLayer.rpcUrls.default.http[0],
+    eta: 180,
     nativeCurrency: {
       address: ZERO_ADDRESS,
       decimals: xLayer.nativeCurrency.decimals,
@@ -105,6 +108,7 @@ const KATANA: ChainEntry = {
     networkId: 20,
     isTestnet: false,
     rpcUrl: katana.rpcUrls.default.http[0],
+    eta: 180,
     nativeCurrency: {
       address: ZERO_ADDRESS,
       decimals: katana.nativeCurrency.decimals,
@@ -125,6 +129,7 @@ const TERNOA: ChainEntry = {
     networkId: 13,
     isTestnet: false,
     rpcUrl: ternoa.rpcUrls.default.http[0],
+    eta: 180,
     nativeCurrency: {
       address: ZERO_ADDRESS,
       decimals: ternoa.nativeCurrency.decimals,
@@ -155,6 +160,7 @@ const FORKNET: ChainEntry = {
     networkId: 22,
     isTestnet: false,
     rpcUrl: 'https://rpc-forknet.t.conduit.xyz',
+    eta: 180,
     nativeCurrency: {
       address: ZERO_ADDRESS,
       decimals: 18,
@@ -175,6 +181,7 @@ const SEPOLIA: ChainEntry = {
     networkId: 0,
     isTestnet: true,
     rpcUrl: 'https://ethereum-sepolia-rpc.publicnode.com',
+    eta: 20,
     nativeCurrency: {
       address: ZERO_ADDRESS,
       decimals: sepolia.nativeCurrency.decimals,
@@ -195,6 +202,7 @@ const POLYGON_ZKEVM_CARDONA: ChainEntry = {
     networkId: 1,
     isTestnet: true,
     rpcUrl: polygonZkEvmCardona.rpcUrls.default.http[0],
+    eta: 180,
     nativeCurrency: {
       address: ZERO_ADDRESS,
       decimals: polygonZkEvmCardona.nativeCurrency.decimals,
@@ -225,6 +233,7 @@ const BOKUTO: ChainEntry = {
     networkId: 37,
     isTestnet: true,
     rpcUrl: 'rpc-katana-bokuto.t.conduit.xyz',
+    eta: 180,
     nativeCurrency: {
       address: ZERO_ADDRESS,
       decimals: 18,
