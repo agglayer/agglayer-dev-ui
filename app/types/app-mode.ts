@@ -8,6 +8,7 @@ export type AppChain = {
   networkId: number;
   isTestnet: boolean;
   rpcUrl: string;
+  eta: number;
   nativeCurrency: {
     address: string;
     decimals: number;

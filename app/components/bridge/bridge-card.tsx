@@ -8,6 +8,7 @@ import { DestinationAddressModal } from '@/app/components/bridge/destination-add
 import { BridgeFromSection } from '@/app/components/bridge/bridge-from-section';
 import { BridgeToSection } from '@/app/components/bridge/bridge-to-section';
 import { BridgeTransactionModal } from '@/app/components/bridge/bridge-transaction-modal/bridge-transaction-modal';
+import { EstimationInfo } from '@/app/components/bridge/estimationInfo';
 import { useAppMode } from '@/app/context/app-mode';
 import { useWallet } from '@/app/context/wallet';
 import { useBridge } from '@/app/hooks/useBridge';
@@ -27,7 +28,7 @@ const createChainOptions = (chains: { id: number; name: string; icon?: string }[
 
 const BridgeCardContent = () => {
   const { connect } = useWallet();
-  const { form, derived, actions, status, balance } = useBridge();
+  const { form, derived, actions, status, balance, gasEstimate } = useBridge();
 
   const [tokenModalOpen, setTokenModalOpen] = useState(false);
   const [destinationModalOpen, setDestinationModalOpen] = useState(false);
@@ -64,11 +65,7 @@ const BridgeCardContent = () => {
     if (!form.selectedToken) return;
     if (!derived.walletAddress) return;
 
-    try {
-      await ensureCorrectChain(form.fromChainId);
-    } catch {
-      return;
-    }
+    await ensureCorrectChain(form.fromChainId);
 
     setTransactionModalOpen(true);
     void execution.execute({
@@ -124,16 +121,22 @@ const BridgeCardContent = () => {
           onClearDestinationAddress={actions.clearDestination}
         />
 
-        <div className="pt-2">
-          <button
-            type="button"
-            onClick={handleBridgeClick}
-            disabled={ctaState.disabled}
-            className="w-full rounded-xl bg-primary text-white py-3 font-semibold shadow-xs hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed transition cursor-pointer"
-          >
-            {ctaState.label}
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={handleBridgeClick}
+          disabled={ctaState.disabled}
+          className="w-full rounded-xl bg-primary text-white py-3 font-semibold shadow-xs hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed transition cursor-pointer"
+        >
+          {ctaState.label}
+        </button>
+        {form.amount && derived.fromChain && form.selectedToken && (
+          <EstimationInfo
+            etaMinutes={derived.fromChain.eta}
+            fee={gasEstimate.feeFormatted}
+            nativeSymbol={derived.fromChain.nativeCurrency.symbol}
+            isLoading={gasEstimate.isLoading}
+          />
+        )}
       </Card>
 
       <TokenSelector
