@@ -23,12 +23,7 @@ const ChainCard = ({ icon, name }: { icon?: string; name: string }) => (
   </div>
 );
 
-export const RouteVisual = ({
-  fromChainIcon,
-  toChainIcon,
-  fromChainName,
-  toChainName,
-}: RouteVisualProps) => {
+export const RouteVisual = ({ fromChainIcon, toChainIcon, fromChainName, toChainName }: RouteVisualProps) => {
   return (
     <div className="flex w-full items-center gap-3">
       <ChainCard icon={fromChainIcon} name={fromChainName} />

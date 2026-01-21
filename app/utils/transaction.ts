@@ -47,10 +47,7 @@ export const computeGlobalIndex = (depositCount: number, sourceNetworkId: number
     ? BigInt(depositCount) + GLOBAL_INDEX_MAINNET_FLAG
     : BigInt(depositCount) + BigInt(sourceNetworkId - 1) * GLOBAL_INDEX_NETWORK_OFFSET;
 
-export const buildClaimAssetParams = (params: {
-  transaction: Transaction;
-  proof: ClaimProof;
-}): ClaimAssetParams => {
+export const buildClaimAssetParams = (params: { transaction: Transaction; proof: ClaimProof }): ClaimAssetParams => {
   const { transaction, proof } = params;
   const metadata = isHex(transaction.metadata) ? transaction.metadata : ZERO_HEX;
 

@@ -1,4 +1,3 @@
-
 export const ICONS = {
   ethereum: 'https://raw.githubusercontent.com/lifinance/types/main/src/assets/icons/chains/ethereum.svg',
   zkevm: 'https://raw.githubusercontent.com/lifinance/types/main/src/assets/icons/chains/zkevm.svg',
