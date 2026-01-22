@@ -1,6 +1,6 @@
-import { cn } from "@/app/utils/common";
-import Link from "next/link";
-import { ReactNode } from "react";
+import { cn } from '@/app/utils/common';
+import Link from 'next/link';
+import { ReactNode } from 'react';
 
 interface HeaderNavLinkProps {
   href: string;
@@ -9,7 +9,7 @@ interface HeaderNavLinkProps {
   onClick?: () => void;
   className?: string;
   children?: ReactNode;
-};
+}
 
 export const HeaderNavLink = ({ href, label, isActive, onClick, className, children }: HeaderNavLinkProps) => (
   <Link

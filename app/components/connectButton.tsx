@@ -64,5 +64,9 @@ export const ConnectButton = () => {
     );
   }
 
-  return <Button className='rounded-3xl' onClick={connect}>Connect Wallet</Button>;
+  return (
+    <Button className="rounded-3xl" onClick={connect}>
+      Connect Wallet
+    </Button>
+  );
 };
