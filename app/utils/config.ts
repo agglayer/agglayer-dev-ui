@@ -1,5 +1,5 @@
 import type { Chain } from 'wagmi/chains';
-import { BRIDGE_HUB_API_BASE_URL } from '@/app/constants/bridge';
+import { BRIDGE_HUB_API_BASE_URL } from '@/app/constants/api';
 import { ICONS } from '@/app/constants/icons';
 import { ZERO_ADDRESS } from '@/app/types/bridge';
 import type { AppMode } from '@/app/types/appMode';

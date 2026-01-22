@@ -1,5 +1,5 @@
 import { APP_MODE_CONFIG } from '@/app/config';
-import { BRIDGE_HUB_API_BASE_URL } from '@/app/constants/bridge';
+import { BRIDGE_HUB_API_BASE_URL } from '@/app/constants/api';
 import { APP_MODES, AppMode, AppModeConfig, EnabledAppModeConfig } from '@/app/types/appMode';
 
 export const isValidAppMode = (value: unknown): value is AppMode => APP_MODES.some((mode) => mode === value);
