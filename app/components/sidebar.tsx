@@ -7,10 +7,10 @@ import { ROUTES } from '@/app/constants/routes';
 import { EXTERNAL_LINKS } from '@/app/constants/externalLinks';
 import { cn } from '@/app/utils/common';
 import { useWallet } from '@/app/context/wallet';
-import { useAppMode } from '@/app/context/app-mode';
+import { useAppMode } from '@/app/context/appMode';
 import { useReadyToClaimCount } from '@/app/hooks/useReadyToClaimCount';
 import { setTransactionInitialStatus } from '@/app/components/transactions/intialStatus';
-import { ModeSwitch } from '@/app/components/mode-switch';
+import { ModeSwitch } from '@/app/components/modeSwitch';
 
 interface SidebarProps {
   isOpen: boolean;

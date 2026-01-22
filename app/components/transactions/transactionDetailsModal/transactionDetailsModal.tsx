@@ -13,9 +13,9 @@ import { getTokenLogoBySymbol } from '@/app/utils/tokens';
 import { Alert } from '@/app/components/ui/alert';
 import { Button } from '@/app/components/ui/button';
 import { formatDateTime } from '@/app/utils/date';
-import { useAppMode } from '@/app/context/app-mode';
+import { useAppMode } from '@/app/context/appMode';
 import { getChainByNetworkId } from '@/app/utils/chains';
-import { TxDetailsHeader } from '@/app/components/transactions/transactions-details-modal/transaction-details-modal-header';
+import { TransactionDetailsHeader } from '@/app/components/transactions/transactionDetailsModal/transactionDetailsHeader';
 
 interface TransactionDetailsModalProps {
   open: boolean;
@@ -74,7 +74,7 @@ export const TransactionDetailsModal = ({
   return (
     <Modal open={open} onClose={onClose} title="Transaction Details" contentClassName="space-y-6">
       <div className="space-y-4">
-        <TxDetailsHeader
+        <TransactionDetailsHeader
           sourceChain={sourceChain ? { name: sourceChain.name, icon: sourceChain.icon } : undefined}
           destChain={destChain ? { name: destChain.name, icon: destChain.icon } : undefined}
           tokenLogo={tokenLogo}

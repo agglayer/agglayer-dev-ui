@@ -1,5 +1,5 @@
 import type BigNumber from 'bignumber.js';
-import { bn, toNumber } from './big-number';
+import { bn, toNumber } from './bigNumber';
 
 export const normalize = (value: string) => value.trim().toLowerCase();
 

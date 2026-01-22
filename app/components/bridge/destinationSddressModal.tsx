@@ -2,7 +2,7 @@ import { Alert } from '@/app/components/ui/alert';
 import { Button } from '@/app/components/ui/button';
 import { Checkbox } from '@/app/components/ui/checkbox';
 import { Modal } from '@/app/components/ui/modal';
-import { TextInput } from '@/app/components/ui/text-input';
+import { TextInput } from '@/app/components/ui/textInput';
 import { isValidEthereumAddress } from '@/app/utils/address';
 import { cn } from '@/app/utils/common';
 import { useState } from 'react';

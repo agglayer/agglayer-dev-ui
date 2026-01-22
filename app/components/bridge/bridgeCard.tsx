@@ -3,19 +3,19 @@
 import { useCallback, useMemo, useState } from 'react';
 import { ArrowDownUp } from 'lucide-react';
 import { Card } from '@/app/components/ui/card';
-import { TokenSelector } from '@/app/components/bridge/token-selector';
-import { DestinationAddressModal } from '@/app/components/bridge/destination-address-modal';
-import { BridgeFromSection } from '@/app/components/bridge/bridge-from-section';
-import { BridgeToSection } from '@/app/components/bridge/bridge-to-section';
-import { BridgeTransactionModal } from '@/app/components/bridge/bridge-transaction-modal/bridge-transaction-modal';
+import { TokenSelector } from '@/app/components/bridge/tokenSelector';
+import { DestinationAddressModal } from '@/app/components/bridge/destinationSddressModal';
+import { BridgeFromSection } from '@/app/components/bridge/bridgeFromSection';
+import { BridgeToSection } from '@/app/components/bridge/bridgeToSection';
 import { EstimationInfo } from '@/app/components/bridge/estimationInfo';
-import { useAppMode } from '@/app/context/app-mode';
+import { useAppMode } from '@/app/context/appMode';
 import { useWallet } from '@/app/context/wallet';
 import { useBridge } from '@/app/hooks/useBridge';
 import { useBridgeExecution } from '@/app/hooks/useBridgeExecution';
 import { useEnforceCorrectChain } from '@/app/hooks/useEnforceCorrectChain';
 import { getBridgeCtaState } from '@/app/utils/bridge';
-import { BadgeImageFallback } from '@/app/components/ui/badge-image-fallback';
+import { BadgeImageFallback } from '@/app/components/ui/badgeImageFallback';
+import { BridgeTransactionModal } from '@/app/components/bridge/bridgeTransactionModal/bridgeTransactionModal';
 
 const createChainOptions = (chains: { id: number; name: string; icon?: string }[], excludeChainId?: number) =>
   chains

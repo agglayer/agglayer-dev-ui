@@ -1,5 +1,5 @@
-import { AppMode } from '@/app/types/app-mode';
-import { getBridgeHubApiBaseUrl } from '@/app/utils/app-mode';
+import { AppMode } from '@/app/types/appMode';
+import { getBridgeHubApiBaseUrl } from '@/app/utils/appMode';
 import { normalize } from '@/app/utils/format';
 
 export interface TokenMetadata {

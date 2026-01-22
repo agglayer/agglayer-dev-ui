@@ -1,5 +1,5 @@
 import { ICONS } from '@/app/constants/icons';
-import { AppChain, AppMode, AppModeConfig } from '@/app/types/app-mode';
+import { AppChain, AppMode, AppModeConfig } from '@/app/types/appMode';
 import { ZERO_ADDRESS } from '@/app/types/bridge';
 import type { Chain } from 'wagmi/chains';
 import { mainnet, sepolia, polygonZkEvm, polygonZkEvmCardona, xLayer, katana, ternoa } from 'wagmi/chains';

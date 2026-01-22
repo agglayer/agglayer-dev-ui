@@ -1,9 +1,9 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { fetchTokenMetadata } from '@/app/services/token-metadata';
+import { fetchTokenMetadata } from '@/app/services/tokenMetadata';
 import { isValidEthereumAddress } from '@/app/utils/address';
-import { useAppMode } from '@/app/context/app-mode';
+import { useAppMode } from '@/app/context/appMode';
 
 export const useTokenMetadata = (params: { chainId?: number; tokenAddress?: string; enabled?: boolean }) => {
   const { chainId, tokenAddress, enabled = false } = params;

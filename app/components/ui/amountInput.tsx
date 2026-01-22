@@ -2,7 +2,7 @@
 
 import { useMemo, type ReactNode } from 'react';
 import { cn } from '@/app/utils/common';
-import { bn } from '@/app/utils/big-number';
+import { bn } from '@/app/utils/bigNumber';
 
 type QuickAction = {
   label: string;
