@@ -33,9 +33,9 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
 
   const menuItems = [
     { label: 'Support', href: EXTERNAL_LINKS.CONTACT_SUPPORT },
-    { label: 'Privacy Policy', href: EXTERNAL_LINKS.POLYGON_PRIVACY_POLICY },
-    { label: 'Terms of Use', href: EXTERNAL_LINKS.POLYGON_TERMS_OF_USE },
-  ];
+    { label: 'Privacy Policy', href: EXTERNAL_LINKS.PRIVACY_POLICY },
+    { label: 'Terms of Use', href: EXTERNAL_LINKS.TERMS_OF_USE },
+  ].filter((item) => item.href.trim() !== '');
 
   return (
     <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-white">

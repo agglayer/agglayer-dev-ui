@@ -6,10 +6,8 @@ import Image from 'next/image';
 interface RouteVisualProps {
   fromChainIcon?: string;
   toChainIcon?: string;
-  tokenLogo?: string;
   fromChainName: string;
   toChainName: string;
-  tokenSymbol: string;
 }
 
 const ChainCard = ({ icon, name }: { icon?: string; name: string }) => (

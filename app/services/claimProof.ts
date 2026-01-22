@@ -1,6 +1,6 @@
 import type { Hex } from 'viem';
-import { AppMode } from '@/app/types/app-mode';
-import { getBridgeHubApiBaseUrl } from '@/app/utils/app-mode';
+import { AppMode } from '@/app/types/appMode';
+import { getBridgeHubApiBaseUrl } from '@/app/utils/appMode';
 
 export type ClaimProof = {
   proof_local_exit_root: Hex[];

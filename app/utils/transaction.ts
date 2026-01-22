@@ -1,10 +1,10 @@
 import { type Hex, isHex } from 'viem';
 import type { ClaimAssetParams, TransactionParams } from '@agglayer/sdk';
 import { formatTokenAmount, toBigInt } from './format';
-import { fromWei } from '@/app/utils/big-number';
+import { fromWei } from '@/app/utils/bigNumber';
 import { isValidEthereumAddress } from '@/app/utils/address';
 import { Transaction } from '@/app/types/transaction';
-import type { ClaimProof } from '@/app/services/claim-proof';
+import type { ClaimProof } from '@/app/services/claimProof';
 
 export const formatTransactionAmount = (amount: string, decimals: number): string => {
   try {

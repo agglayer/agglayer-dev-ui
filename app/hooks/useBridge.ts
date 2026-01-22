@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { formatUnits } from 'viem';
-import { useAppMode } from '@/app/context/app-mode';
+import { useAppMode } from '@/app/context/appMode';
 import { useTokens } from '@/app/context/token';
 import { useWallet } from '@/app/context/wallet';
 import { useCheckAllowance } from '@/app/hooks/useCheckAllowance';
@@ -12,7 +12,7 @@ import type { BridgeValidationError } from '@/app/types/bridge';
 import { ZERO_ADDRESS } from '@/app/types/bridge';
 import type { Token } from '@/app/types/token';
 import { isValidEthereumAddress } from '@/app/utils/address';
-import { isPositive, toWei } from '@/app/utils/big-number';
+import { isPositive, toWei } from '@/app/utils/bigNumber';
 import { getChainById } from '@/app/utils/chains';
 import { normalize } from '@/app/utils/format';
 

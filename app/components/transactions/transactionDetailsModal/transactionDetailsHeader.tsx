@@ -1,7 +1,7 @@
-import { BadgeImageFallback } from '@/app/components/ui/badge-image-fallback';
+import { BadgeImageFallback } from '@/app/components/ui/badgeImageFallback';
 import { ArrowRight } from 'lucide-react';
 
-interface TxDetailsHeaderProps {
+interface TransactionDetailsHeaderProps {
   sourceChain?: { name: string; icon?: string };
   destChain?: { name: string; icon?: string };
   tokenLogo?: string;
@@ -9,13 +9,13 @@ interface TxDetailsHeaderProps {
   formattedAmount: string;
 }
 
-export const TxDetailsHeader = ({
+export const TransactionDetailsHeader = ({
   sourceChain,
   destChain,
   tokenLogo,
   tokenSymbol,
   formattedAmount,
-}: TxDetailsHeaderProps) => {
+}: TransactionDetailsHeaderProps) => {
   return (
     <div className="w-full rounded-xl border border-border bg-surface-muted p-5 flex flex-col items-center text-center">
       <div className="flex items-center gap-2 text-sm">

@@ -1,49 +1,9 @@
-import { ICONS } from '@/app/constants/icons';
-import { AppChain, AppMode, AppModeConfig } from '@/app/types/app-mode';
-import { ZERO_ADDRESS } from '@/app/types/bridge';
+import { katana, mainnet, polygonZkEvm, polygonZkEvmCardona, sepolia, ternoa, xLayer } from 'wagmi/chains';
 import type { Chain } from 'wagmi/chains';
-import { mainnet, sepolia, polygonZkEvm, polygonZkEvmCardona, xLayer, katana, ternoa } from 'wagmi/chains';
-
-type ChainEntry = {
-  wagmi: Chain;
-  app: AppChain;
-};
-
-type ChainEntryParams = {
-  wagmi: Chain;
-  icon: string;
-  networkId: number;
-  isTestnet: boolean;
-  eta: number;
-  rpcUrl?: string;
-  explorer?: string;
-  nativeLogoURI?: string;
-};
-
-const createChainEntry = (params: ChainEntryParams): ChainEntry => ({
-  wagmi: params.wagmi,
-  app: {
-    id: params.wagmi.id,
-    name: params.wagmi.name,
-    icon: params.icon,
-    explorer: params.explorer ?? params.wagmi.blockExplorers?.default?.url ?? '',
-    networkId: params.networkId,
-    isTestnet: params.isTestnet,
-    rpcUrl: params.rpcUrl ?? params.wagmi.rpcUrls.default.http[0] ?? '',
-    eta: params.eta,
-    nativeCurrency: {
-      address: ZERO_ADDRESS,
-      decimals: params.wagmi.nativeCurrency.decimals,
-      name: params.wagmi.nativeCurrency.name,
-      symbol: params.wagmi.nativeCurrency.symbol,
-      logoURI: params.nativeLogoURI ?? ICONS.ethereum,
-    },
-  },
-});
-
-export const BRIDGE_HUB_API_BASE_URL = 'https://bridge-hub-api.polygon.technology';
-
-const toProofApiUrl = (mode: AppMode): string => `${BRIDGE_HUB_API_BASE_URL}/${mode}/`;
+import { ICONS } from '@/app/constants/icons';
+import { createChainEntry, toNonEmptyChainArray, toProofApiUrl } from '@/app/utils/config';
+import type { AppMode, AppModeConfig } from '@/app/types/appMode';
+import type { ChainEntry } from '@/app/types/config';
 
 // zkevm rpc urls current issue with walletconnect rpc always failing
 const polygonZkEvmRpcEndpoints = [
@@ -93,6 +53,12 @@ const bokutoWagmi: Chain = {
   },
   nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
 };
+
+export const EXTERNAL_LINKS = Object.freeze({
+  PRIVACY_POLICY: 'https://polygon.technology/privacy-policy',
+  TERMS_OF_USE: 'https://polygon.technology/terms-of-use',
+  CONTACT_SUPPORT: 'https://support.polygon.technology/support/home',
+} as const);
 
 const MAINNET = createChainEntry({
   wagmi: mainnet,
@@ -209,11 +175,6 @@ export const APP_MODE_CONFIG: Record<AppMode, AppModeConfig> = {
   },
 };
 
-const toNonEmptyChainArray = (chains: Chain[]): readonly [Chain, ...Chain[]] => {
-  const [first, ...rest] = chains;
-  if (!first) throw new Error('APP_CONFIG_INVALID: no wagmi chains configured');
-  return [first, ...rest];
-};
 
 export const ALL_WAGMI_CHAINS: readonly [Chain, ...Chain[]] = toNonEmptyChainArray(
   Object.values(CHAIN_REGISTRY).map((entry) => entry.wagmi),

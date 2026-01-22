@@ -14,6 +14,7 @@ import { EXTERNAL_LINKS } from '@/app/constants/externalLinks';
 
 const queryClient = new QueryClient();
 const projectId = process.env.NEXT_PUBLIC_PROJECT_ID!;
+const toOptionalUrl = (value: string): string | undefined => (value.trim() === '' ? undefined : value);
 
 const wagmiAdapter = new WagmiAdapter({
   ssr: true,
@@ -55,8 +56,8 @@ createAppKit({
   themeVariables: {
     '--w3m-accent': '#7b3fe4',
   },
-  termsConditionsUrl: EXTERNAL_LINKS.POLYGON_TERMS_OF_USE,
-  privacyPolicyUrl: EXTERNAL_LINKS.POLYGON_PRIVACY_POLICY,
+  termsConditionsUrl: toOptionalUrl(EXTERNAL_LINKS.TERMS_OF_USE),
+  privacyPolicyUrl: toOptionalUrl(EXTERNAL_LINKS.PRIVACY_POLICY),
   featuredWalletIds: [walletIds.METAMASK],
 });
 

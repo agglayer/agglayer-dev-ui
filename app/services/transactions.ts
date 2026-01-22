@@ -1,7 +1,7 @@
 import { APP_MODE_CONFIG } from '@/app/config';
-import { AppMode } from '@/app/types/app-mode';
+import { AppMode } from '@/app/types/appMode';
 import type { TransactionsResponse, TransactionFilters } from '@/app/types/transaction';
-import { getBridgeHubApiBaseUrl } from '@/app/utils/app-mode';
+import { getBridgeHubApiBaseUrl } from '@/app/utils/appMode';
 
 const getEnvironmentNetworkIds = (mode: AppMode): number[] =>
   APP_MODE_CONFIG[mode].chains.map((chain) => chain.networkId).filter((id): id is number => Number.isFinite(id));

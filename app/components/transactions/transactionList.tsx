@@ -2,7 +2,7 @@
 
 import { useMemo, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
-import { TransactionListItem } from '@/app/components/transactions/transaction-list-item';
+import { TransactionListItem } from '@/app/components/transactions/transactionListItem';
 import { useInfiniteScroll } from '@/app/hooks/useInfiniteScroll';
 import { groupTransactionsByDate } from '@/app/utils/date';
 import type { ClaimStep, Transaction } from '@/app/types/transaction';

@@ -7,10 +7,10 @@ import { ROUTES } from '@/app/constants/routes';
 import { EXTERNAL_LINKS } from '@/app/constants/externalLinks';
 import { cn } from '@/app/utils/common';
 import { useWallet } from '@/app/context/wallet';
-import { useAppMode } from '@/app/context/app-mode';
+import { useAppMode } from '@/app/context/appMode';
 import { useReadyToClaimCount } from '@/app/hooks/useReadyToClaimCount';
 import { setTransactionInitialStatus } from '@/app/components/transactions/intialStatus';
-import { ModeSwitch } from '@/app/components/mode-switch';
+import { ModeSwitch } from '@/app/components/modeSwitch';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -42,6 +42,8 @@ export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
     address,
     enabled: Boolean(address),
   });
+  const supportUrl = EXTERNAL_LINKS.CONTACT_SUPPORT;
+  const showSupportLink = supportUrl.trim() !== '';
 
   return (
     <>
@@ -100,15 +102,17 @@ export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
           </nav>
           <div className="space-y-3">
             <ModeSwitch />
-            <a
-              href={EXTERNAL_LINKS.CONTACT_SUPPORT}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-3 px-3 py-2 text-muted hover:bg-surface-muted hover:text-black rounded-lg cursor-pointer transition-colors"
-            >
-              <CircleUser size={20} />
-              <span className="font-medium">Contact Support</span>
-            </a>
+            {showSupportLink && (
+              <a
+                href={supportUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 px-3 py-2 text-muted hover:bg-surface-muted hover:text-black rounded-lg cursor-pointer transition-colors"
+              >
+                <CircleUser size={20} />
+                <span className="font-medium">Contact Support</span>
+              </a>
+            )}
           </div>
         </div>
       </aside>

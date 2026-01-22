@@ -1,8 +1,8 @@
 'use client';
 
 import { createContext, useCallback, useContext, useMemo, useSyncExternalStore, type ReactNode } from 'react';
-import { AppChain, AppMode, EnabledAppModeConfig } from '@/app/types/app-mode';
-import { getEnabledModes, isEnabledModeConfig, isValidAppMode } from '@/app/utils/app-mode';
+import { AppChain, AppMode, EnabledAppModeConfig } from '@/app/types/appMode';
+import { getEnabledModes, isEnabledModeConfig, isValidAppMode } from '@/app/utils/appMode';
 import { APP_MODE_CONFIG, DEFAULT_APP_MODE } from '@/app/config';
 import { StorageUtils, STORAGE_KEYS } from '@/app/utils/storage';
 

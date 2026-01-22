@@ -35,6 +35,8 @@ export const ClaimResultModal = ({
 
   const txExplorerUrl = explorerUrl && claimTxHash ? `${explorerUrl}/tx/${claimTxHash}` : undefined;
   const userRejected = isUserRejection(errorMessage);
+  const supportUrl = EXTERNAL_LINKS.CONTACT_SUPPORT;
+  const hasSupportUrl = supportUrl.trim() !== '';
 
   return (
     <Modal open={open} onClose={onClose} title="Claim">
@@ -53,22 +55,24 @@ export const ClaimResultModal = ({
             <div className="space-y-2">
               <h2 className="text-xl font-bold">Claim failed</h2>
               <p className="text-sm text-grey">
-                {userRejected ? (
-                  'User rejected the request.'
-                ) : (
-                  <>
-                    Something went wrong. Please try again or{' '}
-                    <Link
-                      href={EXTERNAL_LINKS.CONTACT_SUPPORT}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue hover:underline"
-                    >
-                      contact support
-                    </Link>
-                    .
-                  </>
-                )}
+                {userRejected
+                  ? 'User rejected the request.'
+                  : hasSupportUrl
+                    ? (
+                      <>
+                        Something went wrong. Please try again or{' '}
+                        <Link
+                          href={supportUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue hover:underline"
+                        >
+                          contact support
+                        </Link>
+                        .
+                      </>
+                    )
+                    : 'Something went wrong. Please try again.'}
               </p>
             </div>
           </>

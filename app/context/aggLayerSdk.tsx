@@ -3,8 +3,8 @@
 import type { PropsWithChildren } from 'react';
 import React, { createContext, useContext, useMemo } from 'react';
 import { AggLayerSDK, SDK_MODES } from '@agglayer/sdk';
-import { useAppMode } from '@/app/context/app-mode';
-import { AppChain } from '@/app/types/app-mode';
+import { useAppMode } from '@/app/context/appMode';
+import { AppChain } from '@/app/types/appMode';
 
 type AggNative = ReturnType<AggLayerSDK['getNative']>;
 

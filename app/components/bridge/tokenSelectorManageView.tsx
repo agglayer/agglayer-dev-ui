@@ -3,15 +3,15 @@
 import { useMemo } from 'react';
 import { Trash2, ArrowLeft, ExternalLink, Loader2 } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
-import { TextInput } from '@/app/components/ui/text-input';
+import { TextInput } from '@/app/components/ui/textInput';
 import { Alert } from '@/app/components/ui/alert';
 import { isValidEthereumAddress, shortenAddress } from '@/app/utils/address';
 import { useTokenMetadata } from '@/app/hooks/useTokenMetadata';
-import { BadgeImageFallback } from '@/app/components/ui/badge-image-fallback';
+import { BadgeImageFallback } from '@/app/components/ui/badgeImageFallback';
 import type { Token } from '@/app/types/token';
 import { CopyText } from '@/app/components/copyText';
 import { getChainById } from '@/app/utils/chains';
-import { useAppMode } from '@/app/context/app-mode';
+import { useAppMode } from '@/app/context/appMode';
 import { getTokenLogoBySymbol } from '@/app/utils/tokens';
 
 interface ManageTokensViewProps {

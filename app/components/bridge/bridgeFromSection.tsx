@@ -2,8 +2,8 @@
 
 import { useMemo } from 'react';
 import { Dropdown, type DropdownOption } from '@/app/components/ui/dropdown';
-import { AmountInput } from '@/app/components/ui/amount-input';
-import { BadgeImageFallback } from '@/app/components/ui/badge-image-fallback';
+import { AmountInput } from '@/app/components/ui/amountInput';
+import { BadgeImageFallback } from '@/app/components/ui/badgeImageFallback';
 import { formatTokenBalance, getTokenLogoBySymbol, portionOfBalance } from '@/app/utils/tokens';
 import type { Token } from '@/app/types/token';
 import { normalize } from '@/app/utils/format';

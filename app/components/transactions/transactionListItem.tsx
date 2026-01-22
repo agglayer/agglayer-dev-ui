@@ -1,10 +1,10 @@
 'use client';
 
 import { ArrowRight, ExternalLink, Loader2 } from 'lucide-react';
-import { BadgeImageFallback } from '@/app/components/ui/badge-image-fallback';
+import { BadgeImageFallback } from '@/app/components/ui/badgeImageFallback';
 import { Button } from '@/app/components/ui/button';
 import { CopyText } from '@/app/components/copyText';
-import { TransactionStatusBadge } from '@/app/components/transactions/transaction-status-badge';
+import { TransactionStatusBadge } from '@/app/components/transactions/transactionStatusBadge';
 import { TransactionETA } from '@/app/components/transactions/transactionEta';
 import { useTokenMetadata } from '@/app/hooks/useTokenMetadata';
 import { getChainByNetworkId } from '@/app/utils/chains';
@@ -14,7 +14,7 @@ import { formatTransactionAmount, isNativeToken } from '@/app/utils/transaction'
 import type { ClaimStep, Transaction } from '@/app/types/transaction';
 import { cn } from '@/app/utils/common';
 import { getTokenLogoBySymbol } from '@/app/utils/tokens';
-import { useAppMode } from '@/app/context/app-mode';
+import { useAppMode } from '@/app/context/appMode';
 
 interface TransactionListItemProps {
   transaction: Transaction;

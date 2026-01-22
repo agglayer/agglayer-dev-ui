@@ -3,8 +3,8 @@
 import { useState } from 'react';
 import { Modal } from '@/app/components/ui/modal';
 import type { Token } from '@/app/types/token';
-import { TokenSelectorListView } from '@/app/components/bridge/token-selector-list-view';
-import { ManageTokensView } from '@/app/components/bridge/token-selector-manage-view';
+import { TokenSelectorListView } from '@/app/components/bridge/tokenSelectorListView';
+import { ManageTokensView } from '@/app/components/bridge/tokenSelectorManageView';
 import { useTokens } from '@/app/context/token';
 
 interface TokenSelectorProps {

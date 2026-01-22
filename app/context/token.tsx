@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { normalize } from '@/app/utils/format';
-import { useAppMode } from '@/app/context/app-mode';
+import { useAppMode } from '@/app/context/appMode';
 import type { Token } from '@/app/types/token';
 import { StorageUtils, STORAGE_KEYS } from '@/app/utils/storage';
 
