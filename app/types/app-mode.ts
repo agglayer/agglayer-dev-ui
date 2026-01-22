@@ -1,4 +1,6 @@
-export type AppMode = 'mainnet' | 'testnet' | 'devnet';
+export const APP_MODES = ['mainnet', 'testnet', 'devnet'] as const;
+
+export type AppMode = (typeof APP_MODES)[number];
 
 export type AppChain = {
   id: number;
@@ -18,11 +20,20 @@ export type AppChain = {
   };
 };
 
-export type AppModeConfig = {
+type BaseModeConfig = {
   label: string;
   bridgeAddress: string;
   proofApiUrl: string;
-  defaultFromChainId: number;
-  defaultToChainId: number;
-  chains: AppChain[];
 };
+
+export type DisabledAppModeConfig = BaseModeConfig & {
+  chains: [];
+};
+
+export type EnabledAppModeConfig = BaseModeConfig & {
+  chains: [AppChain, AppChain, ...AppChain[]];
+  defaultFromChainId?: number;
+  defaultToChainId?: number;
+};
+
+export type AppModeConfig = DisabledAppModeConfig | EnabledAppModeConfig;

@@ -1,15 +1,12 @@
-import { APP_MODE_CONFIG } from '@/app/config';
-import { AppMode } from '@/app/types/app-mode';
+import { APP_MODE_CONFIG, BRIDGE_HUB_API_BASE_URL } from '@/app/config';
+import { APP_MODES, AppMode, AppModeConfig, EnabledAppModeConfig } from '@/app/types/app-mode';
 
-export const getEnabledModes = (): AppMode[] =>
-  (Object.keys(APP_MODE_CONFIG) as AppMode[]).filter((mode) => APP_MODE_CONFIG[mode].chains.length > 0);
+export const isValidAppMode = (value: unknown): value is AppMode => APP_MODES.some((mode) => mode === value);
 
-export const isValidAppMode = (value: unknown): value is AppMode =>
-  typeof value === 'string' && value in APP_MODE_CONFIG;
+export const isEnabledModeConfig = (config: AppModeConfig): config is EnabledAppModeConfig => config.chains.length >= 2;
+
+export const getEnabledModes = (): AppMode[] => APP_MODES.filter((mode) => isEnabledModeConfig(APP_MODE_CONFIG[mode]));
 
 export const getBridgeHubApiBaseUrl = (mode: AppMode): string => {
-  const origin = process.env.NEXT_PUBLIC_BRIDGE_HUB_API;
-  if (!origin) throw new Error('NEXT_PUBLIC_BRIDGE_HUB_API missing');
-  const trimmed = origin.endsWith('/') ? origin.slice(0, -1) : origin;
-  return `${trimmed}/${mode}`;
+  return `${BRIDGE_HUB_API_BASE_URL}/${mode}`;
 };
