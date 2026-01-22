@@ -51,7 +51,7 @@ const CHAIN_REGISTRY = { ... , MY_CHAIN };
 - `isTestnet`: boolean
 - `eta`: estimated bridging time in minutes
 - `rpcUrl` (optional): override for the app’s RPC URL
-- `explorer` (optional): override block explorer URL (required if your wagmi chain does not define one)
+- `explorer` (optional): override block explorer URL
 - `nativeLogoURI` (optional): override native token logo
 
 ### Custom chains + RPCs

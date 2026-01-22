@@ -175,7 +175,6 @@ export const APP_MODE_CONFIG: Record<AppMode, AppModeConfig> = {
   },
 };
 
-
 export const ALL_WAGMI_CHAINS: readonly [Chain, ...Chain[]] = toNonEmptyChainArray(
   Object.values(CHAIN_REGISTRY).map((entry) => entry.wagmi),
 );

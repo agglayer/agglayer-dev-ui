@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { CircleCheck, CircleX, ExternalLink } from 'lucide-react';
 import { Modal } from '@/app/components/ui/modal';
 import { Button } from '@/app/components/ui/button';
-import { EXTERNAL_LINKS } from '@/app/constants/externalLinks';
+import { EXTERNAL_LINKS } from '@/app/config';
 
 type ClaimResultStatus = 'success' | 'error';
 
@@ -55,24 +55,24 @@ export const ClaimResultModal = ({
             <div className="space-y-2">
               <h2 className="text-xl font-bold">Claim failed</h2>
               <p className="text-sm text-grey">
-                {userRejected
-                  ? 'User rejected the request.'
-                  : hasSupportUrl
-                    ? (
-                      <>
-                        Something went wrong. Please try again or{' '}
-                        <Link
-                          href={supportUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue hover:underline"
-                        >
-                          contact support
-                        </Link>
-                        .
-                      </>
-                    )
-                    : 'Something went wrong. Please try again.'}
+                {userRejected ? (
+                  'User rejected the request.'
+                ) : hasSupportUrl ? (
+                  <>
+                    Something went wrong. Please try again or{' '}
+                    <Link
+                      href={supportUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue hover:underline"
+                    >
+                      contact support
+                    </Link>
+                    .
+                  </>
+                ) : (
+                  'Something went wrong. Please try again.'
+                )}
               </p>
             </div>
           </>

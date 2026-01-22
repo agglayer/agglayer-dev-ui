@@ -32,5 +32,4 @@ export const toNonEmptyChainArray = (chains: Chain[]): readonly [Chain, ...Chain
   return [first, ...rest];
 };
 
-
 export const toProofApiUrl = (mode: AppMode): string => `${BRIDGE_HUB_API_BASE_URL}/${mode}/`;

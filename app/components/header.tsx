@@ -2,10 +2,10 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { EllipsisVertical, Menu } from 'lucide-react';
-import { EXTERNAL_LINKS } from '@/app/constants/externalLinks';
 import { ConnectButton } from '@/app/components/connectButton';
 import { Logo } from '@/app/components/ui/logo';
 import Link from 'next/link';
+import { EXTERNAL_LINKS } from '@/app/config';
 
 interface HeaderProps {
   onMenuClick: () => void;

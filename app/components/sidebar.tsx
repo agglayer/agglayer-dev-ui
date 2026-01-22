@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ArrowLeftRight, FileText, X, CircleUser, Loader2 } from 'lucide-react';
 import { ROUTES } from '@/app/constants/routes';
-import { EXTERNAL_LINKS } from '@/app/constants/externalLinks';
+import { EXTERNAL_LINKS } from '@/app/config';
 import { cn } from '@/app/utils/common';
 import { useWallet } from '@/app/context/wallet';
 import { useAppMode } from '@/app/context/appMode';
