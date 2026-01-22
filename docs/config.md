@@ -58,7 +58,9 @@ const CHAIN_REGISTRY = { ... , MY_CHAIN };
 
 If a chain is not available in `wagmi/chains`, define a custom wagmi chain and pass it to `createChainEntry`.
 
-`customRpcUrls` is used by the wallet adapter. It maps CAIP-2 chain ids (e.g. `eip155:1101`) to RPC endpoints:
+`customRpcUrls` is used by the wallet adapter. It maps CAIP-2 chain ids (e.g. `eip155:1101`) to RPC endpoints for any chain.
+
+Example:
 ```ts
 export const customRpcUrls = {
   'eip155:1101': [{ url: 'https://rpc.example.org' }],

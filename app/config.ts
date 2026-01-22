@@ -1,33 +1,13 @@
-import { katana, mainnet, polygonZkEvm, polygonZkEvmCardona, sepolia, ternoa, xLayer } from 'wagmi/chains';
+import { katana, mainnet, polygonZkEvmCardona, sepolia } from 'wagmi/chains';
 import type { Chain } from 'wagmi/chains';
 import { ICONS } from '@/app/constants/icons';
 import { createChainEntry, toNonEmptyChainArray, toProofApiUrl } from '@/app/utils/config';
 import type { AppMode, AppModeConfig } from '@/app/types/appMode';
 import type { ChainEntry } from '@/app/types/config';
 
-// zkevm rpc urls current issue with walletconnect rpc always failing
-const polygonZkEvmRpcEndpoints = [
-  'https://zkevm-rpc.com',
-  'https://endpoints.omniatech.io/v1/polygon-zkevm/mainnet/public',
-  'https://polygon-zkevm.drpc.org',
-  'https://polygon-zkevm-public.nodies.app',
-  'https://1rpc.io/polygon/zkevm',
-];
-
 export const customRpcUrls = {
-  'eip155:1101': polygonZkEvmRpcEndpoints.map((url) => ({ url })),
-};
-
-const polygonZkEvmWagmi: Chain = {
-  ...polygonZkEvm,
-  rpcUrls: {
-    default: {
-      http: polygonZkEvmRpcEndpoints,
-    },
-    public: {
-      http: polygonZkEvmRpcEndpoints,
-    },
-  },
+  // Example:
+  // 'eip155:1234': [{ url: 'https://rpc.example.org' }],
 };
 
 const forknetWagmi: Chain = {
@@ -68,39 +48,12 @@ const MAINNET = createChainEntry({
   eta: 20,
 });
 
-const POLYGON_ZKEVM = createChainEntry({
-  wagmi: polygonZkEvmWagmi,
-  icon: ICONS.zkevm,
-  networkId: 1,
-  isTestnet: false,
-  eta: 180,
-  rpcUrl: polygonZkEvmRpcEndpoints[0],
-});
-
-const XLAYER = createChainEntry({
-  wagmi: xLayer,
-  icon: ICONS.xlayer,
-  networkId: 3,
-  isTestnet: false,
-  eta: 180,
-  nativeLogoURI: ICONS.xlayerToken,
-});
-
 const KATANA = createChainEntry({
   wagmi: katana,
   icon: ICONS.katana,
   networkId: 20,
   isTestnet: false,
   eta: 180,
-});
-
-const TERNOA = createChainEntry({
-  wagmi: ternoa,
-  icon: ICONS.ternoa,
-  networkId: 13,
-  isTestnet: false,
-  eta: 180,
-  nativeLogoURI: ICONS.ternoa,
 });
 
 const FORKNET = createChainEntry({
@@ -138,10 +91,7 @@ const BOKUTO = createChainEntry({
 
 const CHAIN_REGISTRY: Record<string, ChainEntry> = {
   MAINNET,
-  POLYGON_ZKEVM,
-  XLAYER,
   KATANA,
-  TERNOA,
   FORKNET,
   SEPOLIA,
   POLYGON_ZKEVM_CARDONA,
@@ -157,7 +107,7 @@ export const APP_MODE_CONFIG: Record<AppMode, AppModeConfig> = {
     proofApiUrl: toProofApiUrl('mainnet'),
     defaultFromChainId: MAINNET.app.id,
     defaultToChainId: KATANA.app.id,
-    chains: [MAINNET.app, POLYGON_ZKEVM.app, XLAYER.app, KATANA.app, TERNOA.app, FORKNET.app],
+    chains: [MAINNET.app, KATANA.app, FORKNET.app],
   },
   testnet: {
     label: 'Testnet',
