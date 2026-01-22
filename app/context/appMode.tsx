@@ -71,6 +71,7 @@ export const AppModeProvider = ({ children }: { children: ReactNode }) => {
   if (!isEnabledModeConfig(config)) {
     throw new Error(`APP_MODE_DISABLED: ${mode}`);
   }
+
   const [primaryChain, secondaryChain] = config.chains;
   const defaultFromChainId = config.defaultFromChainId ?? primaryChain.id;
   const defaultToChainId = config.defaultToChainId ?? secondaryChain.id;

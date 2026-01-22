@@ -36,7 +36,22 @@ export const ClaimResultModal = ({
   const txExplorerUrl = explorerUrl && claimTxHash ? `${explorerUrl}/tx/${claimTxHash}` : undefined;
   const userRejected = isUserRejection(errorMessage);
   const supportUrl = EXTERNAL_LINKS.CONTACT_SUPPORT;
-  const hasSupportUrl = supportUrl.trim() !== '';
+  const hasSupportUrl = !!supportUrl?.trim();
+
+  const getErrorMessage = () => {
+    if (userRejected) return 'User rejected the request.';
+    if (!hasSupportUrl) return 'Something went wrong. Please try again.';
+
+    return (
+      <>
+        Something went wrong. Please try again or{' '}
+        <Link href={supportUrl} target="_blank" rel="noopener noreferrer" className="text-blue hover:underline">
+          contact support
+        </Link>
+        .
+      </>
+    );
+  };
 
   return (
     <Modal open={open} onClose={onClose} title="Claim">
@@ -54,26 +69,7 @@ export const ClaimResultModal = ({
             <CircleX aria-hidden className="size-12 text-red" />
             <div className="space-y-2">
               <h2 className="text-xl font-bold">Claim failed</h2>
-              <p className="text-sm text-grey">
-                {userRejected ? (
-                  'User rejected the request.'
-                ) : hasSupportUrl ? (
-                  <>
-                    Something went wrong. Please try again or{' '}
-                    <Link
-                      href={supportUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue hover:underline"
-                    >
-                      contact support
-                    </Link>
-                    .
-                  </>
-                ) : (
-                  'Something went wrong. Please try again.'
-                )}
-              </p>
+              <p className="text-sm text-grey">{getErrorMessage()}</p>
             </div>
           </>
         )}

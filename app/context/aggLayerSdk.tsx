@@ -27,13 +27,13 @@ const toSdkChainConfig = (chain: AppChain, bridgeAddress: string, proofApiUrl: s
 });
 
 export const AggLayerSDKProvider: React.FC<PropsWithChildren> = ({ children }) => {
-  const { config, defaultFromChainId } = useAppMode();
+  const { config } = useAppMode();
 
   const native = useMemo(() => {
     const sdk = new AggLayerSDK({
       mode: [SDK_MODES.NATIVE],
       native: {
-        defaultNetwork: defaultFromChainId,
+        defaultNetwork: config.defaultFromChainId,
         chains: config.chains.map((chain: AppChain) =>
           toSdkChainConfig(chain, config.bridgeAddress, config.proofApiUrl),
         ),
@@ -41,7 +41,7 @@ export const AggLayerSDKProvider: React.FC<PropsWithChildren> = ({ children }) =
     });
 
     return sdk.getNative();
-  }, [config, defaultFromChainId]);
+  }, [config]);
 
   return <AggLayerNativeContext.Provider value={native}>{children}</AggLayerNativeContext.Provider>;
 };
