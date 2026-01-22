@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { ArrowDownUp } from 'lucide-react';
 import { Card } from '@/app/components/ui/card';
 import { TokenSelector } from '@/app/components/bridge/tokenSelector';
-import { DestinationAddressModal } from '@/app/components/bridge/destinationSddressModal';
+import { DestinationAddressModal } from '@/app/components/bridge/destinationAddressModal';
 import { BridgeFromSection } from '@/app/components/bridge/bridgeFromSection';
 import { BridgeToSection } from '@/app/components/bridge/bridgeToSection';
 import { EstimationInfo } from '@/app/components/bridge/estimationInfo';
