@@ -2,8 +2,8 @@
 
 import { useMemo } from 'react';
 import { Code } from 'lucide-react';
-import { useAppMode } from '@/app/context/app-mode';
-import { AppMode } from '@/app/types/app-mode';
+import { useAppMode } from '@/app/context/appMode';
+import { AppMode } from '@/app/types/appMode';
 import { APP_MODE_CONFIG } from '@/app/config';
 
 type ModeOption = {

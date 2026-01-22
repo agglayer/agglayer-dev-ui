@@ -2,9 +2,9 @@
 
 import { useMemo } from 'react';
 import { Plus } from 'lucide-react';
-import { TextInput } from '@/app/components/ui/text-input';
+import { TextInput } from '@/app/components/ui/textInput';
 import type { Token } from '@/app/types/token';
-import { TokenSelectorItem } from '@/app/components/bridge/token-selector-item';
+import { TokenSelectorItem } from '@/app/components/bridge/tokenSelectorItem';
 
 interface TokenSelectorListViewProps {
   tokens: Token[];

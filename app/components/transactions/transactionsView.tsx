@@ -6,20 +6,20 @@ import { useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Plug, RotateCw } from 'lucide-react';
 import { Card } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
-import { TransactionFilters } from '@/app/components/transactions/transaction-filters';
-import { TransactionList } from '@/app/components/transactions/transaction-list';
-import { ClaimResultModal } from '@/app/components/transactions/claim-result-modal';
+import { TransactionFilters } from '@/app/components/transactions/transactionFilters';
+import { TransactionList } from '@/app/components/transactions/transactionList';
+import { ClaimResultModal } from '@/app/components/transactions/claimResultModal';
 import { TOTAL_REFETCH_TIME, useTransactions } from '@/app/hooks/useTransactions';
 import { useClaimExecution } from '@/app/hooks/useClaimExecution';
 import { useEnforceCorrectChain } from '@/app/hooks/useEnforceCorrectChain';
 import { useWallet } from '@/app/context/wallet';
-import { useAppMode } from '@/app/context/app-mode';
+import { useAppMode } from '@/app/context/appMode';
 import { useRefetch } from '@/app/context/refetch';
 import type { TransactionStatus, Transaction } from '@/app/types/transaction';
 import { getTransactionInitialStatus } from '@/app/components/transactions/intialStatus';
-import { TransactionDetailsModal } from '@/app/components/transactions/transactions-details-modal/transaction-details-modal';
 import { getChainById, getChainByNetworkId } from '@/app/utils/chains';
 import { cn } from '@/app/utils/common';
+import { TransactionDetailsModal } from '@/app/components/transactions/transactionDetailsModal/transactionDetailsModal';
 
 export const TransactionsView = () => {
   const { address, status, chainId, connect } = useWallet();

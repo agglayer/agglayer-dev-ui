@@ -54,10 +54,7 @@ export const formatDuration = (minutes: number): string => {
 
 export type ETAStatus = 'pending' | 'grace' | 'delayed';
 
-export const getETAStatus = (
-  timestampSeconds: number,
-  etaMinutes: number,
-): { status: ETAStatus; message: string } => {
+export const getETAStatus = (timestampSeconds: number, etaMinutes: number): { status: ETAStatus; message: string } => {
   const now = Date.now();
   const transactionTime = timestampSeconds * 1000;
   const expectedArrival = transactionTime + etaMinutes * 60 * 1000;

@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { Inter_Tight } from 'next/font/google';
 import './globals.css';
 import { Providers } from '@/app/providers';
-import { LayoutWrapper } from '@/app/components/layout-wrapper';
+import { LayoutWrapper } from '@/app/components/layoutWrapper';
 
 const interTight = Inter_Tight({
   subsets: ['latin'],

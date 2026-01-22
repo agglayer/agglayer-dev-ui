@@ -1,4 +1,4 @@
-import { AppChain } from '@/app/types/app-mode';
+import { AppChain } from '@/app/types/appMode';
 
 export const getChainById = (chains: AppChain[], chainId: number): AppChain | undefined =>
   chains.find((chain) => chain.id === chainId);

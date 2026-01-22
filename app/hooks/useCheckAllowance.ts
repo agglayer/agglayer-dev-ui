@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useAggNative } from '@/app/context/aggLayerSdk';
-import { useAppMode } from '@/app/context/app-mode';
+import { useAppMode } from '@/app/context/appMode';
 import { isValidEthereumAddress } from '@/app/utils/address';
 import { toBigInt } from '@/app/utils/format';
 

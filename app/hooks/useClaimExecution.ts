@@ -5,10 +5,10 @@ import type { Hex } from 'viem';
 import { useConfig, useSendTransaction } from 'wagmi';
 import { getPublicClient } from '@wagmi/core';
 import { useAggNative } from '@/app/context/aggLayerSdk';
-import { useAppMode } from '@/app/context/app-mode';
-import { fetchClaimProof } from '@/app/services/claim-proof';
+import { useAppMode } from '@/app/context/appMode';
+import { fetchClaimProof } from '@/app/services/claimProof';
 import type { ClaimExecutionResult, ClaimExecutionState, Transaction } from '@/app/types/transaction';
-import type { AppChain } from '@/app/types/app-mode';
+import type { AppChain } from '@/app/types/appMode';
 import { buildClaimAssetParams, mapTransactionRequest, resolveLeafIndex } from '@/app/utils/transaction';
 
 interface UseClaimExecutionParams {

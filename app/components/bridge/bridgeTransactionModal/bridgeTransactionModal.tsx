@@ -5,10 +5,10 @@ import { Modal } from '@/app/components/ui/modal';
 import { Button } from '@/app/components/ui/button';
 import type { BridgeExecutionState, BridgeStep as BridgeStepType } from '@/app/types/bridge';
 import type { Token } from '@/app/types/token';
-import { BridgeStep, type StepState } from '@/app/components/bridge/bridge-transaction-modal/bridge-step';
-import { RouteVisual } from '@/app/components/bridge/bridge-transaction-modal/route-visual';
-import { BridgeSummary } from '@/app/components/bridge/bridge-transaction-modal/bridge-summary';
-import { BridgeSuccessView } from '@/app/components/bridge/bridge-transaction-modal/bridge-success-view';
+import { BridgeStep, StepState } from '@/app/components/bridge/bridgeTransactionModal/bridgeStep';
+import { BridgeSuccessView } from '@/app/components/bridge/bridgeTransactionModal/bridgeSuccessView';
+import { RouteVisual } from '@/app/components/bridge/bridgeTransactionModal/routeVisual';
+import { BridgeSummary } from '@/app/components/bridge/bridgeTransactionModal/bridgeSummary';
 
 type ModalMode = 'pending' | 'success' | 'error';
 
@@ -178,7 +178,7 @@ export const BridgeTransactionModal = ({
     <Modal
       open={open}
       onClose={handleClose}
-      title="Bridge transaction"
+      title="Bridge assets"
       showCloseButton={!isPending}
       dismissible={!isPending}
       contentClassName="space-y-6"
@@ -196,10 +196,8 @@ export const BridgeTransactionModal = ({
           <RouteVisual
             fromChainIcon={fromChainIcon}
             toChainIcon={toChainIcon}
-            tokenLogo={token.logoURI}
             fromChainName={fromChainName}
             toChainName={toChainName}
-            tokenSymbol={token.symbol}
           />
         )}
         <BridgeSummary

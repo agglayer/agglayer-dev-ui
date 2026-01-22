@@ -1,6 +1,6 @@
 import BigNumber from 'bignumber.js';
 import { normalize } from '@/app/utils/format';
-import { fromWei } from '@/app/utils/big-number';
+import { fromWei } from '@/app/utils/bigNumber';
 import type { Token } from '@/app/types/token';
 
 export const getTokenBalance = (token: Token, rawBalance?: string | bigint | null) => {

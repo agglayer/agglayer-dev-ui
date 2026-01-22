@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { type InfiniteData, useInfiniteQuery } from '@tanstack/react-query';
 import { fetchTransactions } from '@/app/services/transactions';
 import type { TransactionFilters, TransactionsResponse } from '@/app/types/transaction';
-import { useAppMode } from '@/app/context/app-mode';
+import { useAppMode } from '@/app/context/appMode';
 
 const REFETCH_INTERVALS = [500, 1000, 2000, 3000];
 export const TOTAL_REFETCH_TIME = REFETCH_INTERVALS.reduce((acc, curr) => acc + curr, 0);
