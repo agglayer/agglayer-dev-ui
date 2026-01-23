@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { CircleCheck, CircleX, ExternalLink } from 'lucide-react';
 import { Modal } from '@/app/components/ui/modal';
 import { Button } from '@/app/components/ui/button';
-import { EXTERNAL_LINKS } from '@/app/constants/externalLinks';
+import { EXTERNAL_LINKS } from '@/app/config';
 
 type ClaimResultStatus = 'success' | 'error';
 
@@ -35,6 +35,23 @@ export const ClaimResultModal = ({
 
   const txExplorerUrl = explorerUrl && claimTxHash ? `${explorerUrl}/tx/${claimTxHash}` : undefined;
   const userRejected = isUserRejection(errorMessage);
+  const supportUrl = EXTERNAL_LINKS.CONTACT_SUPPORT;
+  const hasSupportUrl = !!supportUrl?.trim();
+
+  const getErrorMessage = () => {
+    if (userRejected) return 'User rejected the request.';
+    if (!hasSupportUrl) return 'Something went wrong. Please try again.';
+
+    return (
+      <>
+        Something went wrong. Please try again or{' '}
+        <Link href={supportUrl} target="_blank" rel="noopener noreferrer" className="text-blue hover:underline">
+          contact support
+        </Link>
+        .
+      </>
+    );
+  };
 
   return (
     <Modal open={open} onClose={onClose} title="Claim">
@@ -52,24 +69,7 @@ export const ClaimResultModal = ({
             <CircleX aria-hidden className="size-12 text-red" />
             <div className="space-y-2">
               <h2 className="text-xl font-bold">Claim failed</h2>
-              <p className="text-sm text-grey">
-                {userRejected ? (
-                  'User rejected the request.'
-                ) : (
-                  <>
-                    Something went wrong. Please try again or{' '}
-                    <Link
-                      href={EXTERNAL_LINKS.CONTACT_SUPPORT}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue hover:underline"
-                    >
-                      contact support
-                    </Link>
-                    .
-                  </>
-                )}
-              </p>
+              <p className="text-sm text-grey">{getErrorMessage()}</p>
             </div>
           </>
         )}

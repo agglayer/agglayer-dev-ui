@@ -1,8 +1,8 @@
 'use client';
 
 import { createContext, useCallback, useContext, useMemo, useSyncExternalStore, type ReactNode } from 'react';
-import { AppChain, AppMode, AppModeConfig } from '@/app/types/appMode';
-import { getEnabledModes, isValidAppMode } from '@/app/utils/appMode';
+import { AppChain, AppMode, EnabledAppModeConfig } from '@/app/types/appMode';
+import { getEnabledModes, isEnabledModeConfig, isValidAppMode } from '@/app/utils/appMode';
 import { APP_MODE_CONFIG, DEFAULT_APP_MODE } from '@/app/config';
 import { StorageUtils, STORAGE_KEYS } from '@/app/utils/storage';
 
@@ -10,7 +10,7 @@ type AppModeContextValue = {
   mode: AppMode;
   setMode: (mode: AppMode) => void;
   enabledModes: AppMode[];
-  config: AppModeConfig;
+  config: EnabledAppModeConfig;
   chains: AppChain[];
   bridgeAddress: string;
   defaultFromChainId: number;
@@ -68,6 +68,13 @@ export const AppModeProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const config = APP_MODE_CONFIG[mode];
+  if (!isEnabledModeConfig(config)) {
+    throw new Error(`APP_MODE_DISABLED: ${mode}`);
+  }
+
+  const [primaryChain, secondaryChain] = config.chains;
+  const defaultFromChainId = config.defaultFromChainId ?? primaryChain.id;
+  const defaultToChainId = config.defaultToChainId ?? secondaryChain.id;
 
   const value = useMemo<AppModeContextValue>(
     () => ({
@@ -77,10 +84,10 @@ export const AppModeProvider = ({ children }: { children: ReactNode }) => {
       config,
       chains: config.chains,
       bridgeAddress: config.bridgeAddress,
-      defaultFromChainId: config.defaultFromChainId,
-      defaultToChainId: config.defaultToChainId,
+      defaultFromChainId,
+      defaultToChainId,
     }),
-    [mode, setMode, config],
+    [mode, setMode, config, defaultFromChainId, defaultToChainId],
   );
 
   return <AppModeContext.Provider value={value}>{children}</AppModeContext.Provider>;

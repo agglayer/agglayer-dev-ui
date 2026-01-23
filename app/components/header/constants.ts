@@ -1,4 +1,4 @@
-import { EXTERNAL_LINKS } from '@/app/constants/externalLinks';
+import { EXTERNAL_LINKS } from '@/app/config';
 import { ROUTES } from '@/app/constants/routes';
 
 interface NavItem {
@@ -18,6 +18,6 @@ export const NAV_ITEMS: NavItem[] = [
 
 export const MENU_LINKS: MenuLink[] = [
   { label: 'Contact Support', href: EXTERNAL_LINKS.CONTACT_SUPPORT },
-  { label: 'Privacy Policy', href: EXTERNAL_LINKS.POLYGON_PRIVACY_POLICY },
-  { label: 'Terms of Use', href: EXTERNAL_LINKS.POLYGON_TERMS_OF_USE },
+  { label: 'Privacy Policy', href: EXTERNAL_LINKS.PRIVACY_POLICY },
+  { label: 'Terms of Use', href: EXTERNAL_LINKS.TERMS_OF_USE },
 ];

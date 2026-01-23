@@ -10,10 +10,11 @@ import type { ConnectedWalletInfo } from '@reown/appkit/react';
 import { createAppKit, useAppKit, useAppKitAccount, useDisconnect, useWalletInfo } from '@reown/appkit/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ALL_WAGMI_CHAINS, customRpcUrls } from '@/app/config';
-import { EXTERNAL_LINKS } from '@/app/constants/externalLinks';
+import { EXTERNAL_LINKS } from '@/app/config';
 
 const queryClient = new QueryClient();
 const projectId = process.env.NEXT_PUBLIC_PROJECT_ID!;
+const urlOrUndefined = (value: string): string | undefined => (value.trim() === '' ? undefined : value);
 
 const wagmiAdapter = new WagmiAdapter({
   ssr: true,
@@ -36,9 +37,9 @@ createAppKit({
   defaultNetwork: sepolia,
   customRpcUrls,
   metadata: {
-    name: 'bridge-hub-ui',
-    description: 'Bridge Hub UI',
-    url: 'https://ui-testnet.agglayer.dev/',
+    name: 'agglayer-dev-ui',
+    description: 'Agglayer Dev UI',
+    url: 'https://dev-ui.agglayer.dev/',
     icons: ['https://avatars.githubusercontent.com/u/179229932'],
   },
   features: {
@@ -55,8 +56,8 @@ createAppKit({
   themeVariables: {
     '--w3m-accent': '#7b3fe4',
   },
-  termsConditionsUrl: EXTERNAL_LINKS.POLYGON_TERMS_OF_USE,
-  privacyPolicyUrl: EXTERNAL_LINKS.POLYGON_PRIVACY_POLICY,
+  termsConditionsUrl: urlOrUndefined(EXTERNAL_LINKS.TERMS_OF_USE),
+  privacyPolicyUrl: urlOrUndefined(EXTERNAL_LINKS.PRIVACY_POLICY),
   featuredWalletIds: [walletIds.METAMASK],
 });
 
