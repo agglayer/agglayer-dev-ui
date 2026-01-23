@@ -34,7 +34,7 @@ export const ConnectButton = () => {
       <div className="relative" ref={popoverRef}>
         <button
           onClick={() => setIsPopoverOpen(!isPopoverOpen)}
-          className="flex items-center gap-2 py-2 px-4 bg-surface-muted text-black border border-border rounded-xl hover:bg-surface cursor-pointer shadow-xs transition-colors"
+          className="flex items-center gap-2 py-2 px-4 bg-surface text-black border border-border rounded-3xl hover:bg-surface-muted cursor-pointer shadow-xs transition-colors"
         >
           <WalletIcon walletIcon={walletIcon} className="size-5" />
           {shortenAddress(address)}
@@ -64,5 +64,9 @@ export const ConnectButton = () => {
     );
   }
 
-  return <Button onClick={connect}>Connect Wallet</Button>;
+  return (
+    <Button className="rounded-3xl" onClick={connect}>
+      Connect Wallet
+    </Button>
+  );
 };

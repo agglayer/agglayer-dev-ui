@@ -34,10 +34,10 @@ export const ModeSwitch = () => {
           key={option.value}
           type="button"
           onClick={() => setMode(option.value)}
-          className="flex items-center gap-3 px-3 py-2 text-muted hover:bg-surface-muted hover:text-black rounded-lg cursor-pointer transition-colors w-full"
+          className="flex items-center gap-3 px-3 py-2 text-black md:hover:bg-surface-muted rounded-lg cursor-pointer transition-colors w-full"
         >
           <Code size={20} />
-          <span className="font-medium">Switch to {option.label}</span>
+          <span>Switch to {option.label}</span>
         </button>
       ))}
     </div>
