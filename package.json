@@ -1,5 +1,5 @@
 {
-  "name": "bridge-hub-ui",
+  "name": "agglayer-dev-ui",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -11,7 +11,8 @@
     "lint:fix": "eslint . --ext .js,.ts,.tsx --fix",
     "format": "prettier --check \"**/*.{ts,tsx}\"",
     "format:fix": "prettier --write \"**/*.{ts,tsx}\"",
-    "test": "playwright test",
+    "test": "npm run test:e2e",
+    "test:e2e": "playwright test",
     "typecheck": "tsc --noEmit",
     "check": "npm run lint && npm run typecheck && npm run test"
   },

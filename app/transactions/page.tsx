@@ -1,9 +1,9 @@
-import { TransactionsView } from '@/app/components/transactions/transactions-view';
+import { TransactionsView } from '@/app/components/transactions/transactionsView';
 
 export default function TransactionsPage() {
   return (
-    <main className="container mx-auto px-4">
+    <div className="mx-auto w-full max-w-5xl px-4 py-8">
       <TransactionsView />
-    </main>
+    </div>
   );
 }

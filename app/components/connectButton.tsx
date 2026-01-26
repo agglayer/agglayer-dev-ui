@@ -1,6 +1,6 @@
 'use client';
 
-import { useWallet } from '@/app/context/wallet-context';
+import { useWallet } from '@/app/context/walletContext';
 import { shortenAddress } from '@/app/utils/address';
 import { CopyText } from '@/app/components/copyText';
 import { WalletIcon } from '@/app/components/walletIcon';
@@ -35,7 +35,7 @@ export const ConnectButton = () => {
         <button
           onClick={() => setIsPopoverOpen(!isPopoverOpen)}
           data-test-id="wallet-connected"
-          className="flex items-center gap-2 py-2 px-4 bg-surface-muted text-black border border-border rounded-xl hover:bg-surface cursor-pointer shadow-xs transition-colors"
+          className="flex items-center gap-2 py-2 px-4 bg-surface text-black border border-border rounded-3xl hover:bg-surface-muted cursor-pointer shadow-xs transition-colors"
         >
           <WalletIcon walletIcon={walletIcon} className="size-5" />
           {shortenAddress(address)}
@@ -66,7 +66,7 @@ export const ConnectButton = () => {
   }
 
   return (
-    <Button onClick={connect} data-test-id="connect-wallet">
+    <Button className="rounded-3xl" data-test-id="connect-wallet" onClick={connect}>
       Connect Wallet
     </Button>
   );

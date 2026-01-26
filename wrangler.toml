@@ -13,7 +13,7 @@ command = "npm run build:production"
 
 [env.production]
 routes = [
-  { pattern = "ui-testnet.agglayer.dev", custom_domain = true }
+  { pattern = "dev-ui.agglayer.dev", custom_domain = true }
 ]
 
 [env.production.build]

@@ -4,7 +4,7 @@ import { useCallback, useState } from 'react';
 import type { Hex } from 'viem';
 import { usePublicClient, useSendTransaction } from 'wagmi';
 import { useAggNative } from '@/app/context/aggLayerSdk';
-import { useAppMode } from '@/app/context/app-mode';
+import { useAppMode } from '@/app/context/appMode';
 import type { BridgeExecutionState } from '@/app/types/bridge';
 import { ZERO_ADDRESS } from '@/app/types/bridge';
 import type { Token } from '@/app/types/token';

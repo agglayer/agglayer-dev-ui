@@ -12,8 +12,9 @@ class BridgePage {
   }
 
   async connectWallet(): Promise<void> {
-    await this.page.getByTestId('connect-wallet').click();
-    await this.page.getByTestId('wallet-connected').waitFor();
+    const header = this.page.getByTestId('header-desktop');
+    await header.getByTestId('connect-wallet').click();
+    await header.getByTestId('wallet-connected').waitFor();
   }
 
   async openTokenSelector(): Promise<void> {

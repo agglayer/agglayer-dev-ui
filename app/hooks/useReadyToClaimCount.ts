@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { fetchTransactions } from '@/app/services/transactions';
 import type { TransactionStatus } from '@/app/types/transaction';
-import { useAppMode } from '@/app/context/app-mode';
+import { useAppMode } from '@/app/context/appMode';
 
 const READY_STATUS: TransactionStatus = 'READY_TO_CLAIM';
 

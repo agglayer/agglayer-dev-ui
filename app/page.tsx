@@ -1,9 +1,9 @@
-import { BridgeCard } from '@/app/components/bridge/bridge-card';
+import { BridgeCard } from '@/app/components/bridge/bridgeCard';
 
 export default function Home() {
   return (
-    <main className="flex justify-center">
+    <div className="flex justify-center px-4 py-8">
       <BridgeCard />
-    </main>
+    </div>
   );
 }

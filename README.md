@@ -1,20 +1,45 @@
 # Agglayer Dev UI
 
-Front-end for the bridging via the Agglayer SDK.
+The Agglayer Dev UI is a configurable, self-hosted bridging interface powered by the [Agglayer SDK](https://github.com/agglayer/sdk) and the [Bridge Hub API](https://github.com/agglayer/agglayer-bridge-hub-api).
 
-## Setup
+## Quickstart
+
+1) Install dependencies:
 
 ```bash
 npm install
+```
+
+2) Configure environment variables:
+
+```bash
+cp .env.example .env.local
+```
+
+Set `NEXT_PUBLIC_PROJECT_ID` (WalletConnect project ID) in `.env.local`.
+
+3) Run the dev server:
+
+```bash
 npm run dev
 ```
 
 Open `http://localhost:3000`.
 
-## E2E Tests
+## Scripts
 
-Playwright runs against `http://localhost:3000` and starts the dev server automatically.
+- `npm run dev` — start dev server
+- `npm run build` — production build
+- `npm run start` — run production server
+- `npm run lint` — lint
+- `npm run typecheck` — TypeScript checks
+- `npm run test` — end-to-end tests (Playwright)
+- `npm run test:e2e` — end-to-end tests (Playwright)
 
-```bash
-npm run test
-```
+## Configuration
+
+All app configuration lives in `app/config.ts`. See [`docs/config.md`](docs/config.md) for the full guide.
+
+## License
+
+TODO.

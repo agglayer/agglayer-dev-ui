@@ -1,7 +1,7 @@
 import { ZERO_ADDRESS } from './../types/bridge';
 import { useQuery } from '@tanstack/react-query';
 import { useAggNative } from '@/app/context/aggLayerSdk';
-import { useAppMode } from '@/app/context/app-mode';
+import { useAppMode } from '@/app/context/appMode';
 import { normalize } from '@/app/utils/format';
 import { isValidEthereumAddress } from '@/app/utils/address';
 import type { Token } from '@/app/types/token';

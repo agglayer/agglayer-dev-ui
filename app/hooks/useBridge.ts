@@ -2,9 +2,9 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { formatUnits } from 'viem';
-import { useAppMode } from '@/app/context/app-mode';
+import { useAppMode } from '@/app/context/appMode';
 import { useTokens } from '@/app/context/token';
-import { useWallet } from '@/app/context/wallet-context';
+import { useWallet } from '@/app/context/walletContext';
 import { useCheckAllowance } from '@/app/hooks/useCheckAllowance';
 import { useGasEstimate } from '@/app/hooks/useGasEstimate';
 import { useTokenBalance } from '@/app/hooks/useTokenBalance';
@@ -12,7 +12,7 @@ import type { BridgeValidationError } from '@/app/types/bridge';
 import { ZERO_ADDRESS } from '@/app/types/bridge';
 import type { Token } from '@/app/types/token';
 import { isValidEthereumAddress } from '@/app/utils/address';
-import { isPositive, toWei } from '@/app/utils/big-number';
+import { isPositive, toWei } from '@/app/utils/bigNumber';
 import { getChainById } from '@/app/utils/chains';
 import { normalize } from '@/app/utils/format';
 
@@ -130,14 +130,26 @@ export const useBridge = () => {
     chainId: fromChainId,
   });
 
-  const { reserveWithBuffer } = useGasEstimate({ chainId: fromChainId, enabled: isNative });
+  const feeNeedsApproval = isNative ? false : (needsApproval ?? true);
+
+  const {
+    maxAmount,
+    feeFormatted,
+    isLoading: isGasLoading,
+  } = useGasEstimate({
+    chainId: fromChainId,
+    networkId: fromChain?.networkId ?? 0,
+    decimals: fromChain?.nativeCurrency.decimals ?? 18,
+    needsApproval: feeNeedsApproval,
+    enabled: true,
+  });
 
   const maxNativeAmount = useMemo(() => {
     if (!isNative || !rawBalance) return '';
     const balance = BigInt(rawBalance);
-    const max = balance > reserveWithBuffer ? balance - reserveWithBuffer : BigInt(0);
+    const max = balance > maxAmount ? balance - maxAmount : BigInt(0);
     return formatUnits(max, selectedToken?.decimals ?? 18);
-  }, [isNative, rawBalance, reserveWithBuffer, selectedToken]);
+  }, [isNative, rawBalance, maxAmount, selectedToken]);
 
   const validationError = useMemo((): BridgeValidationError | null => {
     if (!walletAddress) return 'NOT_CONNECTED';
@@ -187,6 +199,10 @@ export const useBridge = () => {
       amountWei,
       maxNativeAmount,
       refetchAllowance,
+    },
+    gasEstimate: {
+      feeFormatted,
+      isLoading: isGasLoading,
     },
   };
 };

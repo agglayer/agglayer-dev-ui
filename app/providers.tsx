@@ -1,10 +1,10 @@
 import { ReactNode } from 'react';
 import { AggLayerSDKProvider } from '@/app/context/aggLayerSdk';
-import { AppModeProvider } from '@/app/context/app-mode';
+import { AppModeProvider } from '@/app/context/appMode';
 import { RefetchProvider } from '@/app/context/refetch';
 import { TokenProvider } from '@/app/context/token';
-import { E2EAppModeProvider } from '@/app/context/e2e-app-mode';
-import { E2EWalletProvider } from '@/app/context/e2e-wallet';
+import { E2EAppModeProvider } from '@/app/context/e2eAppMode';
+import { E2EWalletProvider } from '@/app/context/e2eWallet';
 import { WalletProvider } from '@/app/context/wallet';
 import { IS_E2E_ENABLED } from '@/app/constants/e2e';
 

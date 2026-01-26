@@ -19,5 +19,6 @@ test('connects wallet and displays the correct address', async ({ page }) => {
   await bridgePage.navigate();
   await bridgePage.connectWallet();
 
-  await expect(page.getByTestId('wallet-connected')).toContainText(shortenAddress(account.address));
+  const header = page.getByTestId('header-desktop');
+  await expect(header.getByTestId('wallet-connected')).toContainText(shortenAddress(account.address));
 });
