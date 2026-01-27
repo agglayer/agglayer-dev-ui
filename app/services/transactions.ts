@@ -3,19 +3,16 @@ import { AppMode } from '@/app/types/appMode';
 import type { TransactionsResponse, TransactionFilters } from '@/app/types/transaction';
 import { getBridgeHubApiBaseUrl } from '@/app/utils/appMode';
 
-const getEnvironmentNetworkIds = (mode: AppMode): number[] =>
-  APP_MODE_CONFIG[mode].chains.map((chain) => chain.networkId).filter((id): id is number => Number.isFinite(id));
+const getEnvironmentNetworkIds = (mode: AppMode): number[] => APP_MODE_CONFIG[mode].chains.map((chain) => chain.networkId);
 
 const formatAllowedNetworkIds = (requestedIds: number[] | undefined, allowedIds: number[]): string | undefined => {
-  const uniqueAllowedIds = [...new Set(allowedIds)];
-  if (!uniqueAllowedIds.length) return undefined;
+  if (!requestedIds?.length) return undefined;
 
-  if (!requestedIds?.length) return uniqueAllowedIds.join(',');
+  const allowed = new Set(allowedIds);
+  const filtered = requestedIds.filter((id) => allowed.has(id));
+  if (!filtered.length) return undefined;
 
-  const filtered = requestedIds.filter((id) => uniqueAllowedIds.includes(id));
-  const resolvedIds = filtered.length ? filtered : uniqueAllowedIds;
-
-  return [...new Set(resolvedIds)].join(',');
+  return [...new Set(filtered)].join(',');
 };
 
 const buildTransactionsUrl = (params: { mode: AppMode; filters?: TransactionFilters }): string => {
