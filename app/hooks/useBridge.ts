@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { formatUnits } from 'viem';
 import { useAppMode } from '@/app/context/appMode';
 import { useTokens } from '@/app/context/token';
-import { useWallet } from '@/app/context/wallet';
+import { useWallet } from '@/app/context/walletContext';
 import { useCheckAllowance } from '@/app/hooks/useCheckAllowance';
 import { useGasEstimate } from '@/app/hooks/useGasEstimate';
 import { useTokenBalance } from '@/app/hooks/useTokenBalance';

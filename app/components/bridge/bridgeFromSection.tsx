@@ -67,6 +67,7 @@ export const BridgeFromSection = ({
           placeholder="0"
           balanceText={balancesLoading ? '...' : balanceText}
           tokenLabel={selectedToken?.symbol ?? 'Select token'}
+          tokenButtonTestId="token-selector-trigger"
           tokenIcon={
             selectedToken ? (
               <BadgeImageFallback

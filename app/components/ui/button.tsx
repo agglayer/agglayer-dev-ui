@@ -8,6 +8,7 @@ interface ButtonProps {
   children: React.ReactNode;
   size?: 'sm' | 'md' | 'lg';
   variant?: 'primary' | 'outline' | 'ghost';
+  'data-test-id'?: string;
 }
 
 const SIZE_STYLES = {
@@ -29,12 +30,14 @@ export const Button: React.FC<ButtonProps> = ({
   children,
   size = 'md',
   variant = 'primary',
+  'data-test-id': dataTestId,
 }) => {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
+      data-test-id={dataTestId}
       className={cn(
         'rounded-xl font-semibold shadow-xs transition inline-flex items-center gap-2 justify-center',
         SIZE_STYLES[size],
