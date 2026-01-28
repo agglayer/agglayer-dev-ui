@@ -33,7 +33,8 @@ Open `http://localhost:3000`.
 - `npm run start` — run production server
 - `npm run lint` — lint
 - `npm run typecheck` — TypeScript checks
-- `npm run test` — unit tests
+- `npm run test` — end-to-end tests (Playwright)
+- `npm run test:e2e` — end-to-end tests (Playwright)
 
 ## Configuration
 

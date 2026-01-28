@@ -9,13 +9,13 @@ import { BridgeFromSection } from '@/app/components/bridge/bridgeFromSection';
 import { BridgeToSection } from '@/app/components/bridge/bridgeToSection';
 import { EstimationInfo } from '@/app/components/bridge/estimationInfo';
 import { useAppMode } from '@/app/context/appMode';
-import { useWallet } from '@/app/context/wallet';
 import { useBridge } from '@/app/hooks/useBridge';
 import { useBridgeExecution } from '@/app/hooks/useBridgeExecution';
 import { useEnforceCorrectChain } from '@/app/hooks/useEnforceCorrectChain';
 import { getBridgeCtaState } from '@/app/utils/bridge';
 import { BadgeImageFallback } from '@/app/components/ui/badgeImageFallback';
 import { BridgeTransactionModal } from '@/app/components/bridge/bridgeTransactionModal/bridgeTransactionModal';
+import { useWallet } from '@/app/context/walletContext';
 
 const createChainOptions = (chains: { id: number; name: string; icon?: string }[], excludeChainId?: number) =>
   chains
@@ -86,7 +86,7 @@ const BridgeCardContent = () => {
 
   return (
     <>
-      <Card title="Bridge" className="w-full max-w-xl mx-auto space-y-3">
+      <Card title="Bridge" className="w-full max-w-xl mx-auto space-y-3" data-test-id="bridge-card">
         <BridgeFromSection
           chainOptions={fromChainOptions}
           selectedChainId={form.fromChainId}

@@ -6,7 +6,6 @@ import { Loader2, Menu } from 'lucide-react';
 import { ROUTES } from '@/app/constants/routes';
 import { ConnectButton } from '@/app/components/connectButton';
 import { Logo } from '@/app/components/ui/logo';
-import { useWallet } from '@/app/context/wallet';
 import { useAppMode } from '@/app/context/appMode';
 import { useReadyToClaimCount } from '@/app/hooks/useReadyToClaimCount';
 import { setTransactionInitialStatus } from '@/app/components/transactions/intialStatus';
@@ -14,6 +13,7 @@ import { HeaderNavLink } from '@/app/components/header/headerNavLink';
 import { HeaderPopover } from '@/app/components/header/headerPopover';
 import { MobileMenu } from '@/app/components/header/mobileMenu';
 import { NAV_ITEMS } from '@/app/components/header/constants';
+import { useWallet } from '@/app/context/walletContext';
 
 export const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -72,7 +72,7 @@ export const Header = () => {
                 </HeaderNavLink>
               ))}
             </nav>
-            <div className="ml-auto hidden md:flex items-center gap-2">
+            <div className="ml-auto hidden md:flex items-center gap-2" data-test-id="header-desktop">
               <ConnectButton />
               <HeaderPopover hasModeOptions={hasModeOptions} />
             </div>

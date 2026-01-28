@@ -12,7 +12,6 @@ import { ClaimResultModal } from '@/app/components/transactions/claimResultModal
 import { TOTAL_REFETCH_TIME, useTransactions } from '@/app/hooks/useTransactions';
 import { useClaimExecution } from '@/app/hooks/useClaimExecution';
 import { useEnforceCorrectChain } from '@/app/hooks/useEnforceCorrectChain';
-import { useWallet } from '@/app/context/wallet';
 import { useAppMode } from '@/app/context/appMode';
 import { useRefetch } from '@/app/context/refetch';
 import type { TransactionStatus, Transaction } from '@/app/types/transaction';
@@ -20,6 +19,7 @@ import { getTransactionInitialStatus } from '@/app/components/transactions/intia
 import { getChainById, getChainByNetworkId } from '@/app/utils/chains';
 import { cn } from '@/app/utils/common';
 import { TransactionDetailsModal } from '@/app/components/transactions/transactionDetailsModal/transactionDetailsModal';
+import { useWallet } from '@/app/context/walletContext';
 
 export const TransactionsView = () => {
   const { address, status, chainId, connect } = useWallet();
