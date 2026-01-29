@@ -3,13 +3,15 @@ import { AppMode } from '@/app/types/appMode';
 import type { TransactionsResponse, TransactionFilters } from '@/app/types/transaction';
 import { getBridgeHubApiBaseUrl } from '@/app/utils/appMode';
 
-const getEnvironmentNetworkIds = (mode: AppMode): number[] =>
-  APP_MODE_CONFIG[mode].chains.map((chain) => chain.networkId).filter((id): id is number => Number.isFinite(id));
+const getEnvironmentNetworkIds = (mode: AppMode): number[] => APP_MODE_CONFIG[mode].chains.map((chain) => chain.networkId);
 
 const formatAllowedNetworkIds = (requestedIds: number[] | undefined, allowedIds: number[]): string | undefined => {
   if (!requestedIds?.length) return undefined;
-  const filtered = requestedIds.filter((id) => allowedIds.includes(id));
+
+  const allowed = new Set(allowedIds);
+  const filtered = requestedIds.filter((id) => allowed.has(id));
   if (!filtered.length) return undefined;
+
   return [...new Set(filtered)].join(',');
 };
 
@@ -17,13 +19,12 @@ const buildTransactionsUrl = (params: { mode: AppMode; filters?: TransactionFilt
   const url = new URL(`${getBridgeHubApiBaseUrl(params.mode)}/transactions`);
   const allowedNetworkIds = getEnvironmentNetworkIds(params.mode);
 
-  // TODO: restore once we move to mongo
   const sourceNetworkIds = formatAllowedNetworkIds(params.filters?.sourceNetworkIds, allowedNetworkIds);
   const destinationNetworkIds = formatAllowedNetworkIds(params.filters?.destinationNetworkIds, allowedNetworkIds);
 
   if (params.filters?.fromAddress) url.searchParams.set('fromAddress', params.filters.fromAddress);
-  // if (sourceNetworkIds) url.searchParams.set('sourceNetworkIds', sourceNetworkIds);
-  // if (destinationNetworkIds) url.searchParams.set('destinationNetworkIds', destinationNetworkIds);
+  if (sourceNetworkIds) url.searchParams.set('sourceNetworkIds', sourceNetworkIds);
+  if (destinationNetworkIds) url.searchParams.set('destinationNetworkIds', destinationNetworkIds);
   if (params.filters?.updatedSince !== undefined)
     url.searchParams.set('updatedSince', params.filters.updatedSince.toString());
   if (params.filters?.status) url.searchParams.set('status', params.filters.status);

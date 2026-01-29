@@ -73,7 +73,7 @@ export const TransactionListItem = ({
         'rounded-2xl border border-border bg-surface shadow-sm transition hover:border-blue hover:shadow-md cursor-pointer',
       )}
     >
-      <div className="p-4 space-y-3">
+      <div className="p-3 space-y-2">
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap items-center gap-2 text-sm text-black">
             {sourceChain && <span className="font-medium">{sourceChain.name}</span>}
@@ -87,7 +87,7 @@ export const TransactionListItem = ({
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
             {tokenLogo && <BadgeImageFallback src={tokenLogo} size="md" fallbackText={tokenSymbol} />}
-            <span className="text-3xl font-bold text-black">
+            <span className="text-2xl font-bold text-black">
               {formattedAmount} {tokenSymbol}
             </span>
           </div>
