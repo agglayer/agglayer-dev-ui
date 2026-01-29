@@ -42,4 +42,4 @@ All app configuration lives in `app/config.ts`. See [`docs/config.md`](docs/conf
 
 ## License
 
-TODO.
+Licensed under the Apache License, Version 2.0. See `LICENSE`.
