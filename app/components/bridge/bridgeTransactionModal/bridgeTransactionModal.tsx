@@ -49,7 +49,6 @@ export const BridgeTransactionModal = ({
   });
 
   const isExecuting = state.isExecuting;
-  const isPendingMode = content.mode === 'pending';
 
   const handleClose = () => {
     if (isExecuting) return;
@@ -63,15 +62,14 @@ export const BridgeTransactionModal = ({
       title="Bridge assets"
       showCloseButton={!isExecuting}
       dismissible={!isExecuting}
-      contentClassName="space-y-5"
+      contentClassName="space-y-6"
     >
-      <div className={cn('space-y-3', isPendingMode ? 'text-left' : 'text-center')}>
+      <div className="space-y-4 text-center">
         {content.mode === 'success' || content.mode === 'error' ? (
           <div
             className={cn(
-              'flex size-14 items-center justify-center rounded-full',
+              'mx-auto flex size-14 items-center justify-center rounded-full',
               content.mode === 'success' ? 'bg-green-light text-green' : 'bg-red-light text-red',
-              !isPendingMode && 'mx-auto',
             )}
           >
             {content.mode === 'success' ? <CheckCircle2 className="size-7" /> : <XCircle className="size-7" />}
@@ -90,7 +88,6 @@ export const BridgeTransactionModal = ({
           showLoader={content.showLoader}
           alternateHeadline={ALTERNATE_HEADLINE}
           shouldAlternate={content.shouldAlternateHeadline}
-          alignment={isPendingMode ? 'left' : 'center'}
         />
       </div>
       {content.mode === 'pending' && (
