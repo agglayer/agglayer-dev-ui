@@ -1,4 +1,4 @@
-import { katana, mainnet, polygonZkEvmCardona, sepolia } from 'wagmi/chains';
+import { katana, mainnet, sepolia } from 'wagmi/chains';
 import type { Chain } from 'wagmi/chains';
 import { ICONS } from '@/app/constants/icons';
 import { createChainEntry, toNonEmptyChainArray, toProofApiUrl } from '@/app/utils/config';
@@ -73,14 +73,6 @@ const SEPOLIA = createChainEntry({
   rpcUrl: 'https://ethereum-sepolia-rpc.publicnode.com',
 });
 
-const POLYGON_ZKEVM_CARDONA = createChainEntry({
-  wagmi: polygonZkEvmCardona,
-  icon: ICONS.zkevm,
-  networkId: 1,
-  isTestnet: true,
-  eta: 180,
-});
-
 const BOKUTO = createChainEntry({
   wagmi: bokutoWagmi,
   icon: ICONS.bokuto,
@@ -94,7 +86,6 @@ const CHAIN_REGISTRY: Record<string, ChainEntry> = {
   KATANA,
   FORKNET,
   SEPOLIA,
-  POLYGON_ZKEVM_CARDONA,
   BOKUTO,
 };
 
@@ -114,8 +105,8 @@ export const APP_MODE_CONFIG: Record<AppMode, AppModeConfig> = {
     bridgeAddress: '0x528e26b25a34a4A5d0dbDa1d57D318153d2ED582',
     proofApiUrl: toProofApiUrl('testnet'),
     defaultFromChainId: SEPOLIA.app.id,
-    defaultToChainId: POLYGON_ZKEVM_CARDONA.app.id,
-    chains: [SEPOLIA.app, POLYGON_ZKEVM_CARDONA.app, BOKUTO.app],
+    defaultToChainId: BOKUTO.app.id,
+    chains: [SEPOLIA.app, BOKUTO.app],
   },
   devnet: {
     label: 'Devnet',
