@@ -18,9 +18,12 @@ const formatAllowedNetworkIds = (requestedIds: number[] | undefined, allowedIds:
 const buildTransactionsUrl = (params: { mode: AppMode; filters?: TransactionFilters }): string => {
   const url = new URL(`${getBridgeHubApiBaseUrl(params.mode)}/transactions`);
   const allowedNetworkIds = getEnvironmentNetworkIds(params.mode);
+  const fallbackNetworkIds = allowedNetworkIds.length > 0 ? [...new Set(allowedNetworkIds)].join(',') : undefined;
 
-  const sourceNetworkIds = formatAllowedNetworkIds(params.filters?.sourceNetworkIds, allowedNetworkIds);
-  const destinationNetworkIds = formatAllowedNetworkIds(params.filters?.destinationNetworkIds, allowedNetworkIds);
+  const sourceNetworkIds =
+    formatAllowedNetworkIds(params.filters?.sourceNetworkIds, allowedNetworkIds) ?? fallbackNetworkIds;
+  const destinationNetworkIds =
+    formatAllowedNetworkIds(params.filters?.destinationNetworkIds, allowedNetworkIds) ?? fallbackNetworkIds;
 
   if (params.filters?.fromAddress) url.searchParams.set('fromAddress', params.filters.fromAddress);
   if (sourceNetworkIds) url.searchParams.set('sourceNetworkIds', sourceNetworkIds);
