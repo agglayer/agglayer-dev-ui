@@ -58,7 +58,7 @@ export const Modal = ({
         role="dialog"
         aria-modal="true"
         className={cn(
-          'relative z-10 w-130 max-w-[calc(100%-32px)] min-h-80 max-h-[85vh] rounded-2xl bg-surface',
+          'relative z-10 w-130 max-w-[calc(100%-32px)] min-h-60 max-h-[85vh] rounded-2xl bg-surface',
           'border border-border ',
           'overflow-hidden flex flex-col',
           className,

@@ -24,7 +24,7 @@ const STATUS_CONFIG: Record<
   LEAF_INCLUDED: {
     label: 'Pending',
     icon: <Loader2 size={16} className="animate-spin" />,
-    variant: 'pending',
+    variant: 'warning',
   },
   BRIDGED: {
     label: 'Pending',

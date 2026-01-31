@@ -33,12 +33,12 @@ export const BridgeSummary = ({
   }, [alternateHeadline, headline, shouldAlternate, useAlternate]);
 
   return (
-    <div className="space-y-2 text-center">
+     <div className="space-y-2 text-center">
       <div className="text-lg font-semibold text-black flex items-center justify-center gap-2">
         {showLoader && <Loader2 className="size-5 text-blue animate-spin" />}
         <span>{displayedHeadline}</span>
       </div>
-      <p className=" text-muted">{subheadline}</p>
+      <p className="text-muted text-sm">{subheadline}</p>
     </div>
   );
 };
