@@ -16,7 +16,7 @@ npm install
 cp .env.example .env.local
 ```
 
-Set `NEXT_PUBLIC_PROJECT_ID` (WalletConnect project ID) in `.env.local`.
+Set `NEXT_PUBLIC_PROJECT_ID` (WalletConnect project ID) and `NEXT_PUBLIC_BRIDGE_HUB_API` (Bridge Hub API base URL, required) in `.env.local`.
 
 3) Run the dev server:
 
