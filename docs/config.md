@@ -86,6 +86,21 @@ Custom tokens can also be removed from the UI.
 
 Bridging is powered by the AggLayer SDK. Proof generation and transaction data come from the Bridge Hub API (open source).
 
+Set `NEXT_PUBLIC_BRIDGE_HUB_API` in your environment.
+
+The app appends `/{mode}` (`mainnet`, `testnet`, `devnet`) when building API requests, so the base URL should not include the mode segment.
+
+Examples:
+```bash
+# local dev
+NEXT_PUBLIC_BRIDGE_HUB_API=http://localhost:8080
+
+# internal QA / staging
+NEXT_PUBLIC_BRIDGE_HUB_API=https://bridge-hub-api.development.polygon.internal
+```
+
+Because this app uses static export, the value is baked in at build time. Set `NEXT_PUBLIC_BRIDGE_HUB_API` in the environment where `next build` runs (for example, your CI deploy job). The build fails if this variable is missing.
+
 ## Checklist: add a chain
 
 1) Add or import the wagmi chain (with RPCs if needed).
