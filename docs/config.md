@@ -84,7 +84,7 @@ Custom tokens can also be removed from the UI.
 
 ## SDK + Bridge Hub API
 
-Bridging is powered by the AggLayer SDK. Proof generation and transaction data come from the Bridge Hub API (open source).
+Bridging is powered by the AggLayer SDK. Proof generation and transaction data come from the [Bridge Hub API](https://github.com/agglayer/agglayer-bridge-hub-api).
 
 Set `NEXT_PUBLIC_BRIDGE_HUB_API` in your environment.
 
@@ -94,12 +94,7 @@ Examples:
 ```bash
 # local dev
 NEXT_PUBLIC_BRIDGE_HUB_API=http://localhost:8080
-
-# internal QA / staging
-NEXT_PUBLIC_BRIDGE_HUB_API=https://bridge-hub-api.development.polygon.internal
 ```
-
-Because this app uses static export, the value is baked in at build time. Set `NEXT_PUBLIC_BRIDGE_HUB_API` in the environment where `next build` runs (for example, your CI deploy job). The build fails if this variable is missing.
 
 ## Checklist: add a chain
 
