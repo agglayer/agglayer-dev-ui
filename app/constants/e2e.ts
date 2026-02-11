@@ -10,12 +10,12 @@ const resolvedWalletAddress = normalizeEnvValue(process.env.NEXT_PUBLIC_E2E_WALL
 
 if (IS_E2E_ENABLED && !isHexPrivateKey(resolvedPrivateKey)) {
   throw new Error(
-    'E2E private key is invalid. NEXT_PUBLIC_E2E_PRIVATE_KEY must be a 32-byte hex key (0x + 64 hex chars).',
+    'E2E private key is invalid. NEXT_PUBLIC_E2E_PRIVATE_KEY must be a valid private key.',
   );
 }
 
 if (IS_E2E_ENABLED && !isHexAddress(resolvedWalletAddress)) {
-  throw new Error('E2E wallet address is invalid. Set NEXT_PUBLIC_E2E_WALLET_ADDRESS to a valid 20-byte hex address.');
+  throw new Error('E2E wallet address is invalid. Set NEXT_PUBLIC_E2E_WALLET_ADDRESS to a valid address.');
 }
 
 export const E2E_PRIVATE_KEY = resolvedPrivateKey as Hex;
