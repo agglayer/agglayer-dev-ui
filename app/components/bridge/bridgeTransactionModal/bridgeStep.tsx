@@ -34,7 +34,10 @@ export const BridgeStep = ({ label, state, txHash, explorerUrl, testId }: Bridge
   const explorerHref = showExplorer ? `${explorerUrl}/tx/${txHash}` : undefined;
 
   return (
-    <div className="flex items-center justify-between rounded-xl border border-border bg-surface-muted px-4 py-3" data-test-id={testId}>
+    <div
+      className="flex items-center justify-between rounded-xl border border-border bg-surface-muted px-4 py-3"
+      data-test-id={testId}
+    >
       <div className="flex items-center gap-3">
         {icon}
         <div className="flex flex-col">

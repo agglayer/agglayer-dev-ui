@@ -21,12 +21,7 @@ const ChainInline = ({ icon, name }: { icon?: string; name: string }) => (
   </span>
 );
 
-export const BridgeRoute = ({
-  fromChainIcon,
-  toChainIcon,
-  fromChainName,
-  toChainName,
-}: BridgeRouteProps) => {
+export const BridgeRoute = ({ fromChainIcon, toChainIcon, fromChainName, toChainName }: BridgeRouteProps) => {
   return (
     <div className="grid w-full grid-cols-[1fr_auto_1fr] items-center">
       <div className="flex justify-end pr-2">

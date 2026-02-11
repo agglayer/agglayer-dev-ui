@@ -64,7 +64,7 @@ const CONNECTOR_ERRORS = {
   INVALID_SWITCH_PARAMS: 'E2E_WALLET_INVALID_SWITCH_PARAMS',
 } as const;
 
-const parseHex = (value: unknown): Hex | null => isHex(value) ? (value as Hex) : null;
+const parseHex = (value: unknown): Hex | null => (isHex(value) ? (value as Hex) : null);
 
 const parseAddress = (value: unknown): Address | undefined => {
   if (typeof value !== 'string') return undefined;
@@ -251,9 +251,7 @@ export const buildE2EPrivateKeyConnector = ({ account, resolveRpcUrl }: E2EConne
 
     return {
       ...CONNECTOR_METADATA,
-      async connect<withCapabilities extends boolean = false>(
-        parameters: ConnectParameters<withCapabilities> = {},
-      ) {
+      async connect<withCapabilities extends boolean = false>(parameters: ConnectParameters<withCapabilities> = {}) {
         const { chainId, withCapabilities } = parameters;
 
         if (chainId && chainId !== activeChainId) {

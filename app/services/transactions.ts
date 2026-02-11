@@ -3,7 +3,8 @@ import { AppMode } from '@/app/types/appMode';
 import type { TransactionsResponse, TransactionFilters } from '@/app/types/transaction';
 import { getProofApiBaseUrl } from '@/app/utils/appMode';
 
-const getEnvironmentNetworkIds = (mode: AppMode): number[] => APP_MODE_CONFIG[mode].chains.map((chain) => chain.networkId);
+const getEnvironmentNetworkIds = (mode: AppMode): number[] =>
+  APP_MODE_CONFIG[mode].chains.map((chain) => chain.networkId);
 
 const formatAllowedNetworkIds = (requestedIds: number[] | undefined, allowedIds: number[]): string | undefined => {
   if (!requestedIds?.length) return undefined;

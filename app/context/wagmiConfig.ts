@@ -62,7 +62,9 @@ const createE2EWagmiSetup = (): WagmiSetup => {
 
   const e2eChainIds = new Set(e2eModeConfig.chains.map((chain) => chain.id));
   const e2eWagmiChains = toNonEmptyChainArray(ALL_WAGMI_CHAINS.filter((chain) => e2eChainIds.has(chain.id)));
-  const e2eRpcUrlByChainId = new Map<number, string>(e2eWagmiChains.map((chain) => [chain.id, getDefaultChainRpcUrl(chain)]));
+  const e2eRpcUrlByChainId = new Map<number, string>(
+    e2eWagmiChains.map((chain) => [chain.id, getDefaultChainRpcUrl(chain)]),
+  );
 
   e2eModeConfig.chains.forEach((chain) => {
     e2eRpcUrlByChainId.set(chain.id, chain.rpcUrl);

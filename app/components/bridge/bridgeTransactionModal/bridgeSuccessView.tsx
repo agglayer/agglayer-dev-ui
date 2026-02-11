@@ -27,7 +27,10 @@ export const BridgeSuccessView = ({ hash, explorerUrl, onClose }: BridgeSuccessV
 
   return (
     <div className="flex flex-col gap-3" data-test-id="bridge-success-view">
-      <div className="flex items-center justify-between px-4 py-3 bg-surface-muted rounded-xl" data-test-id="bridge-success-hash-row">
+      <div
+        className="flex items-center justify-between px-4 py-3 bg-surface-muted rounded-xl"
+        data-test-id="bridge-success-hash-row"
+      >
         <div className="flex items-center gap-2 text-black">
           <span>{shortenAddress(hash, 8)}</span>
           <CopyText textToCopy={hash} iconClassName="size-3.5" />

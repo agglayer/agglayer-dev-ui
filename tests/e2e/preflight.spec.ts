@@ -2,12 +2,7 @@ import { expect, test } from '@playwright/test';
 import { createPublicClient, erc20Abi, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { sepolia } from 'viem/chains';
-import {
-  E2E_ERC20_ADDRESS,
-  E2E_FROM_CHAIN_ID,
-  E2E_PRIVATE_KEY,
-  E2E_WALLET_ADDRESS,
-} from '@/app/constants/e2e';
+import { E2E_ERC20_ADDRESS, E2E_FROM_CHAIN_ID, E2E_PRIVATE_KEY, E2E_WALLET_ADDRESS } from '@/app/constants/e2e';
 import { getE2EFromChainRpcUrl } from '@/tests/e2e/testnetRpc';
 
 const createClient = () =>
