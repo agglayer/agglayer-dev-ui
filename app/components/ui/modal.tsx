@@ -14,6 +14,7 @@ interface ModalProps {
   contentClassName?: string;
   showCloseButton?: boolean;
   dismissible?: boolean;
+  dataTestId?: string;
 }
 
 export const Modal = ({
@@ -25,6 +26,7 @@ export const Modal = ({
   contentClassName,
   showCloseButton = true,
   dismissible = true,
+  dataTestId,
 }: ModalProps) => {
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -57,6 +59,7 @@ export const Modal = ({
         ref={contentRef}
         role="dialog"
         aria-modal="true"
+        data-test-id={dataTestId}
         className={cn(
           'relative z-10 w-130 max-w-[calc(100%-32px)] min-h-60 max-h-[85vh] rounded-2xl bg-surface',
           'border border-border ',

@@ -23,6 +23,7 @@ interface AmountInputProps {
   className?: string;
   maxDecimals?: number;
   tokenButtonTestId?: string;
+  inputTestId?: string;
 }
 
 export const AmountInput = ({
@@ -39,6 +40,7 @@ export const AmountInput = ({
   className,
   maxDecimals = 18,
   tokenButtonTestId,
+  inputTestId,
 }: AmountInputProps) => {
   const decimalsLimit = Math.max(0, Math.trunc(maxDecimals));
   const decimalRegex = useMemo(
@@ -84,6 +86,7 @@ export const AmountInput = ({
           onChange={(e) => handleChange(e.target.value)}
           placeholder={placeholder}
           disabled={disabled}
+          data-test-id={inputTestId}
           className={cn(
             'w-full bg-transparent text-2xl font-semibold leading-none outline-none placeholder:text-grey',
             disabled && 'cursor-not-allowed',

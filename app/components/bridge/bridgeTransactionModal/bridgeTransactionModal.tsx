@@ -63,6 +63,7 @@ export const BridgeTransactionModal = ({
       showCloseButton={!isExecuting}
       dismissible={!isExecuting}
       contentClassName="space-y-6"
+      dataTestId="bridge-transaction-modal"
     >
       <div className="space-y-4 text-center">
         {content.mode === 'success' || content.mode === 'error' ? (
@@ -98,6 +99,7 @@ export const BridgeTransactionModal = ({
               state={content.approveStepState}
               txHash={state.approvalTxHash}
               explorerUrl={explorerUrl}
+              testId="bridge-step-approve"
             />
           )}
           <BridgeStep

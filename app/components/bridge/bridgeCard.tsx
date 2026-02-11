@@ -125,6 +125,7 @@ const BridgeCardContent = () => {
           type="button"
           onClick={handleBridgeClick}
           disabled={ctaState.disabled}
+          data-test-id="bridge-cta"
           className="w-full rounded-xl bg-primary text-white py-3 font-semibold shadow-xs hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed transition cursor-pointer"
         >
           {ctaState.label}
