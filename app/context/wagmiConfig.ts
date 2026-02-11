@@ -2,11 +2,9 @@ import { QueryClient } from '@tanstack/react-query';
 import { WagmiAdapter } from '@reown/appkit-adapter-wagmi';
 import { createConfig, http } from 'wagmi';
 import type { Config } from 'wagmi';
-import { privateKeyToAccount } from 'viem/accounts';
 import type { Chain } from 'wagmi/chains';
 import { ALL_WAGMI_CHAINS, APP_MODE_CONFIG, customRpcUrls } from '@/app/config';
-import { E2E_APP_MODE, E2E_PRIVATE_KEY, IS_E2E_ENABLED } from '@/app/constants/e2e';
-import { buildE2EPrivateKeyConnector } from '@/app/context/e2eConnector';
+import { E2E_APP_MODE, IS_E2E_ENABLED } from '@/app/constants/e2e';
 import { isEnabledModeConfig } from '@/app/utils/appMode';
 import { toNonEmptyChainArray } from '@/app/utils/config';
 
@@ -48,12 +46,6 @@ const createTransportsByChainId = ({
   }, {});
 };
 
-const getDefaultChainRpcUrl = (chain: Chain): string => {
-  const defaultRpcUrl = chain.rpcUrls.default.http[0];
-  if (defaultRpcUrl) return defaultRpcUrl;
-  throw new Error(`WAGMI_CHAIN_RPC_MISSING: ${chain.id}`);
-};
-
 const createE2EWagmiSetup = (): WagmiSetup => {
   const e2eModeConfig = APP_MODE_CONFIG[E2E_APP_MODE];
   if (!isEnabledModeConfig(e2eModeConfig)) {
@@ -63,12 +55,8 @@ const createE2EWagmiSetup = (): WagmiSetup => {
   const e2eChainIds = new Set(e2eModeConfig.chains.map((chain) => chain.id));
   const e2eWagmiChains = toNonEmptyChainArray(ALL_WAGMI_CHAINS.filter((chain) => e2eChainIds.has(chain.id)));
   const e2eRpcUrlByChainId = new Map<number, string>(
-    e2eWagmiChains.map((chain) => [chain.id, getDefaultChainRpcUrl(chain)]),
+    e2eModeConfig.chains.map((chain) => [chain.id, chain.rpcUrl]),
   );
-
-  e2eModeConfig.chains.forEach((chain) => {
-    e2eRpcUrlByChainId.set(chain.id, chain.rpcUrl);
-  });
 
   const resolveE2ERpcUrl = (chainId: number): string => {
     const rpcUrl = e2eRpcUrlByChainId.get(chainId);
@@ -77,10 +65,8 @@ const createE2EWagmiSetup = (): WagmiSetup => {
     throw new Error(`E2E_WAGMI_RPC_MISSING: ${chainId}`);
   };
 
-  const account = privateKeyToAccount(E2E_PRIVATE_KEY);
   const config = createConfig({
     chains: e2eWagmiChains,
-    connectors: [buildE2EPrivateKeyConnector({ account, resolveRpcUrl: resolveE2ERpcUrl })],
     transports: createTransportsByChainId({ chains: e2eWagmiChains, resolveRpcUrl: resolveE2ERpcUrl }),
   });
 

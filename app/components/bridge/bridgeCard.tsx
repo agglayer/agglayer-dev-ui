@@ -72,7 +72,6 @@ const BridgeCardContent = () => {
       toChainId: form.toChainId,
       token: form.selectedToken,
       amountWei: balance.amountWei,
-      userAddress: derived.walletAddress,
       destinationAddress: form.destinationAddress.trim() || undefined,
       needsApproval: Boolean(status.needsApproval),
       isNative: derived.isNative,

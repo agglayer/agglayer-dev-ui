@@ -70,7 +70,7 @@ export default defineConfig({
       },
       url: 'http://localhost:3000',
       // Always restart so the dev server picks up E2E-specific public env values.
-      reuseExistingServer: false,
+      reuseExistingServer: !process.env.CI,
     },
   ],
 });

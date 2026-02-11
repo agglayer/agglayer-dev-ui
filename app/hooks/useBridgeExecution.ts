@@ -5,6 +5,8 @@ import type { Hex } from 'viem';
 import { usePublicClient, useSendTransaction } from 'wagmi';
 import { useAggNative } from '@/app/context/aggLayerSdk';
 import { useAppMode } from '@/app/context/appMode';
+import { useWallet } from '@/app/context/walletContext';
+import { useSenderAccount } from '@/app/hooks/useSenderAccount';
 import type { BridgeExecutionState } from '@/app/types/bridge';
 import { ZERO_ADDRESS } from '@/app/types/bridge';
 import type { Token } from '@/app/types/token';
@@ -16,6 +18,8 @@ export const useBridgeExecution = (params: { fromChainId: number }) => {
   const { fromChainId } = params;
   const native = useAggNative();
   const { chains, bridgeAddress } = useAppMode();
+  const { address } = useWallet();
+  const senderAccount = useSenderAccount();
   const publicClient = usePublicClient({ chainId: fromChainId });
   const { sendTransactionAsync } = useSendTransaction();
 
@@ -29,12 +33,13 @@ export const useBridgeExecution = (params: { fromChainId: number }) => {
       toChainId: number;
       token: Token;
       amountWei: bigint;
-      userAddress: Hex;
       destinationAddress?: string;
       needsApproval: boolean;
       isNative: boolean;
     }) => {
-      if (!publicClient) {
+      const walletAddress = isValidEthereumAddress(address) ? address : undefined;
+
+      if (!publicClient || !walletAddress || !senderAccount) {
         setState({
           isExecuting: false,
           currentStep: 'error',
@@ -56,7 +61,7 @@ export const useBridgeExecution = (params: { fromChainId: number }) => {
         const recipient =
           args.destinationAddress && isValidEthereumAddress(args.destinationAddress)
             ? args.destinationAddress
-            : args.userAddress;
+            : walletAddress;
 
         const destNetworkId = getNetworkId(chains, args.toChainId);
 
@@ -69,10 +74,11 @@ export const useBridgeExecution = (params: { fromChainId: number }) => {
         // Approval step (ERC20 only)
         if (args.needsApproval && !args.isNative) {
           const erc20 = native.erc20(tokenAddressValue, fromChainId);
-          const approveTx = await erc20.buildApprove(bridgeAddress, args.amountWei.toString(), args.userAddress);
+          const approveTx = await erc20.buildApprove(bridgeAddress, args.amountWei.toString(), walletAddress);
 
           localApprovalHash = await sendTransactionAsync({
-            ...mapTransactionRequest(approveTx, args.userAddress),
+            ...mapTransactionRequest(approveTx),
+            account: senderAccount,
             chainId: fromChainId,
           });
           setState((prev) => ({ ...prev, approvalTxHash: localApprovalHash }));
@@ -102,16 +108,17 @@ export const useBridgeExecution = (params: { fromChainId: number }) => {
                 token: ZERO_ADDRESS,
                 forceUpdateGlobalExitRoot: true,
               },
-              args.userAddress,
+              walletAddress,
             )
           : await native
               .erc20(tokenAddressValue, fromChainId)
-              .bridgeTo(destNetworkId, recipient, args.amountWei.toString(), args.userAddress, {
+              .bridgeTo(destNetworkId, recipient, args.amountWei.toString(), walletAddress, {
                 forceUpdateGlobalExitRoot: true,
               });
 
         localBridgeHash = await sendTransactionAsync({
-          ...mapTransactionRequest(bridgeTx, args.userAddress),
+          ...mapTransactionRequest(bridgeTx),
+          account: senderAccount,
           chainId: fromChainId,
         });
         setState((prev) => ({ ...prev, bridgeTxHash: localBridgeHash }));
@@ -136,7 +143,6 @@ export const useBridgeExecution = (params: { fromChainId: number }) => {
           bridgeTxHash: localBridgeHash,
         });
       } catch (error) {
-        console.log('Bridge execution error', error);
         const message = error instanceof Error ? error.message : 'Transaction failed';
         setState({
           isExecuting: false,
@@ -147,7 +153,7 @@ export const useBridgeExecution = (params: { fromChainId: number }) => {
         });
       }
     },
-    [fromChainId, native, publicClient, sendTransactionAsync, chains, bridgeAddress],
+    [address, bridgeAddress, chains, fromChainId, native, publicClient, sendTransactionAsync, senderAccount],
   );
 
   const reset = useCallback(() => {

@@ -16,8 +16,8 @@ test('testnet preflight: funded wallet and rpc are available', async () => {
 
   const client = createClient();
   const chainId = await client.getChainId();
-  const account = privateKeyToAccount(E2E_PRIVATE_KEY);
-  const expectedAddress = E2E_WALLET_ADDRESS;
+  const account = privateKeyToAccount(E2E_PRIVATE_KEY!);
+  const expectedAddress = E2E_WALLET_ADDRESS!;
 
   expect(chainId).toBe(E2E_FROM_CHAIN_ID);
   expect(account.address.toLowerCase()).toBe(expectedAddress.toLowerCase());

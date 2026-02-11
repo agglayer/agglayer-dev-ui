@@ -17,5 +17,5 @@ test('connects wallet and displays the correct address', async ({ page }) => {
   await bridgePage.navigate();
   await bridgePage.connectWallet();
 
-  await expect(bridgePage.walletConnectedBadge).toContainText(shortenAddress(E2E_WALLET_ADDRESS));
+  await expect(bridgePage.walletConnectedBadge).toContainText(shortenAddress(E2E_WALLET_ADDRESS!));
 });

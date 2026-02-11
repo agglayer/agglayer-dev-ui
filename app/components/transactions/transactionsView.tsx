@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { Hex } from 'viem';
 import { useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Plug, RotateCw } from 'lucide-react';
 import { Card } from '@/app/components/ui/card';
@@ -73,7 +72,6 @@ export const TransactionsView = () => {
   const claimExecution = useClaimExecution({
     bridgeAddress,
     chains,
-    address: address as Hex | undefined,
     onComplete: handleClaimComplete,
   });
 

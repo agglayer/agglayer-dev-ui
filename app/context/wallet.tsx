@@ -1,13 +1,10 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
-  useAccount,
   useChainId,
   useChains,
-  useConnect,
-  useDisconnect as useWagmiDisconnect,
   useSwitchChain,
   WagmiProvider,
 } from 'wagmi';
@@ -22,6 +19,7 @@ import type { WagmiAdapter } from '@reown/appkit-adapter-wagmi';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { ALL_WAGMI_CHAINS, customRpcUrls, DEFAULT_WAGMI_CHAIN, EXTERNAL_LINKS } from '@/app/config';
 import { IS_E2E_ENABLED } from '@/app/constants/e2e';
+import { e2eWalletAddress } from '@/app/context/e2eAccount';
 import { projectId, queryClient, wagmiSetup } from '@/app/context/wagmiConfig';
 import { WalletContext } from '@/app/context/walletContext';
 import type { WalletContextValue } from '@/app/context/walletContext';
@@ -108,7 +106,9 @@ const ProdWalletProvider = ({ children }: { readonly children: ReactNode }) => {
       switchNetwork: (target) => {
         try {
           switchChain({ chainId: target });
-        } catch {}
+        } catch (error) {
+          console.error('Failed to switch chain', error);
+        }
       },
     }),
     [address, chainId, currentChain, disconnect, open, status, switchChain, walletInfo],
@@ -118,37 +118,25 @@ const ProdWalletProvider = ({ children }: { readonly children: ReactNode }) => {
 };
 
 const E2EWalletProvider = ({ children }: { readonly children: ReactNode }) => {
-  const { address, status } = useAccount();
   const chainId = useChainId();
-  const { connect, connectors } = useConnect();
-  const { disconnect } = useWagmiDisconnect();
-  const { switchChain } = useSwitchChain();
+  const [isConnected, setIsConnected] = useState(false);
+  const status = isConnected ? 'connected' : 'disconnected';
   const currentChain = useCurrentChain({ status, chainId });
 
   const value = useMemo<WalletContextValue>(
     () => ({
-      address: address ?? '',
-      status: status ?? 'disconnected',
+      address: isConnected ? (e2eWalletAddress ?? '') : '',
+      status,
       chainId: status === 'connected' ? chainId : undefined,
       chain: currentChain,
       walletInfo: undefined,
       walletIcon: undefined,
-      connect: () => {
-        const connector = connectors[0];
-        if (!connector) return;
-        connect({ connector });
-      },
-      disconnect: () => {
-        disconnect();
-      },
-      switchNetwork: (target) => {
-        if (!switchChain) return;
-        try {
-          switchChain({ chainId: target });
-        } catch {}
-      },
+      connect: () => setIsConnected(true),
+      disconnect: () => setIsConnected(false),
+      // no-op for E2E
+      switchNetwork: () => () => {},
     }),
-    [address, chainId, connect, connectors, currentChain, disconnect, status, switchChain],
+    [chainId, currentChain, isConnected, status],
   );
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;

@@ -26,7 +26,7 @@ const buildNativeToken = (): Token => ({
 
 test('token selector shows token symbol and native balance when wallet is connected', async ({ page }) => {
   const bridgePage = new BridgePage({ page });
-  const account = privateKeyToAccount(E2E_PRIVATE_KEY);
+  const account = privateKeyToAccount(E2E_PRIVATE_KEY!);
   const client = createClient();
 
   await bridgePage.navigate();

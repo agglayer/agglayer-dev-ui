@@ -18,8 +18,8 @@ if (IS_E2E_ENABLED && !isHexAddress(resolvedWalletAddress)) {
   throw new Error('E2E wallet address is invalid. Set NEXT_PUBLIC_E2E_WALLET_ADDRESS to a valid address.');
 }
 
-export const E2E_PRIVATE_KEY = resolvedPrivateKey as Hex;
-export const E2E_WALLET_ADDRESS = resolvedWalletAddress as Address;
+export const E2E_PRIVATE_KEY = IS_E2E_ENABLED ? (resolvedPrivateKey as Hex) : undefined;
+export const E2E_WALLET_ADDRESS = IS_E2E_ENABLED ? (resolvedWalletAddress as Address) : undefined;
 export const E2E_ERC20_ADDRESS: Address = '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238';
 export const E2E_ERC20_SYMBOL = 'USDC';
 export const E2E_ERC20_NAME = 'USD Coin';
