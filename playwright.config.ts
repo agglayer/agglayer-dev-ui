@@ -6,6 +6,7 @@ loadEnvConfig(process.cwd(), true);
 
 const e2ePrivateKey = normalizeEnvValue(process.env.E2E_PRIVATE_KEY);
 const e2eWalletAddress = normalizeEnvValue(process.env.NEXT_PUBLIC_E2E_WALLET_ADDRESS);
+const projectId = normalizeEnvValue(process.env.NEXT_PUBLIC_PROJECT_ID);
 
 if (!isHexPrivateKey(e2ePrivateKey)) {
   throw new Error('Playwright E2E env invalid: set E2E_PRIVATE_KEY to a 32-byte hex key (0x + 64 hex chars).');
@@ -15,8 +16,13 @@ if (!isHexAddress(e2eWalletAddress)) {
   throw new Error('Playwright E2E env invalid: set NEXT_PUBLIC_E2E_WALLET_ADDRESS to a 20-byte hex address.');
 }
 
+if (!projectId) {
+  throw new Error('Playwright E2E env invalid: set NEXT_PUBLIC_PROJECT_ID.');
+}
+
 process.env.NEXT_PUBLIC_E2E_PRIVATE_KEY = e2ePrivateKey;
 process.env.NEXT_PUBLIC_E2E_WALLET_ADDRESS = e2eWalletAddress;
+process.env.NEXT_PUBLIC_PROJECT_ID = projectId;
 
 process.env.NEXT_PUBLIC_E2E_ENABLED = 'true';
 
@@ -60,6 +66,7 @@ export default defineConfig({
         NEXT_PUBLIC_E2E_ENABLED: 'true',
         NEXT_PUBLIC_E2E_WALLET_ADDRESS: e2eWalletAddress,
         NEXT_PUBLIC_E2E_PRIVATE_KEY: e2ePrivateKey,
+        NEXT_PUBLIC_PROJECT_ID: projectId,
       },
       url: 'http://localhost:3000',
       // Always restart so the dev server picks up E2E-specific public env values.

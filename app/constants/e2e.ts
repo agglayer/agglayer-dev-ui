@@ -1,6 +1,27 @@
-import type { Hex } from 'viem';
+import { isHexAddress, isHexPrivateKey, normalizeEnvValue } from '@/app/utils/e2eEnv';
+import type { AppMode } from '@/app/types/appMode';
+import type { Address, Hex } from 'viem';
 
-export const ANVIL_DEFAULT_PRIVATE_KEY: Hex = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
-export const ANVIL_DEFAULT_RPC_URL = 'http://127.0.0.1:8545';
 export const IS_E2E_ENABLED = process.env.NEXT_PUBLIC_E2E_ENABLED === 'true';
-export const ANVIL_PORT = 8545;
+export const E2E_APP_MODE: AppMode = 'testnet';
+
+const resolvedPrivateKey = normalizeEnvValue(process.env.NEXT_PUBLIC_E2E_PRIVATE_KEY);
+const resolvedWalletAddress = normalizeEnvValue(process.env.NEXT_PUBLIC_E2E_WALLET_ADDRESS);
+
+if (IS_E2E_ENABLED && !isHexPrivateKey(resolvedPrivateKey)) {
+  throw new Error('E2E private key is invalid. NEXT_PUBLIC_E2E_PRIVATE_KEY must be a 32-byte hex key (0x + 64 hex chars).');
+}
+
+if (IS_E2E_ENABLED && !isHexAddress(resolvedWalletAddress)) {
+  throw new Error('E2E wallet address is invalid. Set NEXT_PUBLIC_E2E_WALLET_ADDRESS to a valid 20-byte hex address.');
+}
+
+export const E2E_PRIVATE_KEY = resolvedPrivateKey as Hex;
+export const E2E_WALLET_ADDRESS = resolvedWalletAddress as Address;
+export const E2E_ERC20_ADDRESS: Address = '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238';
+export const E2E_ERC20_SYMBOL = 'USDC';
+export const E2E_ERC20_NAME = 'USD Coin';
+export const E2E_ERC20_DECIMALS = 6;
+export const E2E_FROM_CHAIN_ID = 11155111;
+export const E2E_NATIVE_BRIDGE_AMOUNT = '0.00001';
+export const E2E_ERC20_BRIDGE_AMOUNT = '0.01';

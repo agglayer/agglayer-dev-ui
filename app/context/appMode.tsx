@@ -1,10 +1,11 @@
 'use client';
 
 import { createContext, useCallback, useContext, useMemo, useSyncExternalStore, type ReactNode } from 'react';
-import { AppChain, AppMode, EnabledAppModeConfig } from '@/app/types/appMode';
-import { getEnabledModes, isEnabledModeConfig, isValidAppMode } from '@/app/utils/appMode';
 import { APP_MODE_CONFIG, DEFAULT_APP_MODE } from '@/app/config';
+import { E2E_APP_MODE, IS_E2E_ENABLED } from '@/app/constants/e2e';
 import { StorageUtils, STORAGE_KEYS } from '@/app/utils/storage';
+import { getEnabledModes, isEnabledModeConfig, isValidAppMode } from '@/app/utils/appMode';
+import type { AppChain, AppMode, EnabledAppModeConfig } from '@/app/types/appMode';
 
 export type AppModeContextValue = {
   mode: AppMode;
@@ -20,6 +21,8 @@ export type AppModeContextValue = {
 export const AppModeContext = createContext<AppModeContextValue | null>(null);
 
 const MODE_EVENT = 'app-mode-change' as const;
+const E2E_ENABLED_MODES: AppMode[] = [E2E_APP_MODE];
+const noopSetMode: AppModeContextValue['setMode'] = () => {};
 
 const enabledModes = getEnabledModes();
 const defaultMode = enabledModes.includes(DEFAULT_APP_MODE) ? DEFAULT_APP_MODE : (enabledModes[0] ?? DEFAULT_APP_MODE);
@@ -51,7 +54,52 @@ const subscribeToMode = (callback: () => void) => {
   };
 };
 
-export const AppModeProvider = ({ children }: { children: ReactNode }) => {
+const createAppModeContextValue = ({
+  mode,
+  setMode,
+  enabledModes,
+  config,
+}: {
+  mode: AppMode;
+  setMode: (mode: AppMode) => void;
+  enabledModes: AppMode[];
+  config: EnabledAppModeConfig;
+}): AppModeContextValue => {
+  const [primaryChain, secondaryChain] = config.chains;
+
+  return {
+    mode,
+    setMode,
+    enabledModes,
+    config,
+    chains: config.chains,
+    bridgeAddress: config.bridgeAddress,
+    defaultFromChainId: config.defaultFromChainId ?? primaryChain.id,
+    defaultToChainId: config.defaultToChainId ?? secondaryChain.id,
+  };
+};
+
+const E2EAppModeProvider = ({ children }: { children: ReactNode }) => {
+  const config = APP_MODE_CONFIG[E2E_APP_MODE];
+  if (!isEnabledModeConfig(config)) {
+    throw new Error('E2E_APP_MODE_INVALID: testnet mode must have at least two chains enabled');
+  }
+
+  const value = useMemo<AppModeContextValue>(
+    () =>
+      createAppModeContextValue({
+        mode: E2E_APP_MODE,
+        setMode: noopSetMode,
+        enabledModes: E2E_ENABLED_MODES,
+        config,
+      }),
+    [config],
+  );
+
+  return <AppModeContext.Provider value={value}>{children}</AppModeContext.Provider>;
+};
+
+const ProdAppModeProvider = ({ children }: { children: ReactNode }) => {
   const mode = useSyncExternalStore(subscribeToMode, getStoredMode, () => defaultMode);
 
   const setMode = useCallback((nextMode: AppMode) => {
@@ -72,25 +120,26 @@ export const AppModeProvider = ({ children }: { children: ReactNode }) => {
     throw new Error(`APP_MODE_DISABLED: ${mode}`);
   }
 
-  const [primaryChain, secondaryChain] = config.chains;
-  const defaultFromChainId = config.defaultFromChainId ?? primaryChain.id;
-  const defaultToChainId = config.defaultToChainId ?? secondaryChain.id;
-
   const value = useMemo<AppModeContextValue>(
-    () => ({
-      mode,
-      setMode,
-      enabledModes,
-      config,
-      chains: config.chains,
-      bridgeAddress: config.bridgeAddress,
-      defaultFromChainId,
-      defaultToChainId,
-    }),
-    [mode, setMode, config, defaultFromChainId, defaultToChainId],
+    () =>
+      createAppModeContextValue({
+        mode,
+        setMode,
+        enabledModes,
+        config,
+      }),
+    [mode, setMode, config],
   );
 
   return <AppModeContext.Provider value={value}>{children}</AppModeContext.Provider>;
+};
+
+export const AppModeProvider = ({ children }: { children: ReactNode }) => {
+  return IS_E2E_ENABLED ? (
+    <E2EAppModeProvider>{children}</E2EAppModeProvider>
+  ) : (
+    <ProdAppModeProvider>{children}</ProdAppModeProvider>
+  );
 };
 
 export const useAppMode = () => {

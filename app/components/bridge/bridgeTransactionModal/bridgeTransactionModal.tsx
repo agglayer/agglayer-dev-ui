@@ -107,6 +107,7 @@ export const BridgeTransactionModal = ({
             state={content.bridgeStepState}
             txHash={state.bridgeTxHash}
             explorerUrl={explorerUrl}
+            testId="bridge-step-bridge"
           />
         </div>
       )}

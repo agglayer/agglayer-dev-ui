@@ -1,4 +1,4 @@
-import type { Locator, Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 import { STORAGE_KEYS } from '@/app/utils/storage';
 import type { Token } from '@/app/types/token';
 
@@ -14,7 +14,9 @@ class BridgePage {
   readonly bridgeCta: Locator;
   readonly transactionModal: Locator;
   readonly transactionModalHeadline: Locator;
-  readonly transactionExplorerLink: Locator;
+  readonly bridgeSuccessView: Locator;
+  readonly bridgeSuccessExplorerLink: Locator;
+  readonly bridgeSuccessCta: Locator;
 
   constructor({ page }: { page: Page }) {
     this.page = page;
@@ -28,7 +30,9 @@ class BridgePage {
     this.bridgeCta = page.getByTestId('bridge-cta');
     this.transactionModal = page.getByTestId('bridge-transaction-modal');
     this.transactionModalHeadline = page.getByTestId('bridge-modal-headline');
-    this.transactionExplorerLink = page.getByRole('link', { name: /view on explorer/i });
+    this.bridgeSuccessView = page.getByTestId('bridge-success-view');
+    this.bridgeSuccessExplorerLink = page.getByTestId('bridge-success-explorer-link');
+    this.bridgeSuccessCta = page.getByTestId('bridge-success-go-to-transactions');
   }
 
   async navigate(): Promise<void> {
@@ -55,6 +59,11 @@ class BridgePage {
 
   async waitForTransactionModal(): Promise<void> {
     await this.transactionModal.waitFor();
+  }
+
+  async waitForBridgeSuccess(): Promise<void> {
+    await expect(this.transactionModalHeadline).toContainText('Transaction successful', { timeout: 120_000 });
+    await this.bridgeSuccessView.waitFor();
   }
 
   async seedCustomToken(token: Pick<Token, 'chainId' | 'address' | 'decimals' | 'symbol' | 'name'>): Promise<void> {

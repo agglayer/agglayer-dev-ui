@@ -1,31 +1,32 @@
 import { expect, test } from '@playwright/test';
 import { createPublicClient, http } from 'viem';
-import { foundry } from 'viem/chains';
-import { ANVIL_DEFAULT_PRIVATE_KEY, ANVIL_DEFAULT_RPC_URL } from '@/app/constants/e2e';
+import { sepolia } from 'viem/chains';
 import { privateKeyToAccount } from 'viem/accounts';
 import { formatTokenBalance } from '@/app/utils/tokens';
 import type { Token } from '@/app/types/token';
 import { BridgePage } from './models/bridge-page';
+import { E2E_PRIVATE_KEY } from '@/app/constants/e2e';
+import { getE2EFromChainRpcUrl } from '@/tests/e2e/testnetRpc';
 
 const createClient = () =>
   createPublicClient({
-    chain: foundry,
-    transport: http(ANVIL_DEFAULT_RPC_URL),
+    chain: sepolia,
+    transport: http(getE2EFromChainRpcUrl()),
   });
 
 const buildNativeToken = (): Token => ({
-  chainId: foundry.id,
+  chainId: sepolia.id,
   address: '0x0000000000000000000000000000000000000000',
   decimals: 18,
-  symbol: foundry.nativeCurrency.symbol,
-  name: foundry.nativeCurrency.name,
+  symbol: sepolia.nativeCurrency.symbol,
+  name: sepolia.nativeCurrency.name,
   logoURI: '',
   isNative: true,
 });
 
 test('token selector shows token symbol and native balance when wallet is connected', async ({ page }) => {
   const bridgePage = new BridgePage({ page });
-  const account = privateKeyToAccount(ANVIL_DEFAULT_PRIVATE_KEY);
+  const account = privateKeyToAccount(E2E_PRIVATE_KEY);
   const client = createClient();
 
   await bridgePage.navigate();
@@ -35,11 +36,11 @@ test('token selector shows token symbol and native balance when wallet is connec
   const rawBalance = await client.getBalance({ address: account.address });
   const expectedBalance = formatTokenBalance(buildNativeToken(), rawBalance);
 
-  const tokenRow = bridgePage.getTokenRow(foundry.nativeCurrency.symbol);
+  const tokenRow = bridgePage.getTokenRow(sepolia.nativeCurrency.symbol);
   await expect(tokenRow).toBeVisible();
-  await expect(tokenRow).toContainText(foundry.nativeCurrency.symbol);
+  await expect(tokenRow).toContainText(sepolia.nativeCurrency.symbol);
 
-  const balance = bridgePage.getTokenBalance(foundry.nativeCurrency.symbol);
+  const balance = bridgePage.getTokenBalance(sepolia.nativeCurrency.symbol);
   await expect(balance).toBeVisible();
   await expect(balance).toHaveText(expectedBalance);
 });
