@@ -1,12 +1,28 @@
-import { ANVIL_PORT } from '@/app/constants/e2e';
+import { loadEnvConfig } from '@next/env';
 import { defineConfig, devices } from '@playwright/test';
+import { isHexAddress, isHexPrivateKey, normalizeEnvValue } from './app/utils/e2eEnv';
+
+loadEnvConfig(process.cwd(), true);
+
+const e2ePrivateKey = normalizeEnvValue(process.env.E2E_PRIVATE_KEY);
+const e2eWalletAddress = normalizeEnvValue(process.env.NEXT_PUBLIC_E2E_WALLET_ADDRESS);
+
+if (!isHexPrivateKey(e2ePrivateKey)) {
+  throw new Error('Playwright E2E env invalid: set E2E_PRIVATE_KEY to a 32-byte hex key (0x + 64 hex chars).');
+}
+
+if (!isHexAddress(e2eWalletAddress)) {
+  throw new Error('Playwright E2E env invalid: set NEXT_PUBLIC_E2E_WALLET_ADDRESS to a 20-byte hex address.');
+}
+
+process.env.NEXT_PUBLIC_E2E_PRIVATE_KEY = e2ePrivateKey;
+process.env.NEXT_PUBLIC_E2E_WALLET_ADDRESS = e2eWalletAddress;
+
+process.env.NEXT_PUBLIC_E2E_ENABLED = 'true';
 
 export default defineConfig({
   // Look for test files in the "tests" directory, relative to this configuration file.
   testDir: 'tests',
-
-  // Run all tests in parallel.
-  fullyParallel: false,
 
   // Fail the build on CI if you accidentally left test.only in the source code.
   forbidOnly: !!process.env.CI,
@@ -14,8 +30,8 @@ export default defineConfig({
   // Retry on CI only.
   retries: process.env.CI ? 2 : 0,
 
-  // Opt out of parallel tests on CI.
-  workers: process.env.CI ? 1 : undefined,
+  // Run serially to avoid nonce races on shared funded test wallets.
+  workers: 1,
 
   // Reporter to use
   reporter: 'html',
@@ -39,17 +55,15 @@ export default defineConfig({
   // Run your local dev server before starting the tests.
   webServer: [
     {
-      command: `anvil --port ${ANVIL_PORT}`,
-      port: ANVIL_PORT,
-      reuseExistingServer: !process.env.CI,
-    },
-    {
       command: 'npm run dev',
       env: {
         NEXT_PUBLIC_E2E_ENABLED: 'true',
+        NEXT_PUBLIC_E2E_WALLET_ADDRESS: e2eWalletAddress,
+        NEXT_PUBLIC_E2E_PRIVATE_KEY: e2ePrivateKey,
       },
       url: 'http://localhost:3000',
-      reuseExistingServer: !process.env.CI,
+      // Always restart so the dev server picks up E2E-specific public env values.
+      reuseExistingServer: false,
     },
   ],
 });
