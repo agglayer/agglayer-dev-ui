@@ -16,6 +16,7 @@ permissions:
 jobs:
   e2e:
     runs-on: ubuntu-latest
+    environment: production
     timeout-minutes: 45
     env:
       CI: true
