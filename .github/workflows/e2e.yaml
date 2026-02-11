@@ -37,8 +37,11 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
 
-      - name: Run Playwright tests
-        run: npx playwright test
+      - name: Run Playwright preflight
+        run: npx playwright test tests/e2e/preflight.spec.ts
+
+      - name: Run Playwright bridge tests
+        run: npx playwright test tests/bridge
 
       - name: Upload Playwright artifacts
         uses: actions/upload-artifact@v4
