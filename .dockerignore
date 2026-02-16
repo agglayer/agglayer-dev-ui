@@ -1,0 +1,12 @@
+node_modules
+.next
+out
+.git
+.github
+.env*
+!.env.production
+*.md
+.vscode
+.cursor
+playwright-report
+test-results

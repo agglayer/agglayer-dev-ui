@@ -13,14 +13,8 @@ import { WalletContext, WalletContextValue } from '@/app/context/walletContext';
 
 const queryClient = new QueryClient();
 const projectId = process.env.NEXT_PUBLIC_PROJECT_ID!;
-const urlOrUndefined = (value: string): string | undefined => (value.trim() === '' ? undefined : value);
-
-const wagmiAdapter = new WagmiAdapter({
-  ssr: true,
-  projectId,
-  customRpcUrls,
-  networks: [...ALL_WAGMI_CHAINS],
-});
+const urlOrUndefined = (value: string | undefined): string | undefined =>
+  value && typeof value === 'string' && value.trim() !== '' ? value : undefined;
 
 // walletIds - https://docs.reown.com/cloud/wallets/wallet-list
 const walletIds = {
@@ -29,36 +23,52 @@ const walletIds = {
   RABBY: '18388be9ac2d02726dbac9777c96efaac06d744b2f6d580fccdd4127a6d01fd1',
 };
 
-createAppKit({
-  adapters: [wagmiAdapter],
-  projectId,
-  networks: [...ALL_WAGMI_CHAINS],
-  defaultNetwork: sepolia,
-  customRpcUrls,
-  metadata: {
-    name: 'agglayer-dev-ui',
-    description: 'Agglayer Dev UI',
-    url: 'https://dev-ui.agglayer.dev/',
-    icons: ['https://avatars.githubusercontent.com/u/179229932'],
-  },
-  features: {
-    socials: [],
-    email: false,
-    analytics: false,
-    swaps: false,
-    onramp: false,
-    send: false,
-    history: false,
-    smartSessions: false,
-  },
-  themeMode: 'light',
-  themeVariables: {
-    '--w3m-accent': '#7b3fe4',
-  },
-  termsConditionsUrl: urlOrUndefined(EXTERNAL_LINKS.TERMS_OF_USE),
-  privacyPolicyUrl: urlOrUndefined(EXTERNAL_LINKS.PRIVACY_POLICY),
-  featuredWalletIds: [walletIds.METAMASK],
-});
+let wagmiAdapter: WagmiAdapter;
+let appKitInitialized = false;
+
+function initializeWallet() {
+  if (appKitInitialized) return;
+
+  wagmiAdapter = new WagmiAdapter({
+    ssr: true,
+    projectId,
+    customRpcUrls,
+    networks: [...ALL_WAGMI_CHAINS()],
+  });
+
+  createAppKit({
+    adapters: [wagmiAdapter],
+    projectId,
+    networks: [...ALL_WAGMI_CHAINS()],
+    defaultNetwork: sepolia,
+    customRpcUrls,
+    metadata: {
+      name: 'agglayer-dev-ui',
+      description: 'Agglayer Dev UI',
+      url: 'https://dev-ui.agglayer.dev/',
+      icons: ['https://avatars.githubusercontent.com/u/179229932'],
+    },
+    features: {
+      socials: [],
+      email: false,
+      analytics: false,
+      swaps: false,
+      onramp: false,
+      send: false,
+      history: false,
+      smartSessions: false,
+    },
+    themeMode: 'light',
+    themeVariables: {
+      '--w3m-accent': '#7b3fe4',
+    },
+    termsConditionsUrl: urlOrUndefined(EXTERNAL_LINKS.TERMS_OF_USE),
+    privacyPolicyUrl: urlOrUndefined(EXTERNAL_LINKS.PRIVACY_POLICY),
+    featuredWalletIds: [walletIds.METAMASK],
+  });
+
+  appKitInitialized = true;
+}
 
 function WalletProviderInternal({ children }: { readonly children: ReactNode }) {
   const { open } = useAppKit();
@@ -96,12 +106,16 @@ function WalletProviderInternal({ children }: { readonly children: ReactNode }) 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
 }
 
-const WalletProvider = ({ children }: { children: ReactNode }) => (
-  <WagmiProvider config={wagmiAdapter.wagmiConfig}>
-    <QueryClientProvider client={queryClient}>
-      <WalletProviderInternal>{children}</WalletProviderInternal>
-    </QueryClientProvider>
-  </WagmiProvider>
-);
+const WalletProvider = ({ children }: { children: ReactNode }) => {
+  initializeWallet();
+
+  return (
+    <WagmiProvider config={wagmiAdapter.wagmiConfig}>
+      <QueryClientProvider client={queryClient}>
+        <WalletProviderInternal>{children}</WalletProviderInternal>
+      </QueryClientProvider>
+    </WagmiProvider>
+  );
+};
 
 export { WalletProvider };

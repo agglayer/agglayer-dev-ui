@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useMemo, useSyncExternalStore, type ReactNode } from 'react';
 import { AppChain, AppMode, EnabledAppModeConfig } from '@/app/types/appMode';
-import { getEnabledModes, isEnabledModeConfig, isValidAppMode } from '@/app/utils/appMode';
+import { getEnabledModes as getEnabledModesFromConfig, isEnabledModeConfig, isValidAppMode } from '@/app/utils/appMode';
 import { APP_MODE_CONFIG, DEFAULT_APP_MODE } from '@/app/config';
 import { StorageUtils, STORAGE_KEYS } from '@/app/utils/storage';
 
@@ -21,16 +21,37 @@ export const AppModeContext = createContext<AppModeContextValue | null>(null);
 
 const MODE_EVENT = 'app-mode-change' as const;
 
-const enabledModes = getEnabledModes();
-const defaultMode = enabledModes.includes(DEFAULT_APP_MODE) ? DEFAULT_APP_MODE : (enabledModes[0] ?? DEFAULT_APP_MODE);
+const getEnabledModes = () => {
+  try {
+    return getEnabledModesFromConfig();
+  } catch {
+    return ['testnet' as AppMode];
+  }
+};
+
+const getDefaultMode = () => {
+  try {
+    const defaultAppMode = DEFAULT_APP_MODE();
+    const enabledModes = getEnabledModes();
+    return enabledModes.includes(defaultAppMode) ? defaultAppMode : (enabledModes[0] ?? defaultAppMode);
+  } catch {
+    return 'testnet' as AppMode;
+  }
+};
 
 const resolveStoredMode = (value: unknown): AppMode | null => {
   if (!isValidAppMode(value)) return null;
-  if (!enabledModes.includes(value)) return null;
-  return value;
+  try {
+    const enabledModes = getEnabledModes();
+    if (!enabledModes.includes(value)) return null;
+    return value;
+  } catch {
+    return null;
+  }
 };
 
 const getStoredMode = (): AppMode => {
+  const defaultMode = getDefaultMode();
   if (typeof window === 'undefined') return defaultMode;
   const storedMode = StorageUtils.getItem<AppMode>(STORAGE_KEYS.APP_MODE);
   return resolveStoredMode(storedMode) ?? defaultMode;
@@ -52,10 +73,13 @@ const subscribeToMode = (callback: () => void) => {
 };
 
 export const AppModeProvider = ({ children }: { children: ReactNode }) => {
-  const mode = useSyncExternalStore(subscribeToMode, getStoredMode, () => defaultMode);
+  const mode = useSyncExternalStore(subscribeToMode, getStoredMode, () => getDefaultMode());
+
+  const enabledModes = useMemo(() => getEnabledModes(), []);
 
   const setMode = useCallback((nextMode: AppMode) => {
-    if (!enabledModes.includes(nextMode)) return;
+    const currentEnabledModes = getEnabledModes();
+    if (!currentEnabledModes.includes(nextMode)) return;
     if (typeof window === 'undefined') return;
 
     const current = getStoredMode();
@@ -87,7 +111,7 @@ export const AppModeProvider = ({ children }: { children: ReactNode }) => {
       defaultFromChainId,
       defaultToChainId,
     }),
-    [mode, setMode, config, defaultFromChainId, defaultToChainId],
+    [mode, setMode, enabledModes, config, defaultFromChainId, defaultToChainId],
   );
 
   return <AppModeContext.Provider value={value}>{children}</AppModeContext.Provider>;

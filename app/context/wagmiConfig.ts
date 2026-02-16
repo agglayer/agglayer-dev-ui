@@ -9,7 +9,7 @@ const wagmiAdapter = new WagmiAdapter({
   ssr: true,
   projectId,
   customRpcUrls,
-  networks: [...ALL_WAGMI_CHAINS],
+  networks: [...ALL_WAGMI_CHAINS()],
 });
 
 export { projectId, queryClient, wagmiAdapter };

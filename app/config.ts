@@ -1,121 +1,114 @@
-import { katana, mainnet, sepolia } from 'wagmi/chains';
-import type { Chain } from 'wagmi/chains';
 import { ICONS } from '@/app/constants/icons';
-import { createChainEntry, toNonEmptyChainArray, toProofApiUrl } from '@/app/utils/config';
+import { createChainEntry, toProofApiUrl, toNonEmptyChainArray } from '@/app/utils/config';
+import type { Chain } from 'wagmi/chains';
 import type { AppMode, AppModeConfig } from '@/app/types/appMode';
-import type { ChainEntry } from '@/app/types/config';
 
-export const customRpcUrls = {
-  // Example:
-  // 'eip155:1234': [{ url: 'https://rpc.example.org' }],
+type AppConfig = {
+  EXTERNAL_LINKS: any;
+  DEFAULT_APP_MODE: AppMode;
+  APP_MODE_CONFIG: Record<AppMode, AppModeConfig>;
+  ALL_WAGMI_CHAINS: readonly [Chain, ...Chain[]];
+  customRpcUrls: Record<string, any>;
 };
 
-const forknetWagmi: Chain = {
-  id: 8338,
-  name: 'Forknet',
-  rpcUrls: {
-    default: { http: ['https://rpc-forknet.t.conduit.xyz'] },
-  },
-  blockExplorers: {
-    default: { name: 'Forkscan', url: 'https://forkscan.org/' },
-  },
-  nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-};
+let APP_CONFIG: AppConfig | null = null;
 
-const bokutoWagmi: Chain = {
-  id: 737373,
-  name: 'Bokuto',
-  rpcUrls: {
-    default: { http: ['https://rpc-katana-bokuto.t.conduit.xyz'] },
-  },
-  blockExplorers: {
-    default: { name: 'Bokutoscan', url: 'https://bokuto.katanascan.com/' },
-  },
-  nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-};
+function getConfig(): AppConfig {
+  if (!APP_CONFIG) {
+    throw new Error('Config not loaded. Call loadRuntimeConfig first.');
+  }
+  return APP_CONFIG;
+}
 
-export const EXTERNAL_LINKS = Object.freeze({
-  PRIVACY_POLICY: 'https://polygon.technology/privacy-policy',
-  TERMS_OF_USE: 'https://polygon.technology/terms-of-use',
-  CONTACT_SUPPORT: 'https://support.polygon.technology/support/home',
-} as const);
-
-const MAINNET = createChainEntry({
-  wagmi: mainnet,
-  icon: ICONS.ethereum,
-  networkId: 0,
-  isTestnet: false,
-  eta: 20,
+export const EXTERNAL_LINKS = new Proxy({} as any, {
+  get(_, prop) {
+    return getConfig().EXTERNAL_LINKS[prop];
+  }
 });
 
-const KATANA = createChainEntry({
-  wagmi: katana,
-  icon: ICONS.katana,
-  networkId: 20,
-  isTestnet: false,
-  eta: 180,
+export function DEFAULT_APP_MODE(): AppMode {
+  return getConfig().DEFAULT_APP_MODE;
+}
+
+export const APP_MODE_CONFIG = new Proxy({} as Record<AppMode, AppModeConfig>, {
+  get(_, prop) {
+    return getConfig().APP_MODE_CONFIG[prop as AppMode];
+  }
 });
 
-const FORKNET = createChainEntry({
-  wagmi: forknetWagmi,
-  icon: ICONS.forknet,
-  networkId: 22,
-  isTestnet: false,
-  eta: 180,
-});
+export function ALL_WAGMI_CHAINS(): readonly [Chain, ...Chain[]] {
+  return getConfig().ALL_WAGMI_CHAINS;
+}
 
-const SEPOLIA = createChainEntry({
-  wagmi: sepolia,
-  icon: ICONS.ethereum,
-  networkId: 0,
-  isTestnet: true,
-  eta: 20,
-  rpcUrl: 'https://ethereum-sepolia-rpc.publicnode.com',
-});
+export const customRpcUrls = {};
 
-const BOKUTO = createChainEntry({
-  wagmi: bokutoWagmi,
-  icon: ICONS.bokuto,
-  networkId: 37,
-  isTestnet: true,
-  eta: 180,
-});
+function buildWagmiChain(chainConfig: any): Chain {
+  return {
+    id: chainConfig.id,
+    name: chainConfig.name,
+    nativeCurrency: chainConfig.currency,
+    rpcUrls: {
+      default: { http: [chainConfig.rpcUrl] },
+      public: { http: [chainConfig.rpcUrl] },
+    },
+    blockExplorers: {
+      default: { name: 'Explorer', url: chainConfig.explorerUrl },
+    },
+  };
+}
 
-const CHAIN_REGISTRY: Record<string, ChainEntry> = {
-  MAINNET,
-  KATANA,
-  FORKNET,
-  SEPOLIA,
-  BOKUTO,
-};
+function buildChainRegistry(chainsData: Record<string, any>) {
+  const registry: Record<string, any> = {};
 
-export const DEFAULT_APP_MODE: AppMode = 'testnet';
+  Object.entries(chainsData).forEach(([key, chainConfig]: [string, any]) => {
+    const wagmiChain = buildWagmiChain(chainConfig);
 
-export const APP_MODE_CONFIG: Record<AppMode, AppModeConfig> = {
-  mainnet: {
-    label: 'Mainnet',
-    bridgeAddress: '0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe',
-    proofApiUrl: toProofApiUrl('mainnet'),
-    defaultFromChainId: MAINNET.app.id,
-    defaultToChainId: KATANA.app.id,
-    chains: [MAINNET.app, KATANA.app, FORKNET.app],
-  },
-  testnet: {
-    label: 'Testnet',
-    bridgeAddress: '0x528e26b25a34a4A5d0dbDa1d57D318153d2ED582',
-    proofApiUrl: toProofApiUrl('testnet'),
-    defaultFromChainId: SEPOLIA.app.id,
-    defaultToChainId: BOKUTO.app.id,
-    chains: [SEPOLIA.app, BOKUTO.app],
-  },
-  devnet: {
-    label: 'Devnet',
-    bridgeAddress: '0x1348947e282138d8f377b467F7D9c2EB0F335d1f',
-    proofApiUrl: toProofApiUrl('devnet'),
-    chains: [],
-  },
-};
+    registry[key] = createChainEntry({
+      wagmi: wagmiChain,
+      icon: ICONS[chainConfig.iconKey as keyof typeof ICONS],
+      networkId: chainConfig.networkId,
+      isTestnet: chainConfig.isTestnet,
+      eta: chainConfig.eta,
+    });
+  });
 
-export const ALL_WAGMI_CHAINS: readonly [Chain, ...Chain[]] = toNonEmptyChainArray(
-  Object.values(CHAIN_REGISTRY).map((entry) => entry.wagmi),
-);
+  return registry;
+}
+
+function buildAppModeConfigs(appModesData: any, chainRegistry: Record<string, any>) {
+  const modeConfigs: Record<string, AppModeConfig> = {};
+
+  Object.entries(appModesData.configs).forEach(([mode, config]: [string, any]) => {
+    const modeChains = config.chainKeys.map((key: string) => chainRegistry[key].app);
+
+    modeConfigs[mode] = {
+      label: mode.charAt(0).toUpperCase() + mode.slice(1),
+      bridgeAddress: config.bridgeAddress,
+      proofApiUrl: toProofApiUrl(config.proofApi),
+      chains: modeChains,
+      defaultFromChainId: modeChains[0]?.id,
+      defaultToChainId: modeChains[1]?.id,
+    };
+  });
+
+  return modeConfigs;
+}
+
+export async function loadRuntimeConfig() {
+  const response = await fetch('/config.json');
+  const configData = await response.json();
+
+  const chainRegistry = buildChainRegistry(configData.chains);
+  const appModeConfigs = buildAppModeConfigs(configData.appModes, chainRegistry);
+  const allWagmiChains = Object.values(chainRegistry).map((entry: any) => entry.wagmi);
+
+  APP_CONFIG = Object.freeze({
+    EXTERNAL_LINKS: configData.externalLinks,
+    DEFAULT_APP_MODE: configData.appModes.default,
+    APP_MODE_CONFIG: appModeConfigs,
+    ALL_WAGMI_CHAINS: toNonEmptyChainArray(allWagmiChains),
+    customRpcUrls: {},
+  });
+
+  return APP_CONFIG;
+}

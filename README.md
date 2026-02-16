@@ -36,9 +36,19 @@ Open `http://localhost:3000`.
 - `npm run test` — end-to-end tests (Playwright)
 - `npm run test:e2e` — end-to-end tests (Playwright)
 
+## Docker
+
+Run the image with a custom chain configuration by mounting your own `config.json`:
+
+```bash
+docker run -p 8080:80 -v ./config.json:/usr/share/nginx/html/config.json:ro ghcr.io/agglayer/agglayer-dev-ui:<tag>
+```
+
+See `public/config.json` for the expected format.
+
 ## Configuration
 
-All app configuration lives in `app/config.ts`. See [`docs/config.md`](docs/config.md) for the full guide.
+All app configuration lives in `public/config.json` and is loaded at runtime. See [`docs/config.md`](docs/config.md) for the full guide.
 
 ## License
 
