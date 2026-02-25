@@ -18,7 +18,7 @@ export const createChainEntry = (params: ChainEntryParams): ChainEntry => ({
       decimals: params.wagmi.nativeCurrency.decimals,
       name: params.wagmi.nativeCurrency.name,
       symbol: params.wagmi.nativeCurrency.symbol,
-      logoURI: params.nativeLogoURI ?? params.icon,
+      logoURI: params.icon,
     },
   },
 });

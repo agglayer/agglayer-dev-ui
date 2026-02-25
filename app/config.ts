@@ -46,47 +46,12 @@ const CHAIN_REGISTRY: Record<string, ChainEntry> = Object.fromEntries(
   ]),
 );
 
-const defaultModeKey = configJson.appModes.default;
-export const DEFAULT_APP_MODE: AppMode = defaultModeKey as AppMode;
+export const DEFAULT_APP_MODE: AppMode = configJson.appModes.default;
 
 const toEnabledChains = (chains: AppChain[]): EnabledAppModeConfig['chains'] | undefined => {
   const [first, second, ...rest] = chains;
   if (!first || !second) return undefined;
   return [first, second, ...rest];
-};
-
-type DefaultChainKeyField = 'defaultFromChainKey' | 'defaultToChainKey';
-
-const toModeChainEntriesByKey = (modeKey: string, chainKeys: string[]): Map<string, ChainEntry> =>
-  new Map(
-    chainKeys.map((chainKey) => {
-      const chainEntry = CHAIN_REGISTRY[chainKey];
-      if (!chainEntry) {
-        throw new Error(
-          `APP_CONFIG_INVALID: appModes.configs.${modeKey}.chainKeys includes unknown chain key "${chainKey}"`,
-        );
-      }
-      return [chainKey, chainEntry] as const;
-    }),
-  );
-
-const toDefaultChainId = (params: {
-  modeKey: string;
-  fieldName: DefaultChainKeyField;
-  configuredChainKey: string | undefined;
-  fallbackChainId: number | undefined;
-  modeChainEntriesByKey: Map<string, ChainEntry>;
-}): number | undefined => {
-  if (!params.configuredChainKey) return params.fallbackChainId;
-
-  const chainEntry = params.modeChainEntriesByKey.get(params.configuredChainKey);
-  if (!chainEntry) {
-    throw new Error(
-      `APP_CONFIG_INVALID: appModes.configs.${params.modeKey}.${params.fieldName} references unknown chain key "${params.configuredChainKey}"`,
-    );
-  }
-
-  return chainEntry.app.id;
 };
 
 const buildModeConfig = (modeKey: string): AppModeConfig => {
@@ -95,24 +60,7 @@ const buildModeConfig = (modeKey: string): AppModeConfig => {
     return { label: modeKey, bridgeAddress: '', proofApiUrl: '', chains: [] };
   }
 
-  const modeChainEntriesByKey = toModeChainEntriesByKey(modeKey, modeConfigJson.chainKeys);
-  const chains = [...modeChainEntriesByKey.values()].map((entry) => entry.app);
-  const [primaryChain, secondaryChain] = chains;
-
-  const defaultFromChainId = toDefaultChainId({
-    modeKey,
-    fieldName: 'defaultFromChainKey',
-    configuredChainKey: modeConfigJson.defaultFromChainKey,
-    fallbackChainId: primaryChain?.id,
-    modeChainEntriesByKey,
-  });
-  const defaultToChainId = toDefaultChainId({
-    modeKey,
-    fieldName: 'defaultToChainKey',
-    configuredChainKey: modeConfigJson.defaultToChainKey,
-    fallbackChainId: secondaryChain?.id,
-    modeChainEntriesByKey,
-  });
+  const chains = modeConfigJson.chainKeys.map((chainKey) => CHAIN_REGISTRY[chainKey].app);
 
   const base = {
     label: modeConfigJson.label,
@@ -124,6 +72,14 @@ const buildModeConfig = (modeKey: string): AppModeConfig => {
   if (!enabledChains) {
     return { ...base, chains: [] };
   }
+
+  const [primaryChain, secondaryChain] = enabledChains;
+  const defaultFromChainId = modeConfigJson.defaultFromChainKey
+    ? CHAIN_REGISTRY[modeConfigJson.defaultFromChainKey].app.id
+    : primaryChain.id;
+  const defaultToChainId = modeConfigJson.defaultToChainKey
+    ? CHAIN_REGISTRY[modeConfigJson.defaultToChainKey].app.id
+    : secondaryChain.id;
 
   return {
     ...base,

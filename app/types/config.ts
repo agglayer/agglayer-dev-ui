@@ -21,7 +21,6 @@ export type ChainEntryParams = {
   eta: number;
   rpcUrl?: string;
   explorer?: string;
-  nativeLogoURI?: string;
 };
 
 export type JsonNativeCurrencyConfig = z.infer<typeof JsonNativeCurrencyConfigSchema>;
