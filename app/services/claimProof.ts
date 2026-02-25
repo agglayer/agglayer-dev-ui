@@ -1,6 +1,6 @@
 import type { Hex } from 'viem';
 import { AppMode } from '@/app/types/appMode';
-import { getBridgeHubApiBaseUrl } from '@/app/utils/appMode';
+import { getProofApiBaseUrl } from '@/app/utils/appMode';
 
 export type ClaimProof = {
   proof_local_exit_root: Hex[];
@@ -30,7 +30,7 @@ const buildClaimProofUrl = (params: {
   leafIndex: number;
   depositCount: number;
 }): string => {
-  const url = new URL(`${getBridgeHubApiBaseUrl(params.mode)}/claim-proof`);
+  const url = new URL(`${getProofApiBaseUrl(params.mode)}/claim-proof`);
   url.searchParams.set('sourceNetworkId', params.sourceNetworkId.toString());
   url.searchParams.set('leafIndex', params.leafIndex.toString());
   url.searchParams.set('depositCount', params.depositCount.toString());

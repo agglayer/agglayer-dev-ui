@@ -1,104 +1,145 @@
 # Configuration Guide
 
-This app is configured primarily through `app/config.ts`. Types and helpers live in:
-- `app/types/config.ts`
-- `app/utils/config.ts`
-- `app/constants/bridge.ts`
+This app is configured through `config.json` at the project root. The JSON file is imported at build time and bundled with the app. The dev server hot-reloads changes to `config.json`.
 
-The goal is to keep `app/config.ts` as the single, user-editable source of truth.
+Supporting files:
+- `config/configSchema.mjs` — shared Zod schema (single source of truth)
+- `config/configValidator.mjs` — schema + validator used by CLI and app startup
+- `app/config.ts` — transforms JSON into typed objects
+- `app/types/config.ts` — type definitions
+- `app/utils/config.ts` — config utilities
 
-## App Modes
+## Bridge Hub API
 
-Supported modes are fixed: `mainnet`, `testnet`, `devnet`.
-Do not add new modes.
+Set `bridgeHubApiBaseUrl` in `config.json`. The app appends `/{proofApiSuffix}/` per mode when building API requests.
 
-A mode is **enabled** only if `chains` has at least two entries (bridging requires a from + to chain). Disabled modes are filtered from the mode switcher.
-
-Defaults:
-- `DEFAULT_APP_MODE` is used only if it is enabled.
-- If `defaultFromChainId` / `defaultToChainId` are omitted, the first two chains in the mode are used.
-
-## Chains
-
-All chains must be represented in `CHAIN_REGISTRY`. It powers:
-- `ALL_WAGMI_CHAINS` for wallet/connectivity
-- `APP_MODE_CONFIG.*.chains` for the UI + SDK
-
-Add a chain with `createChainEntry`:
-
-```ts
-const MY_CHAIN = createChainEntry({
-  wagmi: myWagmiChain,
-  icon: 'https://example.com/my-chain-icon.svg',
-  networkId: 42,
-  isTestnet: true,
-  eta: 120,
-  rpcUrl: 'https://rpc.my-chain.org', // optional override
-  explorer: 'https://explorer.my-chain.org', // optional override
-  nativeLogoURI: ICONS.myToken, // optional override
-});
+```json
+{
+  "bridgeHubApiBaseUrl": "http://localhost:8080"
+}
 ```
 
-Then include it:
-```ts
-const CHAIN_REGISTRY = { ... , MY_CHAIN };
-```
-
-### ChainEntryParams (summary)
-- `wagmi`: Wagmi `Chain` object (use built-ins or define a custom one)
-- `icon`: chain icon URL
-- `networkId`: AggLayer network id
-- `isTestnet`: boolean
-- `eta`: estimated bridging time in minutes
-- `rpcUrl` (optional): override for the app’s RPC URL
-- `explorer` (optional): override block explorer URL
-- `nativeLogoURI` (optional): override native token logo
-
-### Custom chains + RPCs
-
-If a chain is not available in `wagmi/chains`, define a custom wagmi chain and pass it to `createChainEntry`.
-
-`customRpcUrls` is used by the wallet adapter. It maps CAIP-2 chain ids (e.g. `eip155:1101`) to RPC endpoints for any chain.
-
-Example:
-```ts
-export const customRpcUrls = {
-  'eip155:1101': [{ url: 'https://rpc.example.org' }],
-};
-```
+If set, `NEXT_PUBLIC_BRIDGE_HUB_API` overrides `bridgeHubApiBaseUrl` for that build environment.
 
 ## External Links
 
-`EXTERNAL_LINKS` live in `app/config.ts`. Supported keys:
-- `PRIVACY_POLICY`
-- `TERMS_OF_USE`
-- `CONTACT_SUPPORT`
+```json
+{
+  "externalLinks": {
+    "privacyPolicy": "https://example.com/privacy",
+    "termsOfUse": "https://example.com/terms",
+    "contactSupport": "https://example.com/support"
+  }
+}
+```
 
-Any link can be set to an empty string to hide it in the UI.
+Set any link to an empty string to hide it in the UI.
+
+## Chains
+
+Chains are defined in the `chains` object, keyed by an uppercase identifier:
+
+```json
+{
+  "chains": {
+    "MY_CHAIN": {
+      "id": 42,
+      "name": "My Chain",
+      "rpcUrl": "https://rpc.my-chain.org",
+      "explorerUrl": "https://explorer.my-chain.org",
+      "currency": { "name": "Ether", "symbol": "ETH", "decimals": 18 },
+      "iconUrl": "https://example.com/icons/my-chain.svg",
+      "networkId": 10,
+      "isTestnet": true,
+      "eta": 120
+    }
+  }
+}
+```
+
+### Chain fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `id` | Yes | Chain ID (e.g. `1` for Ethereum mainnet) |
+| `name` | Yes | Display name |
+| `rpcUrl` | Yes | RPC endpoint URL |
+| `explorerUrl` | Yes | Block explorer URL |
+| `currency` | Yes | Native currency `{ name, symbol, decimals }` |
+| `iconUrl` | Yes | URL for the chain/native token icon shown in the UI |
+| `networkId` | Yes | AggLayer network ID |
+| `isTestnet` | Yes | Whether this is a test network |
+| `eta` | Yes | Estimated bridging time in minutes |
+
+## App Modes
+
+Supported modes are fixed: `mainnet`, `testnet`, `devnet`. Do not add new modes.
+
+A mode is **enabled** only if `chainKeys` has at least two entries (bridging requires a source and destination chain). Disabled modes are hidden from the UI mode switcher.
+
+```json
+{
+  "appModes": {
+    "default": "testnet",
+    "configs": {
+      "mainnet": {
+        "label": "Mainnet",
+        "bridgeAddress": "0x...",
+        "proofApiSuffix": "mainnet",
+        "chainKeys": ["MAINNET", "KATANA"],
+        "defaultFromChainKey": "MAINNET",
+        "defaultToChainKey": "KATANA"
+      }
+    }
+  }
+}
+```
+
+### Mode config fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `label` | Yes | Display label in the mode switcher |
+| `bridgeAddress` | Yes | Bridge contract address |
+| `proofApiSuffix` | Yes | Path suffix appended to `bridgeHubApiBaseUrl` |
+| `chainKeys` | Yes | Array of chain keys from `chains` (need >= 2 to enable) |
+| `defaultFromChainKey` | No | Default source chain (defaults to first in `chainKeys`) |
+| `defaultToChainKey` | No | Default destination chain (defaults to second in `chainKeys`) |
 
 ## Tokens
 
-On first load, the UI is seeded with **only the native gas token** for each configured chain.
-Users can import additional tokens via the UI. Imported tokens are stored in local storage.
-Custom tokens can also be removed from the UI.
+On first load, the UI shows **only the native gas token** for each configured chain. Users can import additional tokens via the UI. Imported tokens are stored in local storage and can be removed.
 
-## SDK + Bridge Hub API
+## Environment Variables
 
-Bridging is powered by the AggLayer SDK. Proof generation and transaction data come from the [Bridge Hub API](https://github.com/agglayer/agglayer-bridge-hub-api).
+Required:
 
-Set `NEXT_PUBLIC_BRIDGE_HUB_API` in your environment.
+| Variable | Description |
+|----------|-------------|
+| `NEXT_PUBLIC_PROJECT_ID` | WalletConnect project ID |
 
-The app appends `/{mode}` (`mainnet`, `testnet`, `devnet`) when building API requests, so the base URL should not include the mode segment.
+Optional:
 
-Examples:
+| Variable | Description |
+|----------|-------------|
+| `NEXT_PUBLIC_BRIDGE_HUB_API` | Overrides `bridgeHubApiBaseUrl` from `config.json` for the active environment |
+
+Set it in `.env.local`:
 ```bash
-# local dev
-NEXT_PUBLIC_BRIDGE_HUB_API=http://localhost:8080
+cp .env.example .env.local
 ```
+
+## Validation
+
+Run config validation locally before opening a PR:
+
+```bash
+npm run validate:config
+```
+
+CI also runs this command before deployment. The app also validates config at startup through `config/configValidator.mjs`.
 
 ## Checklist: add a chain
 
-1) Add or import the wagmi chain (with RPCs if needed).
-2) Create a `ChainEntry` via `createChainEntry`.
-3) Register it in `CHAIN_REGISTRY`.
-4) Include it in the desired `APP_MODE_CONFIG.*.chains` arrays.
+1. Add the chain entry to `chains` in `config.json`.
+2. Add the chain key to the desired mode's `chainKeys` array in `config.json`.

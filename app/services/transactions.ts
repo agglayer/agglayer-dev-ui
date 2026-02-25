@@ -1,7 +1,7 @@
 import { APP_MODE_CONFIG } from '@/app/config';
 import { AppMode } from '@/app/types/appMode';
 import type { TransactionsResponse, TransactionFilters } from '@/app/types/transaction';
-import { getBridgeHubApiBaseUrl } from '@/app/utils/appMode';
+import { getProofApiBaseUrl } from '@/app/utils/appMode';
 
 const getEnvironmentNetworkIds = (mode: AppMode): number[] => APP_MODE_CONFIG[mode].chains.map((chain) => chain.networkId);
 
@@ -16,7 +16,7 @@ const formatAllowedNetworkIds = (requestedIds: number[] | undefined, allowedIds:
 };
 
 const buildTransactionsUrl = (params: { mode: AppMode; filters?: TransactionFilters }): string => {
-  const url = new URL(`${getBridgeHubApiBaseUrl(params.mode)}/transactions`);
+  const url = new URL(`${getProofApiBaseUrl(params.mode)}/transactions`);
   const allowedNetworkIds = getEnvironmentNetworkIds(params.mode);
   const fallbackNetworkIds = allowedNetworkIds.length > 0 ? [...new Set(allowedNetworkIds)].join(',') : undefined;
 

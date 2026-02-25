@@ -1,4 +1,4 @@
-export const APP_MODES = ['mainnet', 'testnet', 'devnet'] as const;
+import { APP_MODES } from '@/config/appModes.mjs';
 
 export type AppMode = (typeof APP_MODES)[number];
 
