@@ -14,8 +14,9 @@
     "format:fix": "prettier --write \"**/*.{ts,tsx}\"",
     "test": "npm run test:e2e",
     "test:e2e": "playwright test",
+    "validate:config": "node ./scripts/validateConfig.mjs",
     "typecheck": "tsc --noEmit",
-    "check": "npm run lint && npm run typecheck && npm run test"
+    "check": "npm run validate:config && npm run lint && npm run typecheck && npm run test"
   },
   "dependencies": {
     "@agglayer/sdk": "^1.0.0-beta.29",
@@ -30,7 +31,8 @@
     "react-dom": "19.2.3",
     "tailwind-merge": "^3.4.0",
     "viem": "^2.43.5",
-    "wagmi": "^2.16.9"
+    "wagmi": "^2.16.9",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@playwright/test": "^1.57.0",

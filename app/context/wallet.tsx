@@ -3,11 +3,9 @@
 import type { ReactNode } from 'react';
 import { useMemo } from 'react';
 import { useChainId, useChains, useSwitchChain, WagmiProvider } from 'wagmi';
-import { sepolia } from '@reown/appkit/networks';
 import { createAppKit, useAppKit, useAppKitAccount, useDisconnect, useWalletInfo } from '@reown/appkit/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ALL_WAGMI_CHAINS, customRpcUrls } from '@/app/config';
-import { EXTERNAL_LINKS } from '@/app/config';
+import { ALL_WAGMI_CHAINS, customRpcUrls, DEFAULT_WAGMI_CHAIN, EXTERNAL_LINKS } from '@/app/config';
 import { WagmiAdapter } from '@reown/appkit-adapter-wagmi';
 import { WalletContext, WalletContextValue } from '@/app/context/walletContext';
 
@@ -33,7 +31,7 @@ createAppKit({
   adapters: [wagmiAdapter],
   projectId,
   networks: [...ALL_WAGMI_CHAINS],
-  defaultNetwork: sepolia,
+  defaultNetwork: DEFAULT_WAGMI_CHAIN,
   customRpcUrls,
   metadata: {
     name: 'agglayer-dev-ui',

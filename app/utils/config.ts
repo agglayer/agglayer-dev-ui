@@ -1,9 +1,6 @@
 import type { Chain } from 'wagmi/chains';
-import { BRIDGE_HUB_API_BASE_URL } from '@/app/constants/api';
-import { ICONS } from '@/app/constants/icons';
 import { ZERO_ADDRESS } from '@/app/types/bridge';
-import type { AppMode } from '@/app/types/appMode';
-import type { ChainEntry, ChainEntryParams } from '@/app/types/config';
+import type { ChainEntry, ChainEntryParams, JsonChainConfig } from '@/app/types/config';
 
 export const createChainEntry = (params: ChainEntryParams): ChainEntry => ({
   wagmi: params.wagmi,
@@ -21,7 +18,7 @@ export const createChainEntry = (params: ChainEntryParams): ChainEntry => ({
       decimals: params.wagmi.nativeCurrency.decimals,
       name: params.wagmi.nativeCurrency.name,
       symbol: params.wagmi.nativeCurrency.symbol,
-      logoURI: params.nativeLogoURI ?? ICONS.ethereum,
+      logoURI: params.icon,
     },
   },
 });
@@ -32,4 +29,16 @@ export const toNonEmptyChainArray = (chains: Chain[]): readonly [Chain, ...Chain
   return [first, ...rest];
 };
 
-export const toProofApiUrl = (mode: AppMode): string => `${BRIDGE_HUB_API_BASE_URL}/${mode}/`;
+export const toProofApiUrl = (baseUrl: string, suffix: string): string => `${baseUrl}/${suffix}/`;
+
+export const buildWagmiChain = (config: JsonChainConfig): Chain => ({
+  id: config.id,
+  name: config.name,
+  nativeCurrency: config.currency,
+  rpcUrls: {
+    default: { http: [config.rpcUrl] },
+  },
+  blockExplorers: {
+    default: { name: 'Explorer', url: config.explorerUrl },
+  },
+});

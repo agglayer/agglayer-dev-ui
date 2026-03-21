@@ -1,5 +1,5 @@
 import { AppMode } from '@/app/types/appMode';
-import { getBridgeHubApiBaseUrl } from '@/app/utils/appMode';
+import { getProofApiBaseUrl } from '@/app/utils/appMode';
 import { normalize } from '@/app/utils/format';
 
 export interface TokenMetadata {
@@ -23,7 +23,7 @@ interface TokenMetadataResponse {
 }
 
 export const fetchTokenMetadata = async (mode: AppMode, tokenAddress: string): Promise<TokenMetadata> => {
-  const url = `${getBridgeHubApiBaseUrl(mode)}/token-metadata/${normalize(tokenAddress)}`;
+  const url = `${getProofApiBaseUrl(mode)}/token-metadata/${normalize(tokenAddress)}`;
   const res = await fetch(url, { headers: { accept: 'application/json' } });
 
   if (!res.ok) {

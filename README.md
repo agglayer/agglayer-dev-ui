@@ -10,13 +10,16 @@ The Agglayer Dev UI is a configurable, self-hosted bridging interface powered by
 npm install
 ```
 
-2) Configure environment variables:
+2) Configure the app:
+
+Edit `config.json` at the project root to set chains, app modes, Bridge Hub API URL, and external links. See [`docs/config.md`](docs/config.md) for the full guide.
+
+Set `NEXT_PUBLIC_PROJECT_ID` (WalletConnect project ID) in `.env.local`.
+Optionally set `NEXT_PUBLIC_BRIDGE_HUB_API` to override `config.json` per environment:
 
 ```bash
 cp .env.example .env.local
 ```
-
-Set `NEXT_PUBLIC_PROJECT_ID` (WalletConnect project ID) and `NEXT_PUBLIC_BRIDGE_HUB_API` (Bridge Hub API base URL, required) in `.env.local`.
 
 3) Run the dev server:
 
@@ -32,13 +35,14 @@ Open `http://localhost:3000`.
 - `npm run build` — production build
 - `npm run start` — run production server
 - `npm run lint` — lint
+- `npm run validate:config` — validate `config.json`
 - `npm run typecheck` — TypeScript checks
 - `npm run test` — end-to-end tests (Playwright)
 - `npm run test:e2e` — end-to-end tests (Playwright)
 
 ## Configuration
 
-All app configuration lives in `app/config.ts`. See [`docs/config.md`](docs/config.md) for the full guide.
+All app configuration lives in `config.json` at the project root. See [`docs/config.md`](docs/config.md) for the full guide.
 
 ## License
 
