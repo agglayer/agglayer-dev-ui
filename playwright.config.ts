@@ -1,24 +1,22 @@
 import { loadEnvConfig } from '@next/env';
 import { defineConfig, devices } from '@playwright/test';
-import { isHexAddress, isHexPrivateKey, normalizeEnvValue } from './app/utils/e2eEnv';
+import { privateKeyToAccount } from 'viem/accounts';
+import { isHexPrivateKey, normalizeEnvValue } from './app/utils/e2eEnv';
 
 loadEnvConfig(process.cwd(), true);
 
 const e2ePrivateKey = normalizeEnvValue(process.env.E2E_PRIVATE_KEY);
-const e2eWalletAddress = normalizeEnvValue(process.env.NEXT_PUBLIC_E2E_WALLET_ADDRESS);
 const projectId = normalizeEnvValue(process.env.NEXT_PUBLIC_PROJECT_ID);
 
 if (!isHexPrivateKey(e2ePrivateKey)) {
   throw new Error('Playwright E2E env invalid: set E2E_PRIVATE_KEY to a valid private key.');
 }
 
-if (!isHexAddress(e2eWalletAddress)) {
-  throw new Error('Playwright E2E env invalid: set NEXT_PUBLIC_E2E_WALLET_ADDRESS to a valid address');
-}
-
 if (!projectId) {
   throw new Error('Playwright E2E env invalid: set NEXT_PUBLIC_PROJECT_ID.');
 }
+
+const e2eWalletAddress = privateKeyToAccount(e2ePrivateKey).address;
 
 process.env.NEXT_PUBLIC_E2E_PRIVATE_KEY = e2ePrivateKey;
 process.env.NEXT_PUBLIC_E2E_WALLET_ADDRESS = e2eWalletAddress;

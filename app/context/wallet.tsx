@@ -15,28 +15,33 @@ import {
   useDisconnect as useAppKitDisconnect,
   useWalletInfo,
 } from '@reown/appkit/react';
-import type { WagmiAdapter } from '@reown/appkit-adapter-wagmi';
-import { QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { WagmiAdapter } from '@reown/appkit-adapter-wagmi';
 import { ALL_WAGMI_CHAINS, customRpcUrls, DEFAULT_WAGMI_CHAIN, EXTERNAL_LINKS } from '@/app/config';
 import { IS_E2E_ENABLED } from '@/app/constants/e2e';
 import { e2eWalletAddress } from '@/app/context/e2eAccount';
-import { projectId, queryClient, wagmiSetup } from '@/app/context/wagmiConfig';
 import { WalletContext } from '@/app/context/walletContext';
 import type { WalletContextValue } from '@/app/context/walletContext';
 
-const urlOrUndefined = (value: string): string | undefined => (value.trim() === '' ? undefined : value);
-let isAppKitInitialized = false;
+const projectId = process.env.NEXT_PUBLIC_PROJECT_ID!;
+const queryClient = new QueryClient();
+const wagmiAdapter = new WagmiAdapter({
+  ssr: true,
+  projectId,
+  customRpcUrls,
+  networks: [...ALL_WAGMI_CHAINS],
+});
 
-// walletIds - https://docs.reown.com/cloud/wallets/wallet-list
+const urlOrUndefined = (value: string): string | undefined => (value.trim() === '' ? undefined : value);
+
+// walletIds - https://docs.reown.com/cloud/wallets/wallet_list
 const walletIds = {
   METAMASK: 'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96',
   COINBASE: 'fd20dc426fb37566d803205b19bbc1d4096b248ac04548e3cfb6b3a38bd033aa',
   RABBY: '18388be9ac2d02726dbac9777c96efaac06d744b2f6d580fccdd4127a6d01fd1',
 };
 
-const initializeAppKit = (wagmiAdapter: WagmiAdapter): void => {
-  if (isAppKitInitialized) return;
-
+if (!IS_E2E_ENABLED) {
   createAppKit({
     adapters: [wagmiAdapter],
     projectId,
@@ -67,12 +72,6 @@ const initializeAppKit = (wagmiAdapter: WagmiAdapter): void => {
     privacyPolicyUrl: urlOrUndefined(EXTERNAL_LINKS.PRIVACY_POLICY),
     featuredWalletIds: [walletIds.METAMASK],
   });
-
-  isAppKitInitialized = true;
-};
-
-if (!IS_E2E_ENABLED && wagmiSetup.wagmiAdapter) {
-  initializeAppKit(wagmiSetup.wagmiAdapter);
 }
 
 const useCurrentChain = ({ status, chainId }: { status: string; chainId: number }) => {
@@ -84,7 +83,7 @@ const useCurrentChain = ({ status, chainId }: { status: string; chainId: number 
   );
 };
 
-const ProdWalletProvider = ({ children }: { readonly children: ReactNode }) => {
+const AppKitWalletProvider = ({ children }: { readonly children: ReactNode }) => {
   const { open } = useAppKit();
   const { disconnect } = useAppKitDisconnect();
   const { walletInfo } = useWalletInfo();
@@ -117,8 +116,9 @@ const ProdWalletProvider = ({ children }: { readonly children: ReactNode }) => {
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
 };
 
-const E2EWalletProvider = ({ children }: { readonly children: ReactNode }) => {
+const LocalWalletProvider = ({ children }: { readonly children: ReactNode }) => {
   const chainId = useChainId();
+  const { switchChain } = useSwitchChain();
   const [isConnected, setIsConnected] = useState(false);
   const status = isConnected ? 'connected' : 'disconnected';
   const currentChain = useCurrentChain({ status, chainId });
@@ -133,22 +133,27 @@ const E2EWalletProvider = ({ children }: { readonly children: ReactNode }) => {
       walletIcon: undefined,
       connect: () => setIsConnected(true),
       disconnect: () => setIsConnected(false),
-      // no-op for E2E
-      switchNetwork: () => () => {},
+      switchNetwork: (target) => {
+        try {
+          switchChain({ chainId: target });
+        } catch (error) {
+          console.error('Failed to switch chain', error);
+        }
+      },
     }),
-    [chainId, currentChain, isConnected, status],
+    [chainId, currentChain, isConnected, status, switchChain],
   );
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
 };
 
 const WalletProvider = ({ children }: { children: ReactNode }) => (
-  <WagmiProvider config={wagmiSetup.config}>
+  <WagmiProvider config={wagmiAdapter.wagmiConfig}>
     <QueryClientProvider client={queryClient}>
       {IS_E2E_ENABLED ? (
-        <E2EWalletProvider>{children}</E2EWalletProvider>
+        <LocalWalletProvider>{children}</LocalWalletProvider>
       ) : (
-        <ProdWalletProvider>{children}</ProdWalletProvider>
+        <AppKitWalletProvider>{children}</AppKitWalletProvider>
       )}
     </QueryClientProvider>
   </WagmiProvider>

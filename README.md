@@ -55,7 +55,6 @@ Security and ops notes:
 Required `.env.local` variables for E2E:
 
 - `E2E_PRIVATE_KEY`
-- `NEXT_PUBLIC_E2E_WALLET_ADDRESS`
 - `NEXT_PUBLIC_PROJECT_ID`
 - `NEXT_PUBLIC_BRIDGE_HUB_API`
 
@@ -64,7 +63,7 @@ Hardcoded E2E test constants:
 - from chain: Sepolia (`11155111`)
 - to chain: Bokuto (`737373`)
 - ERC20 address: Sepolia USDC (`0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238`)
-- ERC20 metadata: `USDC` / `USD Coin` / `6`
+- ERC20 metadata (symbol, name, decimals) is fetched on-chain from the contract
 - native bridge amount: `0.00001`
 - ERC20 bridge amount: `0.01`
 

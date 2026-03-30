@@ -1,13 +1,13 @@
 import { expect, test } from '@playwright/test';
 import { BridgePage } from './models/bridge-page';
-import {
-  E2E_ERC20_ADDRESS,
-  E2E_ERC20_BRIDGE_AMOUNT,
-  E2E_ERC20_DECIMALS,
-  E2E_ERC20_NAME,
-  E2E_ERC20_SYMBOL,
-  E2E_FROM_CHAIN_ID,
-} from '@/app/constants/e2e';
+import { E2E_ERC20_ADDRESS, E2E_ERC20_BRIDGE_AMOUNT, E2E_FROM_CHAIN_ID } from '@/app/constants/e2e';
+import { type Erc20Metadata, fetchErc20Metadata } from '@/tests/e2e/erc20Metadata';
+
+let erc20: Erc20Metadata;
+
+test.beforeAll(async () => {
+  erc20 = await fetchErc20Metadata(E2E_ERC20_ADDRESS);
+});
 
 test('bridges ERC20 with approval step', async ({ page }) => {
   test.setTimeout(180_000);
@@ -16,15 +16,15 @@ test('bridges ERC20 with approval step', async ({ page }) => {
   await bridgePage.seedCustomToken({
     chainId: E2E_FROM_CHAIN_ID,
     address: E2E_ERC20_ADDRESS,
-    symbol: E2E_ERC20_SYMBOL,
-    name: E2E_ERC20_NAME,
-    decimals: E2E_ERC20_DECIMALS,
+    symbol: erc20.symbol,
+    name: erc20.name,
+    decimals: erc20.decimals,
   });
 
   await bridgePage.navigate();
   await bridgePage.connectWallet();
   await bridgePage.openTokenSelector();
-  await bridgePage.selectToken(E2E_ERC20_SYMBOL);
+  await bridgePage.selectToken(erc20.symbol);
   await bridgePage.fillAmount(E2E_ERC20_BRIDGE_AMOUNT);
   await bridgePage.submitBridge();
   await bridgePage.waitForTransactionModal();

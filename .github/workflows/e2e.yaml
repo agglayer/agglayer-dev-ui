@@ -17,11 +17,10 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     environment: production
-    timeout-minutes: 45
+    timeout-minutes: 10
     env:
       CI: true
       E2E_PRIVATE_KEY: ${{ secrets.E2E_PRIVATE_KEY }}
-      NEXT_PUBLIC_E2E_WALLET_ADDRESS: ${{ secrets.NEXT_PUBLIC_E2E_WALLET_ADDRESS }}
       NEXT_PUBLIC_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_PROJECT_ID }}
       NEXT_PUBLIC_BRIDGE_HUB_API: ${{ secrets.NEXT_PUBLIC_BRIDGE_HUB_API }}
     steps:
