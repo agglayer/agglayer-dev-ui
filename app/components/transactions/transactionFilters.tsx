@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
 import type { TransactionStatus } from '@/app/types/transaction';
-import { getTimestampForDaysAgo } from '@/app/utils/date';
+
 import { Dropdown } from '@/app/components/ui/dropdown';
+import { getTimestampForDaysAgo } from '@/app/utils/date';
+import { useState } from 'react';
 
 interface TransactionFiltersProps {
   onFilterChange: (filters: { status?: TransactionStatus; updatedSince?: number }) => void;
@@ -18,14 +19,14 @@ const DATE_PRESETS = [
   { label: 'Last 7 days', days: 7 },
   { label: 'Last 30 days', days: 30 },
   { label: 'Last 90 days', days: 90 },
-  { label: 'All time', days: null },
+  { label: 'All time', days: null }
 ] as const;
 
 const STATUS_OPTIONS: Array<{ label: string; value: TransactionStatus | null }> = [
   { label: 'All transactions', value: null },
   { label: 'Ready to claim', value: 'READY_TO_CLAIM' },
   { label: 'Claimed', value: 'CLAIMED' },
-  { label: 'Pending', value: 'BRIDGED' },
+  { label: 'Pending', value: 'BRIDGED' }
 ];
 
 export const TransactionFilters = ({
@@ -33,7 +34,7 @@ export const TransactionFilters = ({
   disabled = false,
   initialStatus = null,
   onStatusClear,
-  onStatusChange,
+  onStatusChange
 }: TransactionFiltersProps) => {
   const [selectedStatus, setSelectedStatus] = useState<TransactionStatus | null>(initialStatus);
   const [selectedDays, setSelectedDays] = useState<number | null>(null);
@@ -44,7 +45,7 @@ export const TransactionFilters = ({
     onStatusChange?.(status);
     onFilterChange({
       status: status || undefined,
-      updatedSince: selectedDays ? getTimestampForDaysAgo(selectedDays) : undefined,
+      updatedSince: selectedDays ? getTimestampForDaysAgo(selectedDays) : undefined
     });
   };
 
@@ -53,7 +54,7 @@ export const TransactionFilters = ({
     setSelectedDays(days);
     onFilterChange({
       status: selectedStatus || undefined,
-      updatedSince: days ? getTimestampForDaysAgo(days) : undefined,
+      updatedSince: days ? getTimestampForDaysAgo(days) : undefined
     });
   };
 
@@ -62,7 +63,7 @@ export const TransactionFilters = ({
     setSelectedStatus(null);
     onStatusClear?.();
     onFilterChange({
-      updatedSince: selectedDays ? getTimestampForDaysAgo(selectedDays) : undefined,
+      updatedSince: selectedDays ? getTimestampForDaysAgo(selectedDays) : undefined
     });
   };
 
@@ -85,14 +86,16 @@ export const TransactionFilters = ({
         <Dropdown
           options={DATE_PRESETS.map((preset) => ({
             value: preset.days?.toString() ?? 'all',
-            label: preset.label,
+            label: preset.label
           }))}
           selectedValue={selectedDays !== null ? selectedDays.toString() : undefined}
           placeholder="All time"
           clearable
           disabled={disabled}
           onClear={() => handleDateChange(null)}
-          onSelect={(option) => handleDateChange(option.value === 'all' ? null : Number(option.value))}
+          onSelect={(option) =>
+            handleDateChange(option.value === 'all' ? null : Number(option.value))
+          }
           className="min-w-35"
         />
       </div>

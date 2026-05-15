@@ -1,18 +1,10 @@
-import { defineConfig, globalIgnores } from "eslint/config";
-import nextVitals from "eslint-config-next/core-web-vitals";
-import nextTs from "eslint-config-next/typescript";
+import { defineConfig, globalIgnores } from 'eslint/config';
 
-const eslintConfig = defineConfig([
-  ...nextVitals,
-  ...nextTs,
-  // Override default ignores of eslint-config-next.
-  globalIgnores([
-    // Default ignores of eslint-config-next:
-    ".next/**",
-    "out/**",
-    "build/**",
-    "next-env.d.ts",
-  ]),
+import { frontend, recommended, typescript } from '@polygonlabs/apps-team-lint';
+
+export default defineConfig([
+  ...recommended({ globals: 'browser' }),
+  ...typescript({ tsconfigRootDir: import.meta.dirname }),
+  ...frontend(),
+  globalIgnores(['.next/**', 'out/**', 'build/**', 'dist/**', 'next-env.d.ts'])
 ]);
-
-export default eslintConfig;

@@ -1,11 +1,15 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useAppMode } from '@/app/context/appMode';
 import { fetchTokenMetadata } from '@/app/services/tokenMetadata';
 import { isValidEthereumAddress } from '@/app/utils/address';
-import { useAppMode } from '@/app/context/appMode';
+import { useQuery } from '@tanstack/react-query';
 
-export const useTokenMetadata = (params: { chainId?: number; tokenAddress?: string; enabled?: boolean }) => {
+export const useTokenMetadata = (params: {
+  chainId?: number;
+  tokenAddress?: string;
+  enabled?: boolean;
+}) => {
   const { chainId, tokenAddress, enabled = false } = params;
   const { mode } = useAppMode();
   const normalizedAddress = tokenAddress?.trim() ?? '';
@@ -19,6 +23,6 @@ export const useTokenMetadata = (params: { chainId?: number; tokenAddress?: stri
     queryFn: async () => {
       if (!normalizedAddress) throw new Error('MISSING_PARAMS');
       return fetchTokenMetadata(mode, normalizedAddress);
-    },
+    }
   });
 };

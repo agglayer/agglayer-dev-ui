@@ -1,6 +1,7 @@
 import { loadEnvConfig } from '@next/env';
 import { defineConfig, devices } from '@playwright/test';
 import { privateKeyToAccount } from 'viem/accounts';
+
 import { isHexPrivateKey, normalizeEnvValue } from './app/utils/e2eEnv';
 
 loadEnvConfig(process.cwd(), true);
@@ -47,28 +48,28 @@ export default defineConfig({
     testIdAttribute: 'data-test-id',
 
     // Collect trace when retrying the failed test.
-    trace: 'on-first-retry',
+    trace: 'on-first-retry'
   },
   // Configure projects for major browsers.
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
-    },
+      use: { ...devices['Desktop Chrome'] }
+    }
   ],
   // Run your local dev server before starting the tests.
   webServer: [
     {
-      command: 'npm run dev',
+      command: 'pnpm run dev',
       env: {
         NEXT_PUBLIC_E2E_ENABLED: 'true',
         NEXT_PUBLIC_E2E_WALLET_ADDRESS: e2eWalletAddress,
         NEXT_PUBLIC_E2E_PRIVATE_KEY: e2ePrivateKey,
-        NEXT_PUBLIC_PROJECT_ID: projectId,
+        NEXT_PUBLIC_PROJECT_ID: projectId
       },
       url: 'http://localhost:3000',
       // Always restart so the dev server picks up E2E-specific public env values.
-      reuseExistingServer: !process.env.CI,
-    },
-  ],
+      reuseExistingServer: !process.env.CI
+    }
+  ]
 });

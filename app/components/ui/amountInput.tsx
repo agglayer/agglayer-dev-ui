@@ -1,8 +1,10 @@
 'use client';
 
-import { useMemo, type ReactNode } from 'react';
-import { cn } from '@/app/utils/common';
+import type { ReactNode } from 'react';
+
 import { bn } from '@/app/utils/bigNumber';
+import { cn } from '@/app/utils/common';
+import { useMemo } from 'react';
 
 type QuickAction = {
   label: string;
@@ -40,12 +42,17 @@ export const AmountInput = ({
   className,
   maxDecimals = 18,
   tokenButtonTestId,
-  inputTestId,
+  inputTestId
 }: AmountInputProps) => {
   const decimalsLimit = Math.max(0, Math.trunc(maxDecimals));
   const decimalRegex = useMemo(
-    () => new RegExp(decimalsLimit === 0 ? '^(?!0\\d|\\.)\\d*$' : `^(?!0\\d|\\.)\\d*(?:\\.\\d{0,${decimalsLimit}})?$`),
-    [decimalsLimit],
+    () =>
+      new RegExp(
+        decimalsLimit === 0
+          ? '^(?!0\\d|\\.)\\d*$'
+          : `^(?!0\\d|\\.)\\d*(?:\\.\\d{0,${decimalsLimit}})?$`
+      ),
+    [decimalsLimit]
   );
 
   const handleChange = (inputValue: string) => {
@@ -76,7 +83,7 @@ export const AmountInput = ({
       <div
         className={cn(
           'flex items-center gap-4 rounded-2xl border border-border bg-surface px-4 py-3 shadow-xs',
-          disabled ? 'cursor-not-allowed bg-surface-muted opacity-70' : 'hover:border-slate-300',
+          disabled ? 'cursor-not-allowed bg-surface-muted opacity-70' : 'hover:border-slate-300'
         )}
       >
         <input
@@ -89,7 +96,7 @@ export const AmountInput = ({
           data-test-id={inputTestId}
           className={cn(
             'w-full bg-transparent text-2xl font-semibold leading-none outline-none placeholder:text-grey',
-            disabled && 'cursor-not-allowed',
+            disabled && 'cursor-not-allowed'
           )}
         />
         {tokenLabel && (
@@ -100,7 +107,9 @@ export const AmountInput = ({
             data-test-id={tokenButtonTestId}
             className={cn(
               'flex items-center gap-2 rounded-xl border border-border bg-surface-muted px-3 py-2 text-sm font-semibold cursor-pointer',
-              disabled ? 'cursor-not-allowed opacity-70' : 'hover:border-blue hover:bg-surface transition-colors',
+              disabled
+                ? 'cursor-not-allowed opacity-70'
+                : 'hover:border-blue hover:bg-surface transition-colors'
             )}
           >
             {tokenIcon}
@@ -122,7 +131,9 @@ export const AmountInput = ({
                   disabled={disabled}
                   className={cn(
                     'rounded-lg border border-border bg-surface px-3 py-1 text-xs font-semibold text-muted cursor-pointer',
-                    disabled ? 'cursor-not-allowed opacity-60' : 'hover:border-blue hover:text-black',
+                    disabled
+                      ? 'cursor-not-allowed opacity-60'
+                      : 'hover:border-blue hover:text-black'
                   )}
                 >
                   {action.label}

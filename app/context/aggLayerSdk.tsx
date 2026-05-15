@@ -1,10 +1,12 @@
 'use client';
 
+import type { AppChain } from '@/app/types/appMode';
 import type { PropsWithChildren } from 'react';
-import React, { createContext, useContext, useMemo } from 'react';
-import { AggLayerSDK, SDK_MODES } from '@agglayer/sdk';
+
 import { useAppMode } from '@/app/context/appMode';
-import { AppChain } from '@/app/types/appMode';
+import React, { createContext, useContext, useMemo } from 'react';
+
+import { AggLayerSDK, SDK_MODES } from '@agglayer/sdk';
 
 type AggNative = ReturnType<AggLayerSDK['getNative']>;
 
@@ -18,12 +20,12 @@ const toSdkChainConfig = (chain: AppChain, bridgeAddress: string, proofApiUrl: s
   nativeCurrency: {
     name: chain.nativeCurrency.name,
     symbol: chain.nativeCurrency.symbol,
-    decimals: chain.nativeCurrency.decimals,
+    decimals: chain.nativeCurrency.decimals
   },
   blockExplorer: chain.explorer ? { name: chain.name, url: chain.explorer } : undefined,
   bridgeAddress,
   proofApiUrl,
-  isTestnet: chain.isTestnet,
+  isTestnet: chain.isTestnet
 });
 
 export const AggLayerSDKProvider: React.FC<PropsWithChildren> = ({ children }) => {
@@ -35,9 +37,9 @@ export const AggLayerSDKProvider: React.FC<PropsWithChildren> = ({ children }) =
       native: {
         defaultNetwork: config.defaultFromChainId,
         chains: config.chains.map((chain: AppChain) =>
-          toSdkChainConfig(chain, config.bridgeAddress, config.proofApiUrl),
-        ),
-      },
+          toSdkChainConfig(chain, config.bridgeAddress, config.proofApiUrl)
+        )
+      }
     });
 
     return sdk.getNative();

@@ -1,14 +1,19 @@
+import {
+  E2E_ERC20_ADDRESS,
+  E2E_FROM_CHAIN_ID,
+  E2E_PRIVATE_KEY,
+  E2E_WALLET_ADDRESS
+} from '@/app/constants/e2e';
+import { getE2EFromChainRpcUrl } from '@/tests/e2e/testnetRpc';
 import { expect, test } from '@playwright/test';
 import { createPublicClient, erc20Abi, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { sepolia } from 'viem/chains';
-import { E2E_ERC20_ADDRESS, E2E_FROM_CHAIN_ID, E2E_PRIVATE_KEY, E2E_WALLET_ADDRESS } from '@/app/constants/e2e';
-import { getE2EFromChainRpcUrl } from '@/tests/e2e/testnetRpc';
 
 const createClient = () =>
   createPublicClient({
     chain: sepolia,
-    transport: http(getE2EFromChainRpcUrl()),
+    transport: http(getE2EFromChainRpcUrl())
   });
 
 test('testnet preflight: funded wallet and rpc are available', async () => {
@@ -29,7 +34,7 @@ test('testnet preflight: funded wallet and rpc are available', async () => {
     address: E2E_ERC20_ADDRESS,
     abi: erc20Abi,
     functionName: 'balanceOf',
-    args: [account.address],
+    args: [account.address]
   });
 
   expect(tokenBalance).toBeGreaterThan(BigInt(0));

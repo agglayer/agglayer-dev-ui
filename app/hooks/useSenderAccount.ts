@@ -1,11 +1,12 @@
 'use client';
 
-import { useMemo } from 'react';
 import type { Address } from 'viem';
 import type { PrivateKeyAccount } from 'viem/accounts';
+
 import { e2eLocalAccount } from '@/app/context/e2eAccount';
 import { useWallet } from '@/app/context/walletContext';
 import { isValidEthereumAddress } from '@/app/utils/address';
+import { useMemo } from 'react';
 
 type SenderAccount = Address | PrivateKeyAccount;
 

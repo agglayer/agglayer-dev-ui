@@ -1,18 +1,27 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import type { AppChain } from '@/app/types/appMode';
+import type {
+  ClaimExecutionResult,
+  ClaimExecutionState,
+  Transaction
+} from '@/app/types/transaction';
 import type { Hex } from 'viem';
-import { useConfig, useSendTransaction } from 'wagmi';
-import { getPublicClient } from '@wagmi/core';
+
 import { useAggNative } from '@/app/context/aggLayerSdk';
 import { useAppMode } from '@/app/context/appMode';
 import { useWallet } from '@/app/context/walletContext';
 import { useSenderAccount } from '@/app/hooks/useSenderAccount';
 import { fetchClaimProof } from '@/app/services/claimProof';
-import type { ClaimExecutionResult, ClaimExecutionState, Transaction } from '@/app/types/transaction';
-import type { AppChain } from '@/app/types/appMode';
 import { isValidEthereumAddress } from '@/app/utils/address';
-import { buildClaimAssetParams, mapTransactionRequest, resolveLeafIndex } from '@/app/utils/transaction';
+import {
+  buildClaimAssetParams,
+  mapTransactionRequest,
+  resolveLeafIndex
+} from '@/app/utils/transaction';
+import { getPublicClient } from '@wagmi/core';
+import { useCallback, useState } from 'react';
+import { useConfig, useSendTransaction } from 'wagmi';
 
 interface UseClaimExecutionParams {
   bridgeAddress?: string;
@@ -31,7 +40,7 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
 
   const [state, setState] = useState<ClaimExecutionState>({
     isExecuting: false,
-    currentStep: 'idle',
+    currentStep: 'idle'
   });
 
   const execute = useCallback(
@@ -43,7 +52,7 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
         setState({
           isExecuting: false,
           currentStep: 'error',
-          error: { message: 'Wallet not connected' },
+          error: { message: 'Wallet not connected' }
         });
         return;
       }
@@ -52,7 +61,7 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
         setState({
           isExecuting: false,
           currentStep: 'error',
-          error: { message: 'Bridge address not configured' },
+          error: { message: 'Bridge address not configured' }
         });
         return;
       }
@@ -61,7 +70,7 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
         isExecuting: true,
         currentStep: 'claiming',
         transactionId: transaction.hubUID,
-        destinationChainId,
+        destinationChainId
       });
 
       let localClaimHash: Hex | undefined;
@@ -72,7 +81,7 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
 
         const alreadyClaimed = await bridge.isClaimed({
           leafIndex,
-          sourceBridgeNetwork: transaction.sourceNetwork,
+          sourceBridgeNetwork: transaction.sourceNetwork
         });
 
         if (alreadyClaimed) {
@@ -82,13 +91,13 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
             currentStep: 'error',
             transactionId: transaction.hubUID,
             destinationChainId,
-            error,
+            error
           });
           onComplete?.({
             status: 'error',
             transactionId: transaction.hubUID,
             destinationChainId,
-            error,
+            error
           });
           return;
         }
@@ -97,7 +106,7 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
           mode,
           sourceNetworkId: transaction.sourceNetwork,
           leafIndex,
-          depositCount: transaction.depositCount,
+          depositCount: transaction.depositCount
         });
 
         const claimParams = buildClaimAssetParams({ transaction, proof });
@@ -106,7 +115,7 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
         localClaimHash = await sendTransactionAsync({
           ...mapTransactionRequest(claimTx),
           account: senderAccount,
-          chainId: destinationChainId,
+          chainId: destinationChainId
         });
 
         setState((prev) => ({ ...prev, claimTxHash: localClaimHash }));
@@ -126,14 +135,14 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
             transactionId: transaction.hubUID,
             destinationChainId,
             claimTxHash: localClaimHash,
-            error,
+            error
           });
           onComplete?.({
             status: 'error',
             transactionId: transaction.hubUID,
             destinationChainId,
             claimTxHash: localClaimHash,
-            error,
+            error
           });
           return;
         }
@@ -143,13 +152,13 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
           currentStep: 'success',
           transactionId: transaction.hubUID,
           destinationChainId,
-          claimTxHash: localClaimHash,
+          claimTxHash: localClaimHash
         });
         onComplete?.({
           status: 'success',
           transactionId: transaction.hubUID,
           destinationChainId,
-          claimTxHash: localClaimHash,
+          claimTxHash: localClaimHash
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Claim failed';
@@ -160,18 +169,18 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
           transactionId: transaction.hubUID,
           destinationChainId,
           claimTxHash: localClaimHash,
-          error: errorState,
+          error: errorState
         });
         onComplete?.({
           status: 'error',
           transactionId: transaction.hubUID,
           destinationChainId,
           claimTxHash: localClaimHash,
-          error: errorState,
+          error: errorState
         });
       }
     },
-    [address, bridgeAddress, config, mode, native, onComplete, sendTransactionAsync, senderAccount],
+    [address, bridgeAddress, config, mode, native, onComplete, sendTransactionAsync, senderAccount]
   );
 
   const reset = useCallback(() => {

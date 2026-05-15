@@ -1,22 +1,24 @@
 import type { Metadata } from 'next';
-import { Inter_Tight } from 'next/font/google';
+
+import { Header } from '@/app/components/header/header';
+
 import './globals.css';
 import { Providers } from '@/app/providers';
-import { Header } from '@/app/components/header/header';
+import { Inter_Tight } from 'next/font/google';
 
 const interTight = Inter_Tight({
   subsets: ['latin'],
   display: 'swap',
-  variable: '--font-sans',
+  variable: '--font-sans'
 });
 
 export const metadata: Metadata = {
   title: 'Agglayer Dev UI',
-  description: '',
+  description: ''
 };
 
 export default function RootLayout({
-  children,
+  children
 }: Readonly<{
   children: React.ReactNode;
 }>) {

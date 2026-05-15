@@ -1,5 +1,6 @@
-.github
-.next
-public
-*.json
-coverage
+*.md
+dist/
+out/
+.next/
+pnpm-lock.yaml
+public/

@@ -1,16 +1,17 @@
 'use client';
 
-import { CheckCircle2, Link as LinkIcon, XCircle } from 'lucide-react';
+import type { BridgeExecutionState } from '@/app/types/bridge';
+import type { Token } from '@/app/types/token';
+
+import { BridgeRoute } from '@/app/components/bridge/bridgeTransactionModal/bridgeRoute';
 import { BridgeStep } from '@/app/components/bridge/bridgeTransactionModal/bridgeStep';
 import { BridgeSuccessView } from '@/app/components/bridge/bridgeTransactionModal/bridgeSuccessView';
 import { BridgeSummary } from '@/app/components/bridge/bridgeTransactionModal/bridgeSummary';
-import { BridgeRoute } from '@/app/components/bridge/bridgeTransactionModal/bridgeRoute';
 import { resolveBridgeTransactionModalContent } from '@/app/components/bridge/bridgeTransactionModal/bridgeTransactionModalContent';
 import { Button } from '@/app/components/ui/button';
 import { Modal } from '@/app/components/ui/modal';
 import { cn } from '@/app/utils/common';
-import type { BridgeExecutionState } from '@/app/types/bridge';
-import type { Token } from '@/app/types/token';
+import { CheckCircle2, Link as LinkIcon, XCircle } from 'lucide-react';
 
 const ALTERNATE_HEADLINE = 'Do not refresh page';
 
@@ -39,13 +40,13 @@ export const BridgeTransactionModal = ({
   toChainIcon,
   amount,
   needsApproval,
-  explorerUrl,
+  explorerUrl
 }: BridgeTransactionModalProps) => {
   const content = resolveBridgeTransactionModalContent(state, {
     tokenSymbol: token.symbol,
     amount,
     fromChainName,
-    toChainName,
+    toChainName
   });
 
   const isExecuting = state.isExecuting;
@@ -70,10 +71,14 @@ export const BridgeTransactionModal = ({
           <div
             className={cn(
               'mx-auto flex size-14 items-center justify-center rounded-full',
-              content.mode === 'success' ? 'bg-green-light text-green' : 'bg-red-light text-red',
+              content.mode === 'success' ? 'bg-green-light text-green' : 'bg-red-light text-red'
             )}
           >
-            {content.mode === 'success' ? <CheckCircle2 className="size-7" /> : <XCircle className="size-7" />}
+            {content.mode === 'success' ? (
+              <CheckCircle2 className="size-7" />
+            ) : (
+              <XCircle className="size-7" />
+            )}
           </div>
         ) : (
           <BridgeRoute

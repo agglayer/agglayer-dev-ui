@@ -1,5 +1,7 @@
 'use client';
 
+import type { ReactNode } from 'react';
+
 import { MENU_LINKS, NAV_ITEMS } from '@/app/components/header/constants';
 import { HeaderNavLink } from '@/app/components/header/headerNavLink';
 import { ModeSwitch } from '@/app/components/modeSwitch';
@@ -7,7 +9,6 @@ import { Logo } from '@/app/components/ui/logo';
 import { ROUTES } from '@/app/constants/routes';
 import { cn } from '@/app/utils/common';
 import { ExternalLink, X } from 'lucide-react';
-import { ReactNode } from 'react';
 
 interface MobileMenuProps {
   isOpen: boolean;
@@ -24,7 +25,7 @@ export const MobileMenu = ({
   pathname,
   onNavClick,
   hasModeOptions,
-  readyCountBadge,
+  readyCountBadge
 }: MobileMenuProps) => {
   if (!isOpen) return null;
 

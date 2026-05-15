@@ -1,4 +1,5 @@
 import type BigNumber from 'bignumber.js';
+
 import { bn, toNumber } from './bigNumber';
 
 export const normalize = (value: string) => value.trim().toLowerCase();
@@ -20,7 +21,7 @@ export const formatTokenAmount = (amount: number | string | BigNumber) => {
       const threshold = isNegative ? -MIN_DISPLAY_THRESHOLD : MIN_DISPLAY_THRESHOLD;
       const thresholdStr = threshold.toLocaleString(undefined, {
         minimumFractionDigits: 6,
-        maximumFractionDigits: 6,
+        maximumFractionDigits: 6
       });
       return `${prefix} ${thresholdStr}`;
     }
@@ -28,7 +29,7 @@ export const formatTokenAmount = (amount: number | string | BigNumber) => {
     const num = toNumber(value);
     return num.toLocaleString(undefined, {
       minimumFractionDigits: 0,
-      maximumFractionDigits: 6,
+      maximumFractionDigits: 6
     });
   } catch {
     return '-';

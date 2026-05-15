@@ -1,16 +1,23 @@
-import type { Chain } from 'wagmi/chains';
-import { buildWagmiChain, createChainEntry, toNonEmptyChainArray, toProofApiUrl } from '@/app/utils/config';
 import type { AppChain, AppMode, AppModeConfig, EnabledAppModeConfig } from '@/app/types/appMode';
 import type { ChainEntry } from '@/app/types/config';
+import type { Chain } from 'wagmi/chains';
+
+import {
+  buildWagmiChain,
+  createChainEntry,
+  toNonEmptyChainArray,
+  toProofApiUrl
+} from '@/app/utils/config';
 import rawJsonConfig from '@/config.json';
-import { parseConfigOrThrow } from '@/config/configValidator.mjs';
 import { APP_MODES } from '@/config/appModes.mjs';
+import { parseConfigOrThrow } from '@/config/configValidator.mjs';
 
 const configJson = parseConfigOrThrow(rawJsonConfig, { sourceName: 'config.json' });
 
 const resolveBridgeHubApiBaseUrl = (): string => {
   const envOverride = process.env.NEXT_PUBLIC_BRIDGE_HUB_API?.trim();
-  const configuredBaseUrl = envOverride && envOverride.length > 0 ? envOverride : configJson.bridgeHubApiBaseUrl;
+  const configuredBaseUrl =
+    envOverride && envOverride.length > 0 ? envOverride : configJson.bridgeHubApiBaseUrl;
 
   try {
     return new URL(configuredBaseUrl).toString().replace(/\/+$/, '');
@@ -30,7 +37,7 @@ export const customRpcUrls: Record<string, { url: string }[]> = {
 export const EXTERNAL_LINKS = Object.freeze({
   PRIVACY_POLICY: configJson.externalLinks.privacyPolicy,
   TERMS_OF_USE: configJson.externalLinks.termsOfUse,
-  CONTACT_SUPPORT: configJson.externalLinks.contactSupport,
+  CONTACT_SUPPORT: configJson.externalLinks.contactSupport
 });
 
 const CHAIN_REGISTRY: Record<string, ChainEntry> = Object.fromEntries(
@@ -41,9 +48,9 @@ const CHAIN_REGISTRY: Record<string, ChainEntry> = Object.fromEntries(
       icon: chainConfigJson.iconUrl,
       networkId: chainConfigJson.networkId,
       isTestnet: chainConfigJson.isTestnet,
-      eta: chainConfigJson.eta,
-    }),
-  ]),
+      eta: chainConfigJson.eta
+    })
+  ])
 );
 
 export const DEFAULT_APP_MODE: AppMode = configJson.appModes.default;
@@ -65,7 +72,7 @@ const buildModeConfig = (modeKey: string): AppModeConfig => {
   const base = {
     label: modeConfigJson.label,
     bridgeAddress: modeConfigJson.bridgeAddress,
-    proofApiUrl: toProofApiUrl(bridgeHubApiBaseUrl, modeConfigJson.proofApiSuffix),
+    proofApiUrl: toProofApiUrl(bridgeHubApiBaseUrl, modeConfigJson.proofApiSuffix)
   };
 
   const enabledChains = toEnabledChains(chains);
@@ -85,16 +92,16 @@ const buildModeConfig = (modeKey: string): AppModeConfig => {
     ...base,
     chains: enabledChains,
     defaultFromChainId,
-    defaultToChainId,
+    defaultToChainId
   };
 };
 
 export const APP_MODE_CONFIG: Record<AppMode, AppModeConfig> = Object.fromEntries(
-  APP_MODES.map((mode) => [mode, buildModeConfig(mode)]),
+  APP_MODES.map((mode) => [mode, buildModeConfig(mode)])
 ) as Record<AppMode, AppModeConfig>;
 
 export const ALL_WAGMI_CHAINS: readonly [Chain, ...Chain[]] = toNonEmptyChainArray(
-  Object.values(CHAIN_REGISTRY).map((entry) => entry.wagmi),
+  Object.values(CHAIN_REGISTRY).map((entry) => entry.wagmi)
 );
 
 const getDefaultWagmiChain = (): Chain => {

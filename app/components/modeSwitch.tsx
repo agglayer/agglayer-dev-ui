@@ -1,10 +1,11 @@
 'use client';
 
-import { useMemo } from 'react';
-import { Code } from 'lucide-react';
-import { useAppMode } from '@/app/context/appMode';
-import { AppMode } from '@/app/types/appMode';
+import type { AppMode } from '@/app/types/appMode';
+
 import { APP_MODE_CONFIG } from '@/app/config';
+import { useAppMode } from '@/app/context/appMode';
+import { Code } from 'lucide-react';
+import { useMemo } from 'react';
 
 type ModeOption = {
   value: AppMode;
@@ -20,9 +21,9 @@ export const ModeSwitch = () => {
         .filter((value) => value !== mode)
         .map((value) => ({
           value,
-          label: APP_MODE_CONFIG[value].label,
+          label: APP_MODE_CONFIG[value].label
         })),
-    [enabledModes, mode],
+    [enabledModes, mode]
   );
 
   if (options.length === 0) return null;

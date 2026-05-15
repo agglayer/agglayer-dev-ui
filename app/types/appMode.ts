@@ -1,4 +1,4 @@
-import { APP_MODES } from '@/config/appModes.mjs';
+import type { APP_MODES } from '@/config/appModes.mjs';
 
 export type AppMode = (typeof APP_MODES)[number];
 

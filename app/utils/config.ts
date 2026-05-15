@@ -1,6 +1,7 @@
-import type { Chain } from 'wagmi/chains';
-import { ZERO_ADDRESS } from '@/app/types/bridge';
 import type { ChainEntry, ChainEntryParams, JsonChainConfig } from '@/app/types/config';
+import type { Chain } from 'wagmi/chains';
+
+import { ZERO_ADDRESS } from '@/app/types/bridge';
 
 export const createChainEntry = (params: ChainEntryParams): ChainEntry => ({
   wagmi: params.wagmi,
@@ -18,9 +19,9 @@ export const createChainEntry = (params: ChainEntryParams): ChainEntry => ({
       decimals: params.wagmi.nativeCurrency.decimals,
       name: params.wagmi.nativeCurrency.name,
       symbol: params.wagmi.nativeCurrency.symbol,
-      logoURI: params.icon,
-    },
-  },
+      logoURI: params.icon
+    }
+  }
 });
 
 export const toNonEmptyChainArray = (chains: Chain[]): readonly [Chain, ...Chain[]] => {
@@ -36,9 +37,9 @@ export const buildWagmiChain = (config: JsonChainConfig): Chain => ({
   name: config.name,
   nativeCurrency: config.currency,
   rpcUrls: {
-    default: { http: [config.rpcUrl] },
+    default: { http: [config.rpcUrl] }
   },
   blockExplorers: {
-    default: { name: 'Explorer', url: config.explorerUrl },
-  },
+    default: { name: 'Explorer', url: config.explorerUrl }
+  }
 });

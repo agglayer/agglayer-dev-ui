@@ -29,19 +29,21 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - uses: pnpm/action-setup@v4
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: npm
+          node-version-file: .nvmrc
+          cache: pnpm
 
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
 
       - name: Run Playwright preflight
-        run: npx playwright test tests/e2e/preflight.spec.ts
+        run: pnpm exec playwright test tests/e2e/preflight.spec.ts
 
       - name: Run Playwright bridge tests
-        run: npx playwright test tests/bridge
+        run: pnpm exec playwright test tests/bridge
 
       - name: Upload Playwright artifacts
         uses: actions/upload-artifact@v4

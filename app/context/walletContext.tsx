@@ -1,8 +1,9 @@
 'use client';
 
-import { createContext, useContext } from 'react';
-import type { Chain } from 'viem';
 import type { ConnectedWalletInfo } from '@reown/appkit/react';
+import type { Chain } from 'viem';
+
+import { createContext, useContext } from 'react';
 
 export type WalletContextValue = {
   address: string;
@@ -25,7 +26,7 @@ const WalletContext = createContext<WalletContextValue>({
   walletIcon: undefined,
   connect: () => {},
   disconnect: () => {},
-  switchNetwork: () => {},
+  switchNetwork: () => {}
 });
 
 const useWallet = () => useContext(WalletContext);

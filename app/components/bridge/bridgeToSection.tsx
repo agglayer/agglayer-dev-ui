@@ -1,6 +1,8 @@
 'use client';
 
-import { Dropdown, type DropdownOption } from '@/app/components/ui/dropdown';
+import type { DropdownOption } from '@/app/components/ui/dropdown';
+
+import { Dropdown } from '@/app/components/ui/dropdown';
 import { shortenAddress } from '@/app/utils/address';
 
 interface BridgeToSectionProps {
@@ -20,7 +22,7 @@ export const BridgeToSection = ({
   onSelectChain,
   destinationAddress,
   onOpenDestinationModal,
-  onClearDestinationAddress,
+  onClearDestinationAddress
 }: BridgeToSectionProps) => {
   const hasDestinationAddress = destinationAddress.length > 0;
 
@@ -29,7 +31,9 @@ export const BridgeToSection = ({
       <div className="flex items-center justify-between">
         <span className="text-sm font-semibold text-muted">Bridge to</span>
         {hasDestinationAddress ? (
-          <span className="text-xs font-semibold text-grey">Custom: {shortenAddress(destinationAddress, 6)}</span>
+          <span className="text-xs font-semibold text-grey">
+            Custom: {shortenAddress(destinationAddress, 6)}
+          </span>
         ) : (
           <button
             type="button"
@@ -55,7 +59,8 @@ export const BridgeToSection = ({
                 <span className="text-xs text-grey">Destination address</span>
                 <span className="font-mono text-sm break-all">{destinationAddress}</span>
                 <span className="text-xs text-muted">
-                  Funds will arrive at this address on {selectedChainName ?? 'the selected network'}.
+                  Funds will arrive at this address on {selectedChainName ?? 'the selected network'}
+                  .
                 </span>
               </div>
               <button
@@ -69,7 +74,8 @@ export const BridgeToSection = ({
           </div>
         ) : (
           <div className="rounded-xl border border-border bg-surface px-4 py-3 text-sm text-muted shadow-xs">
-            Funds will arrive at your connected address on {selectedChainName ?? 'the selected network'}.
+            Funds will arrive at your connected address on{' '}
+            {selectedChainName ?? 'the selected network'}.
           </div>
         )}
       </div>

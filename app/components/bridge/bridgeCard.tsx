@@ -1,29 +1,32 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
-import { ArrowDownUp } from 'lucide-react';
-import { Card } from '@/app/components/ui/card';
-import { TokenSelector } from '@/app/components/bridge/tokenSelector';
-import { DestinationAddressModal } from '@/app/components/bridge/destinationAddressModal';
 import { BridgeFromSection } from '@/app/components/bridge/bridgeFromSection';
 import { BridgeToSection } from '@/app/components/bridge/bridgeToSection';
+import { BridgeTransactionModal } from '@/app/components/bridge/bridgeTransactionModal/bridgeTransactionModal';
+import { DestinationAddressModal } from '@/app/components/bridge/destinationAddressModal';
 import { EstimationInfo } from '@/app/components/bridge/estimationInfo';
+import { TokenSelector } from '@/app/components/bridge/tokenSelector';
+import { BadgeImageFallback } from '@/app/components/ui/badgeImageFallback';
+import { Card } from '@/app/components/ui/card';
 import { useAppMode } from '@/app/context/appMode';
+import { useWallet } from '@/app/context/walletContext';
 import { useBridge } from '@/app/hooks/useBridge';
 import { useBridgeExecution } from '@/app/hooks/useBridgeExecution';
 import { useEnforceCorrectChain } from '@/app/hooks/useEnforceCorrectChain';
 import { getBridgeCtaState } from '@/app/utils/bridge';
-import { BadgeImageFallback } from '@/app/components/ui/badgeImageFallback';
-import { BridgeTransactionModal } from '@/app/components/bridge/bridgeTransactionModal/bridgeTransactionModal';
-import { useWallet } from '@/app/context/walletContext';
+import { ArrowDownUp } from 'lucide-react';
+import { useCallback, useMemo, useState } from 'react';
 
-const createChainOptions = (chains: { id: number; name: string; icon?: string }[], excludeChainId?: number) =>
+const createChainOptions = (
+  chains: { id: number; name: string; icon?: string }[],
+  excludeChainId?: number
+) =>
   chains
     .filter((chain) => chain.id !== excludeChainId)
     .map((chain) => ({
       value: chain.id.toString(),
       label: chain.name,
-      icon: <BadgeImageFallback src={chain.icon} size="sm" />,
+      icon: <BadgeImageFallback src={chain.icon} size="sm" />
     }));
 
 const BridgeCardContent = () => {
@@ -40,14 +43,15 @@ const BridgeCardContent = () => {
   const fromChainOptions = useMemo(() => createChainOptions(derived.chains), [derived.chains]);
   const toChainOptions = useMemo(
     () => createChainOptions(derived.chains, form.fromChainId),
-    [derived.chains, form.fromChainId],
+    [derived.chains, form.fromChainId]
   );
 
-  const isLoading = status.isLoadingAllowance || status.isLoadingBalance || execution.state.isExecuting;
+  const isLoading =
+    status.isLoadingAllowance || status.isLoadingBalance || execution.state.isExecuting;
   const ctaState = getBridgeCtaState({
     isConnected: derived.isConnected,
     isLoading,
-    validationError: status.validationError,
+    validationError: status.validationError
   });
 
   const handleSetDestination = (addr: string) => {
@@ -74,9 +78,18 @@ const BridgeCardContent = () => {
       amountWei: balance.amountWei,
       destinationAddress: form.destinationAddress.trim() || undefined,
       needsApproval: Boolean(status.needsApproval),
-      isNative: derived.isNative,
+      isNative: derived.isNative
     });
-  }, [ctaState.action, connect, ensureCorrectChain, form, derived, balance, status.needsApproval, execution]);
+  }, [
+    ctaState.action,
+    connect,
+    ensureCorrectChain,
+    form,
+    derived,
+    balance,
+    status.needsApproval,
+    execution
+  ]);
 
   const handleCloseTransactionModal = useCallback(() => {
     setTransactionModalOpen(false);

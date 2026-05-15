@@ -1,10 +1,12 @@
 'use client';
 
-import { createContext, useCallback, useContext, useMemo, useSyncExternalStore, type ReactNode } from 'react';
-import { APP_MODE_CONFIG, DEFAULT_APP_MODE } from '@/app/config';
-import { StorageUtils, STORAGE_KEYS } from '@/app/utils/storage';
-import { getEnabledModes, isEnabledModeConfig, isValidAppMode } from '@/app/utils/appMode';
 import type { AppChain, AppMode, EnabledAppModeConfig } from '@/app/types/appMode';
+import type { ReactNode } from 'react';
+
+import { APP_MODE_CONFIG, DEFAULT_APP_MODE } from '@/app/config';
+import { getEnabledModes, isEnabledModeConfig, isValidAppMode } from '@/app/utils/appMode';
+import { StorageUtils, STORAGE_KEYS } from '@/app/utils/storage';
+import { createContext, useCallback, useContext, useMemo, useSyncExternalStore } from 'react';
 
 export type AppModeContextValue = {
   mode: AppMode;
@@ -22,7 +24,9 @@ export const AppModeContext = createContext<AppModeContextValue | null>(null);
 const MODE_EVENT = 'app-mode-change' as const;
 
 const enabledModes = getEnabledModes();
-const defaultMode = enabledModes.includes(DEFAULT_APP_MODE) ? DEFAULT_APP_MODE : (enabledModes[0] ?? DEFAULT_APP_MODE);
+const defaultMode = enabledModes.includes(DEFAULT_APP_MODE)
+  ? DEFAULT_APP_MODE
+  : (enabledModes[0] ?? DEFAULT_APP_MODE);
 
 const resolveStoredMode = (value: unknown): AppMode | null => {
   if (!isValidAppMode(value)) return null;
@@ -55,7 +59,7 @@ const createAppModeContextValue = ({
   mode,
   setMode,
   enabledModes,
-  config,
+  config
 }: {
   mode: AppMode;
   setMode: (mode: AppMode) => void;
@@ -72,7 +76,7 @@ const createAppModeContextValue = ({
     chains: config.chains,
     bridgeAddress: config.bridgeAddress,
     defaultFromChainId: config.defaultFromChainId ?? primaryChain.id,
-    defaultToChainId: config.defaultToChainId ?? secondaryChain.id,
+    defaultToChainId: config.defaultToChainId ?? secondaryChain.id
   };
 };
 
@@ -103,9 +107,9 @@ export const AppModeProvider = ({ children }: { children: ReactNode }) => {
         mode,
         setMode,
         enabledModes,
-        config,
+        config
       }),
-    [mode, setMode, config],
+    [mode, setMode, config]
   );
 
   return <AppModeContext.Provider value={value}>{children}</AppModeContext.Provider>;

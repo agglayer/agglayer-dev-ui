@@ -1,13 +1,13 @@
 'use client';
 
-import { useCallback } from 'react';
-import { Link as LinkIcon } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { Button } from '@/app/components/ui/button';
 import { CopyText } from '@/app/components/copyText';
+import { Button } from '@/app/components/ui/button';
 import { ROUTES } from '@/app/constants/routes';
 import { useRefetch } from '@/app/context/refetch';
 import { shortenAddress } from '@/app/utils/address';
+import { Link as LinkIcon } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useCallback } from 'react';
 
 interface BridgeSuccessViewProps {
   hash: string;
@@ -48,7 +48,11 @@ export const BridgeSuccessView = ({ hash, explorerUrl, onClose }: BridgeSuccessV
           </a>
         )}
       </div>
-      <Button className="w-full" onClick={handleGoToTransactions} data-test-id="bridge-success-go-to-transactions">
+      <Button
+        className="w-full"
+        onClick={handleGoToTransactions}
+        data-test-id="bridge-success-go-to-transactions"
+      >
         Go to transactions
       </Button>
     </div>

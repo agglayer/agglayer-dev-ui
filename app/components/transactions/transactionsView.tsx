@@ -1,24 +1,25 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Plug, RotateCw } from 'lucide-react';
-import { Card } from '@/app/components/ui/card';
-import { Button } from '@/app/components/ui/button';
+import type { TransactionStatus, Transaction } from '@/app/types/transaction';
+
+import { ClaimResultModal } from '@/app/components/transactions/claimResultModal';
+import { getTransactionInitialStatus } from '@/app/components/transactions/intialStatus';
+import { TransactionDetailsModal } from '@/app/components/transactions/transactionDetailsModal/transactionDetailsModal';
 import { TransactionFilters } from '@/app/components/transactions/transactionFilters';
 import { TransactionList } from '@/app/components/transactions/transactionList';
-import { ClaimResultModal } from '@/app/components/transactions/claimResultModal';
-import { TOTAL_REFETCH_TIME, useTransactions } from '@/app/hooks/useTransactions';
-import { useClaimExecution } from '@/app/hooks/useClaimExecution';
-import { useEnforceCorrectChain } from '@/app/hooks/useEnforceCorrectChain';
+import { Button } from '@/app/components/ui/button';
+import { Card } from '@/app/components/ui/card';
 import { useAppMode } from '@/app/context/appMode';
 import { useRefetch } from '@/app/context/refetch';
-import type { TransactionStatus, Transaction } from '@/app/types/transaction';
-import { getTransactionInitialStatus } from '@/app/components/transactions/intialStatus';
+import { useWallet } from '@/app/context/walletContext';
+import { useClaimExecution } from '@/app/hooks/useClaimExecution';
+import { useEnforceCorrectChain } from '@/app/hooks/useEnforceCorrectChain';
+import { TOTAL_REFETCH_TIME, useTransactions } from '@/app/hooks/useTransactions';
 import { getChainById, getChainByNetworkId } from '@/app/utils/chains';
 import { cn } from '@/app/utils/common';
-import { TransactionDetailsModal } from '@/app/components/transactions/transactionDetailsModal/transactionDetailsModal';
-import { useWallet } from '@/app/context/walletContext';
+import { useQueryClient } from '@tanstack/react-query';
+import { AlertTriangle, Plug, RotateCw } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 export const TransactionsView = () => {
   const { address, status, chainId, connect } = useWallet();
@@ -26,9 +27,11 @@ export const TransactionsView = () => {
   const { aggressiveRefetch, triggerAggressiveRefetch, clearAggressiveRefetch } = useRefetch();
   const queryClient = useQueryClient();
   const initialStatus = getTransactionInitialStatus();
-  const [filters, setFilters] = useState<{ status?: TransactionStatus; updatedSince?: number }>(() => ({
-    status: initialStatus ?? undefined,
-  }));
+  const [filters, setFilters] = useState<{ status?: TransactionStatus; updatedSince?: number }>(
+    () => ({
+      status: initialStatus ?? undefined
+    })
+  );
   const statusKey = (initialStatus || filters.status || 'all') as string;
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [isDifferentAddress, setIsDifferentAddress] = useState<boolean>(false);
@@ -39,21 +42,29 @@ export const TransactionsView = () => {
       status: filters.status,
       updatedSince: filters.updatedSince,
       order: 'desc' as const,
-      limit: 20,
+      limit: 20
     }),
-    [address, filters],
+    [address, filters]
   );
 
   const effectiveChainId = chainId ?? defaultFromChainId;
   const isConnected = status === 'connected' && Boolean(address);
 
-  const { data, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage, error, refetch, isRefetching } =
-    useTransactions({
-      chainId: effectiveChainId,
-      filters: queryFilters,
-      enabled: isConnected,
-      aggressiveRefetch,
-    });
+  const {
+    data,
+    isLoading,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+    error,
+    refetch,
+    isRefetching
+  } = useTransactions({
+    chainId: effectiveChainId,
+    filters: queryFilters,
+    enabled: isConnected,
+    aggressiveRefetch
+  });
 
   // Auto-disable aggressive mode after burst completes
   useEffect(() => {
@@ -64,15 +75,15 @@ export const TransactionsView = () => {
 
   const handleClaimComplete = useCallback(() => {
     triggerAggressiveRefetch();
-    refetch();
-    queryClient.invalidateQueries({ queryKey: ['ready-to-claim-count'] });
+    void refetch();
+    void queryClient.invalidateQueries({ queryKey: ['ready-to-claim-count'] });
   }, [queryClient, refetch, triggerAggressiveRefetch]);
 
   const ensureCorrectChain = useEnforceCorrectChain();
   const claimExecution = useClaimExecution({
     bridgeAddress,
     chains,
-    onComplete: handleClaimComplete,
+    onComplete: handleClaimComplete
   });
 
   const claimingTxId = claimExecution.state.transactionId;
@@ -100,7 +111,7 @@ export const TransactionsView = () => {
 
     await claimExecution.execute({
       transaction,
-      destinationChainId: targetChain.id,
+      destinationChainId: targetChain.id
     });
   };
 
@@ -129,8 +140,8 @@ export const TransactionsView = () => {
       <div className="sticky top-0 z-10 space-y-3 bg-surface pb-2">
         <div className="space-y-2">
           <p className="text-base text-grey">
-            This page displays your bridge transactions. In case yours isn&apos;t visible, it&apos;s likely a temporary
-            issue, and your funds are safe on the chain.
+            This page displays your bridge transactions. In case yours isn&apos;t visible, it&apos;s
+            likely a temporary issue, and your funds are safe on the chain.
           </p>
           {totalCount > 0 && (
             <p className="text-base font-semibold text-muted">
@@ -147,13 +158,13 @@ export const TransactionsView = () => {
             onStatusChange={(nextStatus) =>
               setFilters((prev) => ({
                 ...prev,
-                status: nextStatus || undefined,
+                status: nextStatus || undefined
               }))
             }
             onStatusClear={() =>
               setFilters((prev) => ({
                 ...prev,
-                status: undefined,
+                status: undefined
               }))
             }
             disabled={!isConnected}
@@ -165,7 +176,7 @@ export const TransactionsView = () => {
             disabled={isRefetching || isLoading}
             className={cn(
               'bg-transparent text-black',
-              isRefetching ? 'cursor-not-allowed text-grey' : 'hover:text-grey cursor-pointer',
+              isRefetching ? 'cursor-not-allowed text-grey' : 'hover:text-grey cursor-pointer'
             )}
           >
             <RotateCw aria-hidden="true" className={cn('size-4', isRefetching && 'animate-spin')} />
@@ -180,7 +191,9 @@ export const TransactionsView = () => {
           </div>
           <div className="space-y-1">
             <h3 className="text-lg font-bold text-black">Wallet not connected</h3>
-            <p className="text-sm text-grey">Connect your wallet to view your recent transactions.</p>
+            <p className="text-sm text-grey">
+              Connect your wallet to view your recent transactions.
+            </p>
           </div>
           <div className="flex justify-center">
             <Button onClick={connect} size="sm">
@@ -197,7 +210,9 @@ export const TransactionsView = () => {
           </div>
           <div className="space-y-1">
             <h3 className="text-lg font-bold text-black">Something went wrong</h3>
-            <p className="text-sm text-grey">We couldn&apos;t load your transactions right now. Please try again.</p>
+            <p className="text-sm text-grey">
+              We couldn&apos;t load your transactions right now. Please try again.
+            </p>
           </div>
           <div className="flex justify-center gap-3">
             <Button variant="outline" size="sm" onClick={() => refetch()}>

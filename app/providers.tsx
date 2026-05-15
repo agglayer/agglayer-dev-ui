@@ -1,4 +1,5 @@
-import { ReactNode } from 'react';
+import type { ReactNode } from 'react';
+
 import { AggLayerSDKProvider } from '@/app/context/aggLayerSdk';
 import { AppModeProvider } from '@/app/context/appMode';
 import { RefetchProvider } from '@/app/context/refetch';

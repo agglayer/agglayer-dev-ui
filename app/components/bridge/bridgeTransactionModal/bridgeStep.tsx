@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react';
 import type { Hex } from 'viem';
+
 import { CircleCheck, Link as LinkIcon, Loader2, XCircle } from 'lucide-react';
 
 export type StepState = 'idle' | 'pending' | 'success' | 'error';
@@ -18,14 +19,14 @@ const statusLabelMap: Record<StepState, string> = {
   idle: 'Waiting',
   pending: 'Pending confirmation',
   success: 'Confirmed',
-  error: 'Failed',
+  error: 'Failed'
 };
 
 const iconMap: Record<StepState, ReactNode> = {
   idle: <CircleCheck className="size-5 text-grey" />,
   pending: <CircleCheck className="size-5 text-grey" />,
   success: <CircleCheck className="size-5 text-green" />,
-  error: <XCircle className="size-5 text-red" />,
+  error: <XCircle className="size-5 text-red" />
 };
 
 export const BridgeStep = ({ label, state, txHash, explorerUrl, testId }: BridgeStepProps) => {

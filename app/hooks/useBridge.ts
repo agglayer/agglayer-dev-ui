@@ -1,22 +1,27 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
-import { formatUnits } from 'viem';
+import type { BridgeValidationError } from '@/app/types/bridge';
+import type { Token } from '@/app/types/token';
+
 import { useAppMode } from '@/app/context/appMode';
 import { useTokens } from '@/app/context/token';
 import { useWallet } from '@/app/context/walletContext';
 import { useCheckAllowance } from '@/app/hooks/useCheckAllowance';
 import { useGasEstimate } from '@/app/hooks/useGasEstimate';
 import { useTokenBalance } from '@/app/hooks/useTokenBalance';
-import type { BridgeValidationError } from '@/app/types/bridge';
 import { ZERO_ADDRESS } from '@/app/types/bridge';
-import type { Token } from '@/app/types/token';
 import { isValidEthereumAddress } from '@/app/utils/address';
 import { isPositive, toWei } from '@/app/utils/bigNumber';
 import { getChainById } from '@/app/utils/chains';
 import { normalize } from '@/app/utils/format';
+import { useCallback, useMemo, useState } from 'react';
+import { formatUnits } from 'viem';
 
-const resolveInitialToChainId = (chains: { id: number }[], fromChainId: number, defaultToChainId: number): number => {
+const resolveInitialToChainId = (
+  chains: { id: number }[],
+  fromChainId: number,
+  defaultToChainId: number
+): number => {
   if (defaultToChainId !== fromChainId) return defaultToChainId;
   const alternative = chains.find((chain) => chain.id !== fromChainId);
   return alternative?.id ?? fromChainId;
@@ -29,7 +34,7 @@ export const useBridge = () => {
 
   const [fromChainId, setFromChainId] = useState<number>(defaultFromChainId);
   const [toChainId, setToChainId] = useState<number>(() =>
-    resolveInitialToChainId(chains, defaultFromChainId, defaultToChainId),
+    resolveInitialToChainId(chains, defaultFromChainId, defaultToChainId)
   );
   const [selectedTokenAddress, setSelectedTokenAddress] = useState<string | undefined>();
   const [amount, setAmount] = useState('');
@@ -42,7 +47,10 @@ export const useBridge = () => {
 
   const selectedToken: Token | undefined = useMemo(() => {
     if (!selectedTokenAddress) return fromTokens[0];
-    return fromTokens.find((token) => normalize(token.address) === normalize(selectedTokenAddress)) ?? fromTokens[0];
+    return (
+      fromTokens.find((token) => normalize(token.address) === normalize(selectedTokenAddress)) ??
+      fromTokens[0]
+    );
   }, [fromTokens, selectedTokenAddress]);
 
   const selectFromChain = useCallback(
@@ -52,7 +60,7 @@ export const useBridge = () => {
       }
       setFromChainId(chainId);
     },
-    [fromChainId, toChainId],
+    [fromChainId, toChainId]
   );
 
   const selectToChain = useCallback(
@@ -62,7 +70,7 @@ export const useBridge = () => {
       }
       setToChainId(chainId);
     },
-    [fromChainId, toChainId],
+    [fromChainId, toChainId]
   );
 
   const swapChains = useCallback(() => {
@@ -85,16 +93,20 @@ export const useBridge = () => {
   }, []);
 
   const isConnected = status === 'connected';
-  const walletAddress = useMemo(() => (isValidEthereumAddress(address) ? address : undefined), [address]);
+  const walletAddress = useMemo(
+    () => (isValidEthereumAddress(address) ? address : undefined),
+    [address]
+  );
 
   const { rawBalance, isLoading: isLoadingBalance } = useTokenBalance({
     token: selectedToken,
     userAddress: walletAddress,
-    enabled: Boolean(selectedToken && walletAddress),
+    enabled: Boolean(selectedToken && walletAddress)
   });
 
   const isNative = Boolean(
-    selectedToken && (selectedToken.isNative || normalize(selectedToken.address) === normalize(ZERO_ADDRESS)),
+    selectedToken &&
+    (selectedToken.isNative || normalize(selectedToken.address) === normalize(ZERO_ADDRESS))
   );
 
   const amountWei = useMemo(() => {
@@ -114,20 +126,20 @@ export const useBridge = () => {
   }, [bridgeAddress]);
 
   const canCheckAllowance = Boolean(
-    !isNative && selectedToken && spenderAddress && walletAddress && amountWei > BigInt(0),
+    !isNative && selectedToken && spenderAddress && walletAddress && amountWei > BigInt(0)
   );
 
   const {
     needsApproval,
     loading: isLoadingAllowance,
-    refetchAllowance,
+    refetchAllowance
   } = useCheckAllowance({
     token: tokenAddress,
     owner: walletAddress ?? ZERO_ADDRESS,
     spender: spenderAddress ?? ZERO_ADDRESS,
     amount: amountWei,
     enabled: canCheckAllowance,
-    chainId: fromChainId,
+    chainId: fromChainId
   });
 
   const feeNeedsApproval = isNative ? false : (needsApproval ?? true);
@@ -135,13 +147,13 @@ export const useBridge = () => {
   const {
     maxAmount,
     feeFormatted,
-    isLoading: isGasLoading,
+    isLoading: isGasLoading
   } = useGasEstimate({
     chainId: fromChainId,
     networkId: fromChain?.networkId ?? 0,
     decimals: fromChain?.nativeCurrency.decimals ?? 18,
     needsApproval: feeNeedsApproval,
-    enabled: true,
+    enabled: true
   });
 
   const maxNativeAmount = useMemo(() => {
@@ -156,10 +168,20 @@ export const useBridge = () => {
     if (!selectedToken) return 'NO_TOKEN_SELECTED';
     if (!amount || !isPositive(amount)) return 'INVALID_AMOUNT';
     if (fromChainId === toChainId) return 'SAME_CHAIN';
-    if (destinationAddress && !isValidEthereumAddress(destinationAddress)) return 'INVALID_DESTINATION';
+    if (destinationAddress && !isValidEthereumAddress(destinationAddress))
+      return 'INVALID_DESTINATION';
     if (rawBalance && amountWei > BigInt(rawBalance)) return 'INSUFFICIENT_BALANCE';
     return null;
-  }, [walletAddress, selectedToken, amount, fromChainId, toChainId, destinationAddress, rawBalance, amountWei]);
+  }, [
+    walletAddress,
+    selectedToken,
+    amount,
+    fromChainId,
+    toChainId,
+    destinationAddress,
+    rawBalance,
+    amountWei
+  ]);
 
   return {
     form: {
@@ -167,7 +189,7 @@ export const useBridge = () => {
       toChainId,
       amount,
       destinationAddress,
-      selectedToken,
+      selectedToken
     },
     derived: {
       chains,
@@ -176,7 +198,7 @@ export const useBridge = () => {
       fromTokens,
       isConnected,
       walletAddress,
-      isNative,
+      isNative
     },
     actions: {
       selectFromChain,
@@ -185,24 +207,24 @@ export const useBridge = () => {
       selectToken,
       setAmount,
       setDestination,
-      clearDestination,
+      clearDestination
     },
     status: {
       validationError,
       isValid: validationError === null,
       isLoadingBalance,
       isLoadingAllowance: isNative ? false : isLoadingAllowance,
-      needsApproval: isNative ? false : needsApproval,
+      needsApproval: isNative ? false : needsApproval
     },
     balance: {
       raw: rawBalance,
       amountWei,
       maxNativeAmount,
-      refetchAllowance,
+      refetchAllowance
     },
     gasEstimate: {
       feeFormatted,
-      isLoading: isGasLoading,
-    },
+      isLoading: isGasLoading
+    }
   };
 };

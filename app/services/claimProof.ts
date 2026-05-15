@@ -1,5 +1,6 @@
+import type { AppMode } from '@/app/types/appMode';
 import type { Hex } from 'viem';
-import { AppMode } from '@/app/types/appMode';
+
 import { getProofApiBaseUrl } from '@/app/utils/appMode';
 
 export type ClaimProof = {
@@ -45,7 +46,7 @@ export const fetchClaimProof = async (params: {
 }): Promise<ClaimProof> => {
   const url = buildClaimProofUrl(params);
   const res = await fetch(url, {
-    headers: { accept: 'application/json' },
+    headers: { accept: 'application/json' }
   });
 
   if (!res.ok) {

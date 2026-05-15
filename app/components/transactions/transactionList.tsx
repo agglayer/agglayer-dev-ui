@@ -1,11 +1,12 @@
 'use client';
 
-import { useMemo, useRef } from 'react';
-import { Loader2 } from 'lucide-react';
+import type { ClaimStep, Transaction } from '@/app/types/transaction';
+
 import { TransactionListItem } from '@/app/components/transactions/transactionListItem';
 import { useInfiniteScroll } from '@/app/hooks/useInfiniteScroll';
 import { groupTransactionsByDate } from '@/app/utils/date';
-import type { ClaimStep, Transaction } from '@/app/types/transaction';
+import { Loader2 } from 'lucide-react';
+import { useMemo, useRef } from 'react';
 
 interface TransactionListProps {
   transactions: Transaction[];
@@ -30,7 +31,7 @@ export const TransactionList = ({
   onSelect,
   claimingTxId,
   claimStep,
-  isAnyClaiming,
+  isAnyClaiming
 }: TransactionListProps) => {
   const sentinelRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -45,7 +46,7 @@ export const TransactionList = ({
     },
     enabled: Boolean(hasNextPage && !isFetchingNextPage),
     rootMargin: '100px',
-    rootRef: scrollContainerRef,
+    rootRef: scrollContainerRef
   });
 
   if (isLoading) {

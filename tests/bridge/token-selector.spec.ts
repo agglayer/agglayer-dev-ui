@@ -1,17 +1,19 @@
+import type { Token } from '@/app/types/token';
+
+import { E2E_PRIVATE_KEY } from '@/app/constants/e2e';
+import { formatTokenBalance } from '@/app/utils/tokens';
+import { getE2EFromChainRpcUrl } from '@/tests/e2e/testnetRpc';
 import { expect, test } from '@playwright/test';
 import { createPublicClient, http } from 'viem';
-import { sepolia } from 'viem/chains';
 import { privateKeyToAccount } from 'viem/accounts';
-import { formatTokenBalance } from '@/app/utils/tokens';
-import type { Token } from '@/app/types/token';
+import { sepolia } from 'viem/chains';
+
 import { BridgePage } from './models/bridge-page';
-import { E2E_PRIVATE_KEY } from '@/app/constants/e2e';
-import { getE2EFromChainRpcUrl } from '@/tests/e2e/testnetRpc';
 
 const createClient = () =>
   createPublicClient({
     chain: sepolia,
-    transport: http(getE2EFromChainRpcUrl()),
+    transport: http(getE2EFromChainRpcUrl())
   });
 
 const buildNativeToken = (): Token => ({
@@ -21,10 +23,12 @@ const buildNativeToken = (): Token => ({
   symbol: sepolia.nativeCurrency.symbol,
   name: sepolia.nativeCurrency.name,
   logoURI: '',
-  isNative: true,
+  isNative: true
 });
 
-test('token selector shows token symbol and native balance when wallet is connected', async ({ page }) => {
+test('token selector shows token symbol and native balance when wallet is connected', async ({
+  page
+}) => {
   const bridgePage = new BridgePage({ page });
   const account = privateKeyToAccount(E2E_PRIVATE_KEY!);
   const client = createClient();

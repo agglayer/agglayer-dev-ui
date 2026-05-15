@@ -134,7 +134,7 @@ cp .env.example .env.local
 Run config validation locally before opening a PR:
 
 ```bash
-npm run validate:config
+pnpm run validate:config
 ```
 
 CI also runs this command before deployment. The app also validates config at startup through `config/configValidator.mjs`.

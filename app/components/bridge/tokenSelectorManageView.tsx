@@ -1,18 +1,19 @@
 'use client';
 
-import { useMemo } from 'react';
-import { Trash2, ArrowLeft, ExternalLink, Loader2 } from 'lucide-react';
+import type { Token } from '@/app/types/token';
+
+import { CopyText } from '@/app/components/copyText';
+import { Alert } from '@/app/components/ui/alert';
+import { BadgeImageFallback } from '@/app/components/ui/badgeImageFallback';
 import { Button } from '@/app/components/ui/button';
 import { TextInput } from '@/app/components/ui/textInput';
-import { Alert } from '@/app/components/ui/alert';
-import { isValidEthereumAddress, shortenAddress } from '@/app/utils/address';
-import { useTokenMetadata } from '@/app/hooks/useTokenMetadata';
-import { BadgeImageFallback } from '@/app/components/ui/badgeImageFallback';
-import type { Token } from '@/app/types/token';
-import { CopyText } from '@/app/components/copyText';
-import { getChainById } from '@/app/utils/chains';
 import { useAppMode } from '@/app/context/appMode';
+import { useTokenMetadata } from '@/app/hooks/useTokenMetadata';
+import { isValidEthereumAddress, shortenAddress } from '@/app/utils/address';
+import { getChainById } from '@/app/utils/chains';
 import { getTokenLogoBySymbol } from '@/app/utils/tokens';
+import { Trash2, ArrowLeft, ExternalLink, Loader2 } from 'lucide-react';
+import { useMemo } from 'react';
 
 interface ManageTokensViewProps {
   chainId?: number;
@@ -33,7 +34,7 @@ export const ManageTokensView: React.FC<ManageTokensViewProps> = ({
   onBack,
   onAddCustomToken,
   onRemoveCustomToken,
-  customTokens,
+  customTokens
 }) => {
   const { chains } = useAppMode();
   const trimmedAddress = customTokenAddress.trim();
@@ -45,7 +46,7 @@ export const ManageTokensView: React.FC<ManageTokensViewProps> = ({
   const { data, isFetching, isError, error, isSuccess } = useTokenMetadata({
     chainId,
     tokenAddress: effectiveQueryAddress ?? undefined,
-    enabled: Boolean(effectiveQueryAddress),
+    enabled: Boolean(effectiveQueryAddress)
   });
 
   const handleAdd = () => {
@@ -57,20 +58,22 @@ export const ManageTokensView: React.FC<ManageTokensViewProps> = ({
       symbol: data.symbol,
       name: data.name,
       logoURI: data.logoURI || getTokenLogoBySymbol(data.symbol),
-      isCustom: true,
+      isCustom: true
     };
     onAddCustomToken(token);
   };
 
   const filteredCustomTokens = useMemo(
     () => (chainId ? customTokens.filter((token) => token.chainId === chainId) : customTokens),
-    [chainId, customTokens],
+    [chainId, customTokens]
   );
 
   const existingToken = useMemo(() => {
     if (!effectiveQueryAddress) return undefined;
     return filteredCustomTokens.find(
-      (token) => token.address.toLowerCase() === effectiveQueryAddress.toLowerCase() && token.chainId === chainId,
+      (token) =>
+        token.address.toLowerCase() === effectiveQueryAddress.toLowerCase() &&
+        token.chainId === chainId
     );
   }, [filteredCustomTokens, effectiveQueryAddress, chainId]);
 
@@ -128,7 +131,9 @@ export const ManageTokensView: React.FC<ManageTokensViewProps> = ({
               <span className="text-xs text-grey">{shortenAddress(data.tokenAddress)}</span>
             </div>
             {existingToken && (
-              <span className="rounded-full bg-blue-light text-blue text-xs px-2 py-0.5 font-semibold">Imported</span>
+              <span className="rounded-full bg-blue-light text-blue text-xs px-2 py-0.5 font-semibold">
+                Imported
+              </span>
             )}
           </div>
           <div className="space-y-2 text-sm">
@@ -147,7 +152,9 @@ export const ManageTokensView: React.FC<ManageTokensViewProps> = ({
             <div className="flex items-center justify-between rounded-lg bg-surface-muted px-3 py-2">
               <span className="text-xs text-grey">Address</span>
               <div className="flex items-center gap-2">
-                <span className="font-semibold text-black">{shortenAddress(data.tokenAddress, 6)}</span>
+                <span className="font-semibold text-black">
+                  {shortenAddress(data.tokenAddress, 6)}
+                </span>
                 <CopyText
                   textToCopy={data.tokenAddress}
                   buttonClassName="rounded-full border border-border bg-surface p-1.5 text-muted hover:text-black hover:border-blue transition-colors"
@@ -157,7 +164,9 @@ export const ManageTokensView: React.FC<ManageTokensViewProps> = ({
                   <button
                     type="button"
                     className="rounded-full border border-border bg-surface p-1.5 text-muted hover:text-black hover:border-blue transition-colors"
-                    onClick={() => window.open(`${explorerBase}/address/${data.tokenAddress}`, '_blank')}
+                    onClick={() =>
+                      window.open(`${explorerBase}/address/${data.tokenAddress}`, '_blank')
+                    }
                     aria-label="Open in explorer"
                   >
                     <ExternalLink size={14} />
@@ -188,7 +197,9 @@ export const ManageTokensView: React.FC<ManageTokensViewProps> = ({
             {filteredCustomTokens.length > 0 && (
               <button
                 type="button"
-                onClick={() => filteredCustomTokens.forEach((t) => onRemoveCustomToken(t.chainId, t.address))}
+                onClick={() =>
+                  filteredCustomTokens.forEach((t) => onRemoveCustomToken(t.chainId, t.address))
+                }
                 className="text-xs font-semibold text-blue hover:underline cursor-pointer"
               >
                 Delete all

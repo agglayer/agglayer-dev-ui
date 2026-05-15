@@ -1,4 +1,5 @@
-import { AppMode } from '@/app/types/appMode';
+import type { AppMode } from '@/app/types/appMode';
+
 import { getProofApiBaseUrl } from '@/app/utils/appMode';
 import { normalize } from '@/app/utils/format';
 
@@ -22,7 +23,10 @@ interface TokenMetadataResponse {
   error?: string;
 }
 
-export const fetchTokenMetadata = async (mode: AppMode, tokenAddress: string): Promise<TokenMetadata> => {
+export const fetchTokenMetadata = async (
+  mode: AppMode,
+  tokenAddress: string
+): Promise<TokenMetadata> => {
   const url = `${getProofApiBaseUrl(mode)}/token-metadata/${normalize(tokenAddress)}`;
   const res = await fetch(url, { headers: { accept: 'application/json' } });
 
@@ -43,7 +47,7 @@ export const fetchTokenMetadata = async (mode: AppMode, tokenAddress: string): P
     data.tokenAddress,
     data.originTokenAddress,
     data.wrappedTokenAddressV1,
-    data.wrappedTokenAddressV2,
+    data.wrappedTokenAddressV2
   ].find((addr) => addr && normalize(addr) === requestedAddress);
 
   if (!matchedAddress) {
@@ -53,6 +57,6 @@ export const fetchTokenMetadata = async (mode: AppMode, tokenAddress: string): P
   return {
     ...data,
     tokenAddress: matchedAddress,
-    decimals: Number(data.decimals),
+    decimals: Number(data.decimals)
   };
 };

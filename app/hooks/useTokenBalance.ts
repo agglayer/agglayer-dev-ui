@@ -1,10 +1,12 @@
-import { ZERO_ADDRESS } from './../types/bridge';
-import { useQuery } from '@tanstack/react-query';
+import type { Token } from '@/app/types/token';
+
 import { useAggNative } from '@/app/context/aggLayerSdk';
 import { useAppMode } from '@/app/context/appMode';
-import { normalize } from '@/app/utils/format';
 import { isValidEthereumAddress } from '@/app/utils/address';
-import type { Token } from '@/app/types/token';
+import { normalize } from '@/app/utils/format';
+import { useQuery } from '@tanstack/react-query';
+
+import { ZERO_ADDRESS } from './../types/bridge';
 
 type UseTokenBalanceParams = {
   token?: Token;
@@ -17,14 +19,16 @@ export const useTokenBalance = ({ token, userAddress, enabled = true }: UseToken
   const { mode } = useAppMode();
   const chainId = token?.chainId;
   const tokenAddress = token?.address ?? ZERO_ADDRESS;
-  const isNative = Boolean(token && (token.isNative || normalize(tokenAddress) === normalize(ZERO_ADDRESS)));
+  const isNative = Boolean(
+    token && (token.isNative || normalize(tokenAddress) === normalize(ZERO_ADDRESS))
+  );
   const isTokenAddressValid = Boolean(isNative || isValidEthereumAddress(tokenAddress));
   const canFetch = Boolean(enabled && token && userAddress && chainId && isTokenAddressValid);
 
   const {
     data: rawBalance,
     isLoading,
-    isError,
+    isError
   } = useQuery({
     queryKey: ['token-balance', mode, chainId, tokenAddress, userAddress],
     enabled: canFetch,
@@ -45,7 +49,7 @@ export const useTokenBalance = ({ token, userAddress, enabled = true }: UseToken
         throw new Error('INVALID_TOKEN_ADDRESS');
       }
       return native.erc20(tokenAddress, chainId).getBalance(userAddress);
-    },
+    }
   });
 
   return { rawBalance, isLoading, isError };

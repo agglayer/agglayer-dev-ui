@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ChevronDown, X } from 'lucide-react';
+import type { ReactNode } from 'react';
+
 import { cn } from '@/app/utils/common';
+import { ChevronDown, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 export type DropdownOption = {
   value: string;
@@ -32,12 +34,15 @@ export const Dropdown = ({
   disabled,
   className,
   clearable = false,
-  onClear,
+  onClear
 }: DropdownProps) => {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const selected = useMemo(() => options.find((option) => option.value === selectedValue), [options, selectedValue]);
+  const selected = useMemo(
+    () => options.find((option) => option.value === selectedValue),
+    [options, selectedValue]
+  );
   const showClearButton = Boolean(clearable && selected && !disabled);
 
   useEffect(() => {
@@ -62,8 +67,10 @@ export const Dropdown = ({
       <div
         className={cn(
           'flex items-center gap-2 rounded-xl border px-3 py-2 shadow-xs transition',
-          selected && clearable ? 'border-blue bg-blue-subtle text-blue' : 'border-border bg-surface text-black',
-          disabled ? 'cursor-not-allowed bg-surface-muted opacity-70' : 'hover:border-blue',
+          selected && clearable
+            ? 'border-blue bg-blue-subtle text-blue'
+            : 'border-border bg-surface text-black',
+          disabled ? 'cursor-not-allowed bg-surface-muted opacity-70' : 'hover:border-blue'
         )}
       >
         <button
@@ -74,7 +81,9 @@ export const Dropdown = ({
         >
           <span className="flex items-center gap-2 text-sm">
             {selected?.icon}
-            <span className={cn(selected ? 'text-black' : 'text-grey')}>{selected?.label ?? placeholder}</span>
+            <span className={cn(selected ? 'text-black' : 'text-grey')}>
+              {selected?.label ?? placeholder}
+            </span>
           </span>
           {!showClearButton && (
             <ChevronDown
@@ -110,17 +119,21 @@ export const Dropdown = ({
                 }}
                 className={cn(
                   'flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-surface-muted transition-colors cursor-pointer',
-                  selectedValue === option.value && 'bg-surface-muted',
+                  selectedValue === option.value && 'bg-surface-muted'
                 )}
               >
                 {option.icon}
                 <div className="flex flex-col">
                   <span className="text-sm font-medium text-black">{option.label}</span>
-                  {option.description && <span className="text-xs text-grey">{option.description}</span>}
+                  {option.description && (
+                    <span className="text-xs text-grey">{option.description}</span>
+                  )}
                 </div>
               </button>
             ))}
-            {options.length === 0 && <div className="px-3 py-2 text-sm text-grey">No options available</div>}
+            {options.length === 0 && (
+              <div className="px-3 py-2 text-sm text-grey">No options available</div>
+            )}
           </div>
         </div>
       )}

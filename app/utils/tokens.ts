@@ -1,7 +1,8 @@
-import BigNumber from 'bignumber.js';
-import { normalize } from '@/app/utils/format';
-import { fromWei } from '@/app/utils/bigNumber';
 import type { Token } from '@/app/types/token';
+
+import { fromWei } from '@/app/utils/bigNumber';
+import { normalize } from '@/app/utils/format';
+import BigNumber from 'bignumber.js';
 
 export const getTokenBalance = (token: Token, rawBalance?: string | bigint | null) => {
   if (!rawBalance) return undefined;
@@ -15,11 +16,18 @@ export const formatTokenBalance = (token: Token, rawBalance?: string | bigint | 
   return value.decimalPlaces(decimalPlaces, BigNumber.ROUND_FLOOR).toString();
 };
 
-export const portionOfBalance = (token: Token, rawBalance: string | bigint | null | undefined, fraction: number) => {
+export const portionOfBalance = (
+  token: Token,
+  rawBalance: string | bigint | null | undefined,
+  fraction: number
+) => {
   const value = getTokenBalance(token, rawBalance);
   if (!value) return '';
   if (fraction === 1) return value.toString();
-  return value.multipliedBy(fraction).decimalPlaces(token.decimals, BigNumber.ROUND_FLOOR).toString();
+  return value
+    .multipliedBy(fraction)
+    .decimalPlaces(token.decimals, BigNumber.ROUND_FLOOR)
+    .toString();
 };
 
 export const getTokenLogoBySymbol = (symbol?: string | null): string | undefined => {

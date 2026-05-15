@@ -1,12 +1,12 @@
-import type { Chain } from 'wagmi/chains';
-import type { z } from 'zod';
-import {
+import type { AppChain } from '@/app/types/appMode';
+import type {
   jsonAppModeConfigSchema,
   jsonChainConfigSchema,
   jsonConfigSchema,
-  JsonNativeCurrencyConfigSchema,
+  JsonNativeCurrencyConfigSchema
 } from '@/config/configSchema.mjs';
-import type { AppChain } from '@/app/types/appMode';
+import type { Chain } from 'wagmi/chains';
+import type { z } from 'zod';
 
 export type ChainEntry = {
   wagmi: Chain;
