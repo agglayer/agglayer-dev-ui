@@ -72,7 +72,6 @@ const BridgeCardContent = () => {
       toChainId: form.toChainId,
       token: form.selectedToken,
       amountWei: balance.amountWei,
-      userAddress: derived.walletAddress,
       destinationAddress: form.destinationAddress.trim() || undefined,
       needsApproval: Boolean(status.needsApproval),
       isNative: derived.isNative,
@@ -125,6 +124,7 @@ const BridgeCardContent = () => {
           type="button"
           onClick={handleBridgeClick}
           disabled={ctaState.disabled}
+          data-test-id="bridge-cta"
           className="w-full rounded-xl bg-primary text-white py-3 font-semibold shadow-xs hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed transition cursor-pointer"
         >
           {ctaState.label}

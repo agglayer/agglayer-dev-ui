@@ -1,6 +1,22 @@
-import type { Hex } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import { isHexPrivateKey, normalizeEnvValue } from '@/app/utils/e2eEnv';
+import type { Address, Hex } from 'viem';
 
-export const ANVIL_DEFAULT_PRIVATE_KEY: Hex = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
-export const ANVIL_DEFAULT_RPC_URL = 'http://127.0.0.1:8545';
 export const IS_E2E_ENABLED = process.env.NEXT_PUBLIC_E2E_ENABLED === 'true';
-export const ANVIL_PORT = 8545;
+
+const resolvedPrivateKey = normalizeEnvValue(process.env.NEXT_PUBLIC_E2E_PRIVATE_KEY);
+
+if (IS_E2E_ENABLED && !isHexPrivateKey(resolvedPrivateKey)) {
+  throw new Error(
+    'E2E private key is invalid. NEXT_PUBLIC_E2E_PRIVATE_KEY must be a valid private key.',
+  );
+}
+
+export const E2E_PRIVATE_KEY = IS_E2E_ENABLED ? (resolvedPrivateKey as Hex) : undefined;
+export const E2E_WALLET_ADDRESS: Address | undefined = E2E_PRIVATE_KEY
+  ? privateKeyToAccount(E2E_PRIVATE_KEY).address
+  : undefined;
+export const E2E_ERC20_ADDRESS: Address = '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238';
+export const E2E_FROM_CHAIN_ID = 11155111;
+export const E2E_NATIVE_BRIDGE_AMOUNT = '0.00001';
+export const E2E_ERC20_BRIDGE_AMOUNT = '0.01';

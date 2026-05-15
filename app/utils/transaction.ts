@@ -19,7 +19,7 @@ export const isNativeToken = (address: string) => {
   return address === '0x0000000000000000000000000000000000000000';
 };
 
-export const mapTransactionRequest = (params: TransactionParams, account: Hex) => {
+export const mapTransactionRequest = (params: TransactionParams) => {
   const to = isValidEthereumAddress(params.to) ? params.to : undefined;
   if (!to) throw new Error('Invalid transaction recipient');
 
@@ -27,7 +27,6 @@ export const mapTransactionRequest = (params: TransactionParams, account: Hex) =
   if (!data) throw new Error('Invalid transaction data');
 
   return {
-    account,
     to,
     data,
     value: toBigInt(params.value),

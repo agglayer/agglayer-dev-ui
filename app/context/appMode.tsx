@@ -1,10 +1,10 @@
 'use client';
 
 import { createContext, useCallback, useContext, useMemo, useSyncExternalStore, type ReactNode } from 'react';
-import { AppChain, AppMode, EnabledAppModeConfig } from '@/app/types/appMode';
-import { getEnabledModes, isEnabledModeConfig, isValidAppMode } from '@/app/utils/appMode';
 import { APP_MODE_CONFIG, DEFAULT_APP_MODE } from '@/app/config';
 import { StorageUtils, STORAGE_KEYS } from '@/app/utils/storage';
+import { getEnabledModes, isEnabledModeConfig, isValidAppMode } from '@/app/utils/appMode';
+import type { AppChain, AppMode, EnabledAppModeConfig } from '@/app/types/appMode';
 
 export type AppModeContextValue = {
   mode: AppMode;
@@ -51,6 +51,31 @@ const subscribeToMode = (callback: () => void) => {
   };
 };
 
+const createAppModeContextValue = ({
+  mode,
+  setMode,
+  enabledModes,
+  config,
+}: {
+  mode: AppMode;
+  setMode: (mode: AppMode) => void;
+  enabledModes: AppMode[];
+  config: EnabledAppModeConfig;
+}): AppModeContextValue => {
+  const [primaryChain, secondaryChain] = config.chains;
+
+  return {
+    mode,
+    setMode,
+    enabledModes,
+    config,
+    chains: config.chains,
+    bridgeAddress: config.bridgeAddress,
+    defaultFromChainId: config.defaultFromChainId ?? primaryChain.id,
+    defaultToChainId: config.defaultToChainId ?? secondaryChain.id,
+  };
+};
+
 export const AppModeProvider = ({ children }: { children: ReactNode }) => {
   const mode = useSyncExternalStore(subscribeToMode, getStoredMode, () => defaultMode);
 
@@ -72,22 +97,15 @@ export const AppModeProvider = ({ children }: { children: ReactNode }) => {
     throw new Error(`APP_MODE_DISABLED: ${mode}`);
   }
 
-  const [primaryChain, secondaryChain] = config.chains;
-  const defaultFromChainId = config.defaultFromChainId ?? primaryChain.id;
-  const defaultToChainId = config.defaultToChainId ?? secondaryChain.id;
-
   const value = useMemo<AppModeContextValue>(
-    () => ({
-      mode,
-      setMode,
-      enabledModes,
-      config,
-      chains: config.chains,
-      bridgeAddress: config.bridgeAddress,
-      defaultFromChainId,
-      defaultToChainId,
-    }),
-    [mode, setMode, config, defaultFromChainId, defaultToChainId],
+    () =>
+      createAppModeContextValue({
+        mode,
+        setMode,
+        enabledModes,
+        config,
+      }),
+    [mode, setMode, config],
   );
 
   return <AppModeContext.Provider value={value}>{children}</AppModeContext.Provider>;

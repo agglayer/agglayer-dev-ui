@@ -6,23 +6,27 @@ import { useConfig, useSendTransaction } from 'wagmi';
 import { getPublicClient } from '@wagmi/core';
 import { useAggNative } from '@/app/context/aggLayerSdk';
 import { useAppMode } from '@/app/context/appMode';
+import { useWallet } from '@/app/context/walletContext';
+import { useSenderAccount } from '@/app/hooks/useSenderAccount';
 import { fetchClaimProof } from '@/app/services/claimProof';
 import type { ClaimExecutionResult, ClaimExecutionState, Transaction } from '@/app/types/transaction';
 import type { AppChain } from '@/app/types/appMode';
+import { isValidEthereumAddress } from '@/app/utils/address';
 import { buildClaimAssetParams, mapTransactionRequest, resolveLeafIndex } from '@/app/utils/transaction';
 
 interface UseClaimExecutionParams {
   bridgeAddress?: string;
   chains: AppChain[];
-  address?: Hex;
   onComplete?: (result: ClaimExecutionResult) => void;
 }
 
 export const useClaimExecution = (params: UseClaimExecutionParams) => {
-  const { bridgeAddress, address, onComplete } = params;
+  const { bridgeAddress, onComplete } = params;
   const native = useAggNative();
   const config = useConfig();
   const { mode } = useAppMode();
+  const { address } = useWallet();
+  const senderAccount = useSenderAccount();
   const { sendTransactionAsync } = useSendTransaction();
 
   const [state, setState] = useState<ClaimExecutionState>({
@@ -33,8 +37,9 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
   const execute = useCallback(
     async (args: { transaction: Transaction; destinationChainId: number }) => {
       const { transaction, destinationChainId } = args;
+      const walletAddress = isValidEthereumAddress(address) ? address : undefined;
 
-      if (!address) {
+      if (!walletAddress || !senderAccount) {
         setState({
           isExecuting: false,
           currentStep: 'error',
@@ -96,10 +101,11 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
         });
 
         const claimParams = buildClaimAssetParams({ transaction, proof });
-        const claimTx = await bridge.buildClaimAsset(claimParams, address);
+        const claimTx = await bridge.buildClaimAsset(claimParams, walletAddress);
 
         localClaimHash = await sendTransactionAsync({
-          ...mapTransactionRequest(claimTx, address),
+          ...mapTransactionRequest(claimTx),
+          account: senderAccount,
           chainId: destinationChainId,
         });
 
@@ -165,7 +171,7 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
         });
       }
     },
-    [address, bridgeAddress, native, config, sendTransactionAsync, onComplete, mode],
+    [address, bridgeAddress, config, mode, native, onComplete, sendTransactionAsync, senderAccount],
   );
 
   const reset = useCallback(() => {

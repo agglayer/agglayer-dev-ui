@@ -26,8 +26,11 @@ export const BridgeSuccessView = ({ hash, explorerUrl, onClose }: BridgeSuccessV
   }, [onClose, router, triggerAggressiveRefetch]);
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between px-4 py-3 bg-surface-muted rounded-xl">
+    <div className="flex flex-col gap-3" data-test-id="bridge-success-view">
+      <div
+        className="flex items-center justify-between px-4 py-3 bg-surface-muted rounded-xl"
+        data-test-id="bridge-success-hash-row"
+      >
         <div className="flex items-center gap-2 text-black">
           <span>{shortenAddress(hash, 8)}</span>
           <CopyText textToCopy={hash} iconClassName="size-3.5" />
@@ -37,6 +40,7 @@ export const BridgeSuccessView = ({ hash, explorerUrl, onClose }: BridgeSuccessV
             href={explorerUrl}
             target="_blank"
             rel="noopener noreferrer"
+            data-test-id="bridge-success-explorer-link"
             className="text-xs text-blue flex items-center gap-1 font-semibold"
           >
             <LinkIcon className="size-3" aria-hidden />
@@ -44,7 +48,7 @@ export const BridgeSuccessView = ({ hash, explorerUrl, onClose }: BridgeSuccessV
           </a>
         )}
       </div>
-      <Button className="w-full" onClick={handleGoToTransactions}>
+      <Button className="w-full" onClick={handleGoToTransactions} data-test-id="bridge-success-go-to-transactions">
         Go to transactions
       </Button>
     </div>

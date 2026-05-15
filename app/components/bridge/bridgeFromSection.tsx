@@ -66,6 +66,7 @@ export const BridgeFromSection = ({
           onChange={onAmountChange}
           placeholder="0"
           balanceText={balancesLoading ? '...' : balanceText}
+          inputTestId="bridge-amount-input"
           tokenLabel={selectedToken?.symbol ?? 'Select token'}
           tokenButtonTestId="token-selector-trigger"
           tokenIcon={
