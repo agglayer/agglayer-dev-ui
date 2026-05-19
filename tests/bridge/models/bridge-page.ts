@@ -1,6 +1,8 @@
-import { expect, type Locator, type Page } from '@playwright/test';
-import { STORAGE_KEYS } from '@/app/utils/storage';
 import type { Token } from '@/app/types/token';
+import type { Locator, Page } from '@playwright/test';
+
+import { STORAGE_KEYS } from '@/app/utils/storage';
+import { expect } from '@playwright/test';
 
 class BridgePage {
   private readonly page: Page;
@@ -62,18 +64,25 @@ class BridgePage {
   }
 
   async waitForBridgeSuccess(): Promise<void> {
-    await expect(this.transactionModalHeadline).toContainText('Transaction successful', { timeout: 120_000 });
+    await expect(this.transactionModalHeadline).toContainText('Transaction successful', {
+      timeout: 120_000
+    });
     await this.bridgeSuccessView.waitFor();
   }
 
-  async seedCustomToken(token: Pick<Token, 'chainId' | 'address' | 'decimals' | 'symbol' | 'name'>): Promise<void> {
+  async seedCustomToken(
+    token: Pick<Token, 'chainId' | 'address' | 'decimals' | 'symbol' | 'name'>
+  ): Promise<void> {
     await this.page.addInitScript(
       ({ key, chainId, address, symbol, name, decimals }) => {
         const existingRaw = window.localStorage.getItem(key);
-        const existing = existingRaw ? (JSON.parse(existingRaw) as Array<Record<string, unknown>>) : [];
+        const existing = existingRaw
+          ? (JSON.parse(existingRaw) as Array<Record<string, unknown>>)
+          : [];
         const normalizedAddress = address.toLowerCase();
         const withoutCurrentToken = existing.filter(
-          (item) => !(typeof item.address === 'string' && item.address.toLowerCase() === normalizedAddress),
+          (item) =>
+            !(typeof item.address === 'string' && item.address.toLowerCase() === normalizedAddress)
         );
 
         const seeded = [
@@ -85,12 +94,12 @@ class BridgePage {
             symbol,
             name,
             logoURI: '',
-            isCustom: true,
-          },
+            isCustom: true
+          }
         ];
         window.localStorage.setItem(key, JSON.stringify(seeded));
       },
-      { key: STORAGE_KEYS.CUSTOM_TOKENS, ...token },
+      { key: STORAGE_KEYS.CUSTOM_TOKENS, ...token }
     );
   }
 

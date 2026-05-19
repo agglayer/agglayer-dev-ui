@@ -1,7 +1,7 @@
 'use client';
 
-import { Search } from 'lucide-react';
 import { cn } from '@/app/utils/common';
+import { Search } from 'lucide-react';
 
 interface TextInputProps {
   value: string;
@@ -22,7 +22,7 @@ export const TextInput = ({
   disabled,
   isSearch,
   className,
-  isError = false,
+  isError = false
 }: TextInputProps) => {
   return (
     <label className={cn('flex flex-col gap-2', disabled && 'opacity-60 cursor-not-allowed')}>
@@ -32,7 +32,7 @@ export const TextInput = ({
           'flex items-center gap-3 rounded-xl border bg-surface px-3 py-2 shadow-xs',
           disabled ? 'cursor-not-allowed bg-surface-muted' : 'hover:border-slate-300',
           isError ? 'border-red' : 'border-border',
-          className,
+          className
         )}
       >
         {isSearch && <Search size={18} className="text-muted" />}
@@ -45,7 +45,7 @@ export const TextInput = ({
           className={cn(
             'w-full bg-transparent text-sm outline-none',
             'placeholder:text-grey',
-            disabled && 'cursor-not-allowed',
+            disabled && 'cursor-not-allowed'
           )}
         />
       </div>

@@ -9,7 +9,7 @@ send_metrics = false
 directory = "./out"
 
 [build]
-command = "npm run build:production"
+command = "pnpm run build:production"
 
 [env.production]
 routes = [
@@ -17,4 +17,4 @@ routes = [
 ]
 
 [env.production.build]
-command = "npm run build:production"
+command = "pnpm run build:production"

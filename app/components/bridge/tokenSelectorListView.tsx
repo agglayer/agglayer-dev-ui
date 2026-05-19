@@ -1,10 +1,11 @@
 'use client';
 
-import { useMemo } from 'react';
-import { Plus } from 'lucide-react';
-import { TextInput } from '@/app/components/ui/textInput';
 import type { Token } from '@/app/types/token';
+
 import { TokenSelectorItem } from '@/app/components/bridge/tokenSelectorItem';
+import { TextInput } from '@/app/components/ui/textInput';
+import { Plus } from 'lucide-react';
+import { useMemo } from 'react';
 
 interface TokenSelectorListViewProps {
   tokens: Token[];
@@ -23,12 +24,14 @@ export const TokenSelectorListView = ({
   search,
   onSearchChange,
   onSelect,
-  onManageTokens,
+  onManageTokens
 }: TokenSelectorListViewProps) => {
   const filteredTokens = useMemo(() => {
     if (!search) return tokens;
     const term = search.toLowerCase();
-    return tokens.filter((token) => `${token.symbol} ${token.name} ${token.address}`.toLowerCase().includes(term));
+    return tokens.filter((token) =>
+      `${token.symbol} ${token.name} ${token.address}`.toLowerCase().includes(term)
+    );
   }, [search, tokens]);
 
   return (

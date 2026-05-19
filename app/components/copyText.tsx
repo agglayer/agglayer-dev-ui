@@ -1,8 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react';
-import { Copy } from 'lucide-react';
+import type { MouseEvent } from 'react';
+
 import { cn } from '@/app/utils/common';
+import { Copy } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 interface CopyTextProps {
   textToCopy: string;
@@ -12,7 +14,11 @@ interface CopyTextProps {
 
 const COPY_FEEDBACK_DURATION = 1200;
 
-export const CopyText: React.FC<CopyTextProps> = ({ textToCopy, buttonClassName = '', iconClassName = 'size-4' }) => {
+export const CopyText: React.FC<CopyTextProps> = ({
+  textToCopy,
+  buttonClassName = '',
+  iconClassName = 'size-4'
+}) => {
   const [copied, setCopied] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -48,7 +54,7 @@ export const CopyText: React.FC<CopyTextProps> = ({ textToCopy, buttonClassName 
         console.error('Failed to copy text', error);
       }
     },
-    [clearTimer, textToCopy],
+    [clearTimer, textToCopy]
   );
 
   return (
@@ -58,7 +64,7 @@ export const CopyText: React.FC<CopyTextProps> = ({ textToCopy, buttonClassName 
         onClick={handleCopy}
         className={cn(
           'flex items-center justify-center cursor-pointer hover:opacity-70 focus:outline-none',
-          buttonClassName,
+          buttonClassName
         )}
         aria-label="Copy to clipboard"
       >

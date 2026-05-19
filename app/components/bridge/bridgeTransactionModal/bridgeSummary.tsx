@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
 import { Loader2 } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 
 interface BridgeSummaryProps {
   headline: string;
@@ -16,7 +16,7 @@ export const BridgeSummary = ({
   subheadline,
   showLoader,
   alternateHeadline,
-  shouldAlternate = false,
+  shouldAlternate = false
 }: BridgeSummaryProps) => {
   const [useAlternate, setUseAlternate] = useState(false);
   const shouldToggle = Boolean(shouldAlternate && alternateHeadline);

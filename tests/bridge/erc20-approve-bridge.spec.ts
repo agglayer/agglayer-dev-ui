@@ -1,7 +1,10 @@
-import { expect, test } from '@playwright/test';
-import { BridgePage } from './models/bridge-page';
+import type { Erc20Metadata } from '@/tests/e2e/erc20Metadata';
+
 import { E2E_ERC20_ADDRESS, E2E_ERC20_BRIDGE_AMOUNT, E2E_FROM_CHAIN_ID } from '@/app/constants/e2e';
-import { type Erc20Metadata, fetchErc20Metadata } from '@/tests/e2e/erc20Metadata';
+import { fetchErc20Metadata } from '@/tests/e2e/erc20Metadata';
+import { expect, test } from '@playwright/test';
+
+import { BridgePage } from './models/bridge-page';
 
 let erc20: Erc20Metadata;
 
@@ -18,7 +21,7 @@ test('bridges ERC20 with approval step', async ({ page }) => {
     address: E2E_ERC20_ADDRESS,
     symbol: erc20.symbol,
     name: erc20.name,
-    decimals: erc20.decimals,
+    decimals: erc20.decimals
   });
 
   await bridgePage.navigate();

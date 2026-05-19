@@ -1,6 +1,7 @@
-import { expect, test } from '@playwright/test';
-import { BridgePage } from './models/bridge-page';
 import { E2E_NATIVE_BRIDGE_AMOUNT } from '@/app/constants/e2e';
+import { expect, test } from '@playwright/test';
+
+import { BridgePage } from './models/bridge-page';
 
 test('bridges native token', async ({ page }) => {
   test.setTimeout(180_000);

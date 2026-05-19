@@ -1,5 +1,6 @@
-import { cn } from '@/app/utils/common';
 import type { MouseEventHandler } from 'react';
+
+import { cn } from '@/app/utils/common';
 
 interface ButtonProps {
   onClick?: MouseEventHandler<HTMLButtonElement>;
@@ -14,13 +15,14 @@ interface ButtonProps {
 const SIZE_STYLES = {
   sm: 'py-1.5 px-3 text-sm',
   md: 'py-2.5 px-4 text-base',
-  lg: 'py-3 px-6 text-lg',
+  lg: 'py-3 px-6 text-lg'
 };
 
 const VARIANT_STYLES = {
   primary: 'bg-primary text-white hover:brightness-110',
-  outline: 'bg-transparent border border-border text-black hover:border-blue hover:bg-surface-muted',
-  ghost: 'bg-transparent text-black hover:bg-surface-muted',
+  outline:
+    'bg-transparent border border-border text-black hover:border-blue hover:bg-surface-muted',
+  ghost: 'bg-transparent text-black hover:bg-surface-muted'
 };
 
 export const Button: React.FC<ButtonProps> = ({
@@ -30,7 +32,7 @@ export const Button: React.FC<ButtonProps> = ({
   children,
   size = 'md',
   variant = 'primary',
-  'data-test-id': dataTestId,
+  'data-test-id': dataTestId
 }) => {
   return (
     <button
@@ -43,7 +45,7 @@ export const Button: React.FC<ButtonProps> = ({
         SIZE_STYLES[size],
         VARIANT_STYLES[variant],
         disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer',
-        className,
+        className
       )}
     >
       {children}

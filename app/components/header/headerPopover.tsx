@@ -1,11 +1,11 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
-import { EllipsisVertical } from 'lucide-react';
-import { useClickOutside } from '@/app/hooks/useClickOutside';
-import { ModeSwitch } from '@/app/components/modeSwitch';
-import { cn } from '@/app/utils/common';
 import { MENU_LINKS } from '@/app/components/header/constants';
+import { ModeSwitch } from '@/app/components/modeSwitch';
+import { useClickOutside } from '@/app/hooks/useClickOutside';
+import { cn } from '@/app/utils/common';
+import { EllipsisVertical } from 'lucide-react';
+import { useCallback, useRef, useState } from 'react';
 
 interface HeaderPopoverProps {
   hasModeOptions: boolean;

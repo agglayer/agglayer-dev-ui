@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useRef, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
-import { X } from 'lucide-react';
+import type { ReactNode } from 'react';
+
 import { cn } from '@/app/utils/common';
+import { X } from 'lucide-react';
+import { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 
 interface ModalProps {
   open: boolean;
@@ -26,7 +28,7 @@ export const Modal = ({
   contentClassName,
   showCloseButton = true,
   dismissible = true,
-  dataTestId,
+  dataTestId
 }: ModalProps) => {
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -64,7 +66,7 @@ export const Modal = ({
           'relative z-10 w-130 max-w-[calc(100%-32px)] min-h-60 max-h-[85vh] rounded-2xl bg-surface',
           'border border-border ',
           'overflow-hidden flex flex-col',
-          className,
+          className
         )}
       >
         <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-border">
@@ -83,6 +85,6 @@ export const Modal = ({
         <div className={cn('px-6 py-4 flex-1 overflow-y-auto', contentClassName)}>{children}</div>
       </div>
     </div>,
-    document.body,
+    document.body
   );
 };

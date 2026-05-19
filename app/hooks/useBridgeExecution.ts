@@ -1,18 +1,19 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import type { BridgeExecutionState } from '@/app/types/bridge';
+import type { Token } from '@/app/types/token';
 import type { Hex } from 'viem';
-import { usePublicClient, useSendTransaction } from 'wagmi';
+
 import { useAggNative } from '@/app/context/aggLayerSdk';
 import { useAppMode } from '@/app/context/appMode';
 import { useWallet } from '@/app/context/walletContext';
 import { useSenderAccount } from '@/app/hooks/useSenderAccount';
-import type { BridgeExecutionState } from '@/app/types/bridge';
 import { ZERO_ADDRESS } from '@/app/types/bridge';
-import type { Token } from '@/app/types/token';
 import { isValidEthereumAddress } from '@/app/utils/address';
 import { getNetworkId } from '@/app/utils/chains';
 import { mapTransactionRequest } from '@/app/utils/transaction';
+import { useCallback, useState } from 'react';
+import { usePublicClient, useSendTransaction } from 'wagmi';
 
 export const useBridgeExecution = (params: { fromChainId: number }) => {
   const { fromChainId } = params;
@@ -25,7 +26,7 @@ export const useBridgeExecution = (params: { fromChainId: number }) => {
 
   const [state, setState] = useState<BridgeExecutionState>({
     isExecuting: false,
-    currentStep: 'idle',
+    currentStep: 'idle'
   });
 
   const execute = useCallback(
@@ -43,7 +44,7 @@ export const useBridgeExecution = (params: { fromChainId: number }) => {
         setState({
           isExecuting: false,
           currentStep: 'error',
-          error: { message: 'Wallet not ready' },
+          error: { message: 'Wallet not ready' }
         });
         return;
       }
@@ -65,7 +66,9 @@ export const useBridgeExecution = (params: { fromChainId: number }) => {
 
         const destNetworkId = getNetworkId(chains, args.toChainId);
 
-        const tokenAddress = isValidEthereumAddress(args.token.address) ? args.token.address : undefined;
+        const tokenAddress = isValidEthereumAddress(args.token.address)
+          ? args.token.address
+          : undefined;
         if (!args.isNative && !tokenAddress) {
           throw new Error('Invalid token address');
         }
@@ -74,23 +77,29 @@ export const useBridgeExecution = (params: { fromChainId: number }) => {
         // Approval step (ERC20 only)
         if (args.needsApproval && !args.isNative) {
           const erc20 = native.erc20(tokenAddressValue, fromChainId);
-          const approveTx = await erc20.buildApprove(bridgeAddress, args.amountWei.toString(), walletAddress);
+          const approveTx = await erc20.buildApprove(
+            bridgeAddress,
+            args.amountWei.toString(),
+            walletAddress
+          );
 
           localApprovalHash = await sendTransactionAsync({
             ...mapTransactionRequest(approveTx),
             account: senderAccount,
-            chainId: fromChainId,
+            chainId: fromChainId
           });
           setState((prev) => ({ ...prev, approvalTxHash: localApprovalHash }));
 
-          const approvalReceipt = await publicClient.waitForTransactionReceipt({ hash: localApprovalHash });
+          const approvalReceipt = await publicClient.waitForTransactionReceipt({
+            hash: localApprovalHash
+          });
 
           if (approvalReceipt.status === 'reverted') {
             setState({
               isExecuting: false,
               currentStep: 'error',
               approvalTxHash: localApprovalHash,
-              error: { message: 'Approval transaction reverted', txHash: localApprovalHash },
+              error: { message: 'Approval transaction reverted', txHash: localApprovalHash }
             });
             return;
           }
@@ -106,20 +115,20 @@ export const useBridgeExecution = (params: { fromChainId: number }) => {
                 destinationAddress: recipient,
                 amount: args.amountWei.toString(),
                 token: ZERO_ADDRESS,
-                forceUpdateGlobalExitRoot: true,
+                forceUpdateGlobalExitRoot: true
               },
-              walletAddress,
+              walletAddress
             )
           : await native
               .erc20(tokenAddressValue, fromChainId)
               .bridgeTo(destNetworkId, recipient, args.amountWei.toString(), walletAddress, {
-                forceUpdateGlobalExitRoot: true,
+                forceUpdateGlobalExitRoot: true
               });
 
         localBridgeHash = await sendTransactionAsync({
           ...mapTransactionRequest(bridgeTx),
           account: senderAccount,
-          chainId: fromChainId,
+          chainId: fromChainId
         });
         setState((prev) => ({ ...prev, bridgeTxHash: localBridgeHash }));
 
@@ -131,7 +140,7 @@ export const useBridgeExecution = (params: { fromChainId: number }) => {
             currentStep: 'error',
             approvalTxHash: localApprovalHash,
             bridgeTxHash: localBridgeHash,
-            error: { message: 'Bridge transaction reverted', txHash: localBridgeHash },
+            error: { message: 'Bridge transaction reverted', txHash: localBridgeHash }
           });
           return;
         }
@@ -140,7 +149,7 @@ export const useBridgeExecution = (params: { fromChainId: number }) => {
           isExecuting: false,
           currentStep: 'success',
           approvalTxHash: localApprovalHash,
-          bridgeTxHash: localBridgeHash,
+          bridgeTxHash: localBridgeHash
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Transaction failed';
@@ -149,11 +158,20 @@ export const useBridgeExecution = (params: { fromChainId: number }) => {
           currentStep: 'error',
           approvalTxHash: localApprovalHash,
           bridgeTxHash: localBridgeHash,
-          error: { message, txHash: localBridgeHash ?? localApprovalHash },
+          error: { message, txHash: localBridgeHash ?? localApprovalHash }
         });
       }
     },
-    [address, bridgeAddress, chains, fromChainId, native, publicClient, sendTransactionAsync, senderAccount],
+    [
+      address,
+      bridgeAddress,
+      chains,
+      fromChainId,
+      native,
+      publicClient,
+      sendTransactionAsync,
+      senderAccount
+    ]
   );
 
   const reset = useCallback(() => {

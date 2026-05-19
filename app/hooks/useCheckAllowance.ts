@@ -1,8 +1,8 @@
-import { useQuery } from '@tanstack/react-query';
 import { useAggNative } from '@/app/context/aggLayerSdk';
 import { useAppMode } from '@/app/context/appMode';
 import { isValidEthereumAddress } from '@/app/utils/address';
 import { toBigInt } from '@/app/utils/format';
+import { useQuery } from '@tanstack/react-query';
 
 interface UseCheckAllowanceParams {
   token: string;
@@ -19,7 +19,7 @@ export const useCheckAllowance = ({
   spender,
   amount,
   enabled = true,
-  chainId,
+  chainId
 }: UseCheckAllowanceParams) => {
   const native = useAggNative();
   const { mode } = useAppMode();
@@ -33,11 +33,15 @@ export const useCheckAllowance = ({
     refetchOnMount: false,
     retryOnMount: false,
     queryFn: async () => {
-      if (!isValidEthereumAddress(token) || !isValidEthereumAddress(owner) || !isValidEthereumAddress(spender)) {
+      if (
+        !isValidEthereumAddress(token) ||
+        !isValidEthereumAddress(owner) ||
+        !isValidEthereumAddress(spender)
+      ) {
         throw new Error('INVALID_ADDRESS');
       }
       return native.erc20(token, chainId).getAllowance(owner, spender);
-    },
+    }
   });
 
   const allowanceValue = toBigInt(data);
@@ -49,6 +53,6 @@ export const useCheckAllowance = ({
     needsApproval,
     loading: isLoading || isFetching,
     error,
-    refetchAllowance: refetch,
+    refetchAllowance: refetch
   };
 };

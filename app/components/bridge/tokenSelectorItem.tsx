@@ -1,14 +1,15 @@
 'use client';
 
+import type { Token } from '@/app/types/token';
+
 import { BadgeImageFallback } from '@/app/components/ui/badgeImageFallback';
-import { cn } from '@/app/utils/common';
-import { getChainById } from '@/app/utils/chains';
-import { normalize } from '@/app/utils/format';
-import { formatTokenBalance, getTokenLogoBySymbol } from '@/app/utils/tokens';
+import { useAppMode } from '@/app/context/appMode';
 import { useWallet } from '@/app/context/walletContext';
 import { useTokenBalance } from '@/app/hooks/useTokenBalance';
-import { useAppMode } from '@/app/context/appMode';
-import type { Token } from '@/app/types/token';
+import { getChainById } from '@/app/utils/chains';
+import { cn } from '@/app/utils/common';
+import { normalize } from '@/app/utils/format';
+import { formatTokenBalance, getTokenLogoBySymbol } from '@/app/utils/tokens';
 
 interface TokenSelectorItemProps {
   token: Token;
@@ -25,7 +26,7 @@ export const TokenSelectorItem = ({ token, selectedToken, onSelect }: TokenSelec
   const { rawBalance, isLoading } = useTokenBalance({
     token,
     userAddress,
-    enabled: isConnected,
+    enabled: isConnected
   });
 
   const isSelected =
@@ -51,7 +52,7 @@ export const TokenSelectorItem = ({ token, selectedToken, onSelect }: TokenSelec
           'flex items-center justify-between gap-3 rounded-xl border px-3 py-2 transition-colors text-left',
           isSelected
             ? 'border-blue bg-blue-subtle shadow-xs'
-            : 'border-border hover:border-blue/50 hover:bg-surface-muted',
+            : 'border-border hover:border-blue/50 hover:bg-surface-muted'
         )}
       >
         <div className="flex items-center gap-3">
@@ -71,7 +72,9 @@ export const TokenSelectorItem = ({ token, selectedToken, onSelect }: TokenSelec
             </div>
           )}
           {token.isCustom && (
-            <span className="rounded-full bg-blue-light text-blue text-xs px-2 py-0.5 font-semibold">Imported</span>
+            <span className="rounded-full bg-blue-light text-blue text-xs px-2 py-0.5 font-semibold">
+              Imported
+            </span>
           )}
         </div>
         <div className="flex items-center gap-2 text-sm text-muted">

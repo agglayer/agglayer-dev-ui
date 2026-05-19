@@ -1,4 +1,5 @@
 import { z } from 'zod';
+
 import { APP_MODES } from './appModes.mjs';
 
 const modeEnum = z.enum(APP_MODES);
@@ -11,7 +12,7 @@ export const JsonNativeCurrencyConfigSchema = z
   .object({
     name: nonEmptyString,
     symbol: nonEmptyString,
-    decimals: z.number().int().min(0),
+    decimals: z.number().int().min(0)
   })
   .strict();
 
@@ -25,7 +26,7 @@ export const jsonChainConfigSchema = z
     iconUrl: urlString,
     networkId: z.number().int().min(0),
     isTestnet: z.boolean(),
-    eta: z.number().int().min(0),
+    eta: z.number().int().min(0)
   })
   .strict();
 
@@ -36,7 +37,7 @@ export const jsonAppModeConfigSchema = z
     proofApiSuffix: nonEmptyString,
     chainKeys: z.array(nonEmptyString),
     defaultFromChainKey: nonEmptyString.optional(),
-    defaultToChainKey: nonEmptyString.optional(),
+    defaultToChainKey: nonEmptyString.optional()
   })
   .strict();
 
@@ -47,15 +48,15 @@ export const jsonConfigSchema = z
       .object({
         privacyPolicy: optionalUrlString,
         termsOfUse: optionalUrlString,
-        contactSupport: optionalUrlString,
+        contactSupport: optionalUrlString
       })
       .strict(),
     chains: z.record(nonEmptyString, jsonChainConfigSchema),
     appModes: z
       .object({
         default: modeEnum,
-        configs: z.record(nonEmptyString, jsonAppModeConfigSchema),
+        configs: z.record(nonEmptyString, jsonAppModeConfigSchema)
       })
-      .strict(),
+      .strict()
   })
   .strict();

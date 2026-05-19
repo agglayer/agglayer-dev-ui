@@ -1,7 +1,8 @@
-import { expect, test } from '@playwright/test';
-import { BridgePage } from './models/bridge-page';
-import { shortenAddress } from '@/app/utils/address';
 import { E2E_WALLET_ADDRESS } from '@/app/constants/e2e';
+import { shortenAddress } from '@/app/utils/address';
+import { expect, test } from '@playwright/test';
+
+import { BridgePage } from './models/bridge-page';
 
 test('load the homepage', async ({ page }) => {
   const bridgePage = new BridgePage({ page });

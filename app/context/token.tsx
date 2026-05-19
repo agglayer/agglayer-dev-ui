@@ -1,10 +1,12 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { normalize } from '@/app/utils/format';
-import { useAppMode } from '@/app/context/appMode';
 import type { Token } from '@/app/types/token';
+import type { ReactNode } from 'react';
+
+import { useAppMode } from '@/app/context/appMode';
+import { normalize } from '@/app/utils/format';
 import { StorageUtils, STORAGE_KEYS } from '@/app/utils/storage';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 interface TokenContextValue {
   tokens: Token[];
@@ -45,7 +47,9 @@ export const TokenProvider = ({ children }: { children: ReactNode }) => {
 
   const removeCustomToken = useCallback((chainId: number, address: string) => {
     const keyToRemove = generateTokenKey(chainId, address);
-    setCustomTokens((prev) => prev.filter((token) => generateTokenKey(token.chainId, token.address) !== keyToRemove));
+    setCustomTokens((prev) =>
+      prev.filter((token) => generateTokenKey(token.chainId, token.address) !== keyToRemove)
+    );
   }, []);
 
   const clearCustomTokens = useCallback(() => {
@@ -63,7 +67,7 @@ export const TokenProvider = ({ children }: { children: ReactNode }) => {
         symbol: chain.nativeCurrency.symbol,
         name: chain.nativeCurrency.name,
         logoURI: chain.nativeCurrency.logoURI || chain.icon,
-        isNative: true,
+        isNative: true
       };
       map.set(generateTokenKey(token.chainId, token.address), token);
     }
@@ -80,12 +84,12 @@ export const TokenProvider = ({ children }: { children: ReactNode }) => {
       if (!chainId) return tokens;
       return tokens.filter((token) => token.chainId === chainId);
     },
-    [tokens],
+    [tokens]
   );
 
   const getToken = useCallback(
     (chainId: number, address: string) => tokenMap.get(generateTokenKey(chainId, address)),
-    [tokenMap],
+    [tokenMap]
   );
 
   const value = useMemo(
@@ -96,9 +100,17 @@ export const TokenProvider = ({ children }: { children: ReactNode }) => {
       customTokens,
       addCustomToken,
       removeCustomToken,
-      clearCustomTokens,
+      clearCustomTokens
     }),
-    [tokens, listTokens, getToken, customTokens, addCustomToken, removeCustomToken, clearCustomTokens],
+    [
+      tokens,
+      listTokens,
+      getToken,
+      customTokens,
+      addCustomToken,
+      removeCustomToken,
+      clearCustomTokens
+    ]
   );
 
   return <TokenContext.Provider value={value}>{children}</TokenContext.Provider>;

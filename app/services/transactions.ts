@@ -1,12 +1,16 @@
-import { APP_MODE_CONFIG } from '@/app/config';
-import { AppMode } from '@/app/types/appMode';
+import type { AppMode } from '@/app/types/appMode';
 import type { TransactionsResponse, TransactionFilters } from '@/app/types/transaction';
+
+import { APP_MODE_CONFIG } from '@/app/config';
 import { getProofApiBaseUrl } from '@/app/utils/appMode';
 
 const getEnvironmentNetworkIds = (mode: AppMode): number[] =>
   APP_MODE_CONFIG[mode].chains.map((chain) => chain.networkId);
 
-const formatAllowedNetworkIds = (requestedIds: number[] | undefined, allowedIds: number[]): string | undefined => {
+const formatAllowedNetworkIds = (
+  requestedIds: number[] | undefined,
+  allowedIds: number[]
+): string | undefined => {
   if (!requestedIds?.length) return undefined;
 
   const allowed = new Set(allowedIds);
@@ -19,12 +23,15 @@ const formatAllowedNetworkIds = (requestedIds: number[] | undefined, allowedIds:
 const buildTransactionsUrl = (params: { mode: AppMode; filters?: TransactionFilters }): string => {
   const url = new URL(`${getProofApiBaseUrl(params.mode)}/transactions`);
   const allowedNetworkIds = getEnvironmentNetworkIds(params.mode);
-  const fallbackNetworkIds = allowedNetworkIds.length > 0 ? [...new Set(allowedNetworkIds)].join(',') : undefined;
+  const fallbackNetworkIds =
+    allowedNetworkIds.length > 0 ? [...new Set(allowedNetworkIds)].join(',') : undefined;
 
   const sourceNetworkIds =
-    formatAllowedNetworkIds(params.filters?.sourceNetworkIds, allowedNetworkIds) ?? fallbackNetworkIds;
+    formatAllowedNetworkIds(params.filters?.sourceNetworkIds, allowedNetworkIds) ??
+    fallbackNetworkIds;
   const destinationNetworkIds =
-    formatAllowedNetworkIds(params.filters?.destinationNetworkIds, allowedNetworkIds) ?? fallbackNetworkIds;
+    formatAllowedNetworkIds(params.filters?.destinationNetworkIds, allowedNetworkIds) ??
+    fallbackNetworkIds;
 
   if (params.filters?.fromAddress) url.searchParams.set('fromAddress', params.filters.fromAddress);
   if (sourceNetworkIds) url.searchParams.set('sourceNetworkIds', sourceNetworkIds);
@@ -45,7 +52,7 @@ export const fetchTransactions = async (params: {
 }): Promise<TransactionsResponse> => {
   const url = buildTransactionsUrl({ mode: params.mode, filters: params.filters });
   const res = await fetch(url, {
-    headers: { accept: 'application/json' },
+    headers: { accept: 'application/json' }
   });
 
   if (!res.ok) {

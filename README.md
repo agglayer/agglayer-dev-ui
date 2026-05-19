@@ -7,7 +7,7 @@ The Agglayer Dev UI is a configurable, self-hosted bridging interface powered by
 1) Install dependencies:
 
 ```bash
-npm install
+pnpm install
 ```
 
 2) Configure the app:
@@ -24,21 +24,21 @@ cp .env.example .env.local
 3) Run the dev server:
 
 ```bash
-npm run dev
+pnpm run dev
 ```
 
 Open `http://localhost:3000`.
 
 ## Scripts
 
-- `npm run dev` — start dev server
-- `npm run build` — production build
-- `npm run start` — run production server
-- `npm run lint` — lint
-- `npm run validate:config` — validate `config.json`
-- `npm run typecheck` — TypeScript checks
-- `npm run test` — end-to-end tests (Playwright)
-- `npm run test:e2e` — end-to-end tests (Playwright)
+- `pnpm run dev` — start dev server
+- `pnpm run build` — production build
+- `pnpm run start` — run production server
+- `pnpm run lint` — lint
+- `pnpm run validate:config` — validate `config.json`
+- `pnpm run typecheck` — TypeScript checks
+- `pnpm run test` — unit tests (Vitest)
+- `pnpm run test:e2e` — end-to-end tests (Playwright)
 
 ## Testing
 

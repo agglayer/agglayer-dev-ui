@@ -1,21 +1,22 @@
 'use client';
 
-import { useMemo } from 'react';
-import { ExternalLink, Loader2 } from 'lucide-react';
-import { Modal } from '@/app/components/ui/modal';
-import { CopyText } from '@/app/components/copyText';
-import { useTokens } from '@/app/context/token';
-import { useTokenMetadata } from '@/app/hooks/useTokenMetadata';
 import type { ClaimStep, Transaction } from '@/app/types/transaction';
-import { shortenAddress } from '@/app/utils/address';
-import { formatTransactionAmount, isNativeToken } from '@/app/utils/transaction';
-import { getTokenLogoBySymbol } from '@/app/utils/tokens';
+
+import { CopyText } from '@/app/components/copyText';
+import { TransactionDetailsHeader } from '@/app/components/transactions/transactionDetailsModal/transactionDetailsHeader';
 import { Alert } from '@/app/components/ui/alert';
 import { Button } from '@/app/components/ui/button';
-import { formatDateTime } from '@/app/utils/date';
+import { Modal } from '@/app/components/ui/modal';
 import { useAppMode } from '@/app/context/appMode';
+import { useTokens } from '@/app/context/token';
+import { useTokenMetadata } from '@/app/hooks/useTokenMetadata';
+import { shortenAddress } from '@/app/utils/address';
 import { getChainByNetworkId } from '@/app/utils/chains';
-import { TransactionDetailsHeader } from '@/app/components/transactions/transactionDetailsModal/transactionDetailsHeader';
+import { formatDateTime } from '@/app/utils/date';
+import { getTokenLogoBySymbol } from '@/app/utils/tokens';
+import { formatTransactionAmount, isNativeToken } from '@/app/utils/transaction';
+import { ExternalLink, Loader2 } from 'lucide-react';
+import { useMemo } from 'react';
 
 interface TransactionDetailsModalProps {
   open: boolean;
@@ -34,7 +35,7 @@ export const TransactionDetailsModal = ({
   isDifferentAddress,
   onClaim,
   claimStep,
-  isAnyClaiming,
+  isAnyClaiming
 }: TransactionDetailsModalProps) => {
   const tx = transaction;
   const { getToken } = useTokens();
@@ -47,13 +48,13 @@ export const TransactionDetailsModal = ({
   const isNative = tx ? isNativeToken(tx.originTokenAddress) : false;
   const localToken = useMemo(
     () => (tx && originChain ? getToken(originChain.id, tx.originTokenAddress) : undefined),
-    [getToken, originChain, tx],
+    [getToken, originChain, tx]
   );
 
   const { data: tokenMetadata } = useTokenMetadata({
     chainId: originChain?.id || 0,
     tokenAddress: tx?.originTokenAddress,
-    enabled: Boolean(tx && originChain && !isNative && !localToken),
+    enabled: Boolean(tx && originChain && !isNative && !localToken)
   });
 
   const decimals = isNative
@@ -102,7 +103,11 @@ export const TransactionDetailsModal = ({
                   type="button"
                   onClick={(event) => {
                     event.stopPropagation();
-                    window.open(`${sourceChain.explorer}/tx/${tx.transactionHash}`, '_blank', 'noopener');
+                    window.open(
+                      `${sourceChain.explorer}/tx/${tx.transactionHash}`,
+                      '_blank',
+                      'noopener'
+                    );
                   }}
                   className="rounded p-1 cursor-pointer hover:bg-surface"
                 >
@@ -130,7 +135,11 @@ export const TransactionDetailsModal = ({
                       type="button"
                       onClick={(event) => {
                         event.stopPropagation();
-                        window.open(`${destChain.explorer}/tx/${tx.claimTransactionHash}`, '_blank', 'noopener');
+                        window.open(
+                          `${destChain.explorer}/tx/${tx.claimTransactionHash}`,
+                          '_blank',
+                          'noopener'
+                        );
                       }}
                       className="rounded p-1 hover:bg-surface"
                     >

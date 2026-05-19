@@ -1,9 +1,12 @@
 'use client';
 
-import { ReactNode, useEffect, useState } from 'react';
-import { Clock, AlertCircle } from 'lucide-react';
-import { getETAStatus, type ETAStatus } from '@/app/utils/date';
+import type { ETAStatus } from '@/app/utils/date';
+import type { ReactNode } from 'react';
+
 import { cn } from '@/app/utils/common';
+import { getETAStatus } from '@/app/utils/date';
+import { Clock, AlertCircle } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 interface TransactionETAProps {
   timestamp: number;
@@ -14,13 +17,13 @@ interface TransactionETAProps {
 const iconMap: Record<ETAStatus, ReactNode> = {
   pending: <Clock size={14} />,
   grace: <Clock size={14} />,
-  delayed: <AlertCircle size={14} />,
+  delayed: <AlertCircle size={14} />
 };
 
 const colorMap: Record<ETAStatus, string> = {
   pending: 'text-blue',
   grace: 'text-blue',
-  delayed: 'text-orange',
+  delayed: 'text-orange'
 };
 
 export const TransactionETA = ({ timestamp, etaMinutes, className }: TransactionETAProps) => {

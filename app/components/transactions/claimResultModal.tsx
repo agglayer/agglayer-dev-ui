@@ -1,10 +1,10 @@
 'use client';
 
-import Link from 'next/link';
-import { CircleCheck, CircleX, ExternalLink } from 'lucide-react';
-import { Modal } from '@/app/components/ui/modal';
 import { Button } from '@/app/components/ui/button';
+import { Modal } from '@/app/components/ui/modal';
 import { EXTERNAL_LINKS } from '@/app/config';
+import { CircleCheck, CircleX, ExternalLink } from 'lucide-react';
+import Link from 'next/link';
 
 type ClaimResultStatus = 'success' | 'error';
 
@@ -20,7 +20,11 @@ interface ClaimResultModalProps {
 const isUserRejection = (message?: string): boolean => {
   if (!message) return false;
   const lowerMessage = message.toLowerCase();
-  return lowerMessage.includes('rejected') || lowerMessage.includes('denied') || lowerMessage.includes('user refused');
+  return (
+    lowerMessage.includes('rejected') ||
+    lowerMessage.includes('denied') ||
+    lowerMessage.includes('user refused')
+  );
 };
 
 export const ClaimResultModal = ({
@@ -29,7 +33,7 @@ export const ClaimResultModal = ({
   status,
   claimTxHash,
   explorerUrl,
-  errorMessage,
+  errorMessage
 }: ClaimResultModalProps) => {
   if (!status) return null;
 
@@ -45,7 +49,12 @@ export const ClaimResultModal = ({
     return (
       <>
         Something went wrong. Please try again or{' '}
-        <Link href={supportUrl} target="_blank" rel="noopener noreferrer" className="text-blue hover:underline">
+        <Link
+          href={supportUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue hover:underline"
+        >
           contact support
         </Link>
         .

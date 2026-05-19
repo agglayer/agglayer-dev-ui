@@ -1,6 +1,7 @@
-import { privateKeyToAccount } from 'viem/accounts';
-import { isHexPrivateKey, normalizeEnvValue } from '@/app/utils/e2eEnv';
 import type { Address, Hex } from 'viem';
+
+import { isHexPrivateKey, normalizeEnvValue } from '@/app/utils/e2eEnv';
+import { privateKeyToAccount } from 'viem/accounts';
 
 export const IS_E2E_ENABLED = process.env.NEXT_PUBLIC_E2E_ENABLED === 'true';
 
@@ -8,7 +9,7 @@ const resolvedPrivateKey = normalizeEnvValue(process.env.NEXT_PUBLIC_E2E_PRIVATE
 
 if (IS_E2E_ENABLED && !isHexPrivateKey(resolvedPrivateKey)) {
   throw new Error(
-    'E2E private key is invalid. NEXT_PUBLIC_E2E_PRIVATE_KEY must be a valid private key.',
+    'E2E private key is invalid. NEXT_PUBLIC_E2E_PRIVATE_KEY must be a valid private key.'
   );
 }
 

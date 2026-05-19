@@ -1,6 +1,8 @@
 'use client';
 
-import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
+
+import { createContext, useCallback, useContext, useState } from 'react';
 
 type RefetchContextValue = {
   aggressiveRefetch: boolean;
@@ -22,7 +24,9 @@ export const RefetchProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   return (
-    <RefetchContext.Provider value={{ aggressiveRefetch, triggerAggressiveRefetch, clearAggressiveRefetch }}>
+    <RefetchContext.Provider
+      value={{ aggressiveRefetch, triggerAggressiveRefetch, clearAggressiveRefetch }}
+    >
       {children}
     </RefetchContext.Provider>
   );

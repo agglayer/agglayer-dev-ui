@@ -1,20 +1,21 @@
 'use client';
 
-import { ArrowRight, ExternalLink, Loader2 } from 'lucide-react';
+import type { ClaimStep, Transaction } from '@/app/types/transaction';
+
+import { CopyText } from '@/app/components/copyText';
+import { TransactionETA } from '@/app/components/transactions/transactionEta';
+import { TransactionStatusBadge } from '@/app/components/transactions/transactionStatusBadge';
 import { BadgeImageFallback } from '@/app/components/ui/badgeImageFallback';
 import { Button } from '@/app/components/ui/button';
-import { CopyText } from '@/app/components/copyText';
-import { TransactionStatusBadge } from '@/app/components/transactions/transactionStatusBadge';
-import { TransactionETA } from '@/app/components/transactions/transactionEta';
-import { useTokenMetadata } from '@/app/hooks/useTokenMetadata';
-import { getChainByNetworkId } from '@/app/utils/chains';
+import { useAppMode } from '@/app/context/appMode';
 import { useTokens } from '@/app/context/token';
+import { useTokenMetadata } from '@/app/hooks/useTokenMetadata';
 import { shortenAddress } from '@/app/utils/address';
-import { formatTransactionAmount, isNativeToken } from '@/app/utils/transaction';
-import type { ClaimStep, Transaction } from '@/app/types/transaction';
+import { getChainByNetworkId } from '@/app/utils/chains';
 import { cn } from '@/app/utils/common';
 import { getTokenLogoBySymbol } from '@/app/utils/tokens';
-import { useAppMode } from '@/app/context/appMode';
+import { formatTransactionAmount, isNativeToken } from '@/app/utils/transaction';
+import { ArrowRight, ExternalLink, Loader2 } from 'lucide-react';
 
 interface TransactionListItemProps {
   transaction: Transaction;
@@ -29,7 +30,7 @@ export const TransactionListItem = ({
   onClaim,
   onSelect,
   claimStep,
-  isAnyClaiming,
+  isAnyClaiming
 }: TransactionListItemProps) => {
   const { chains } = useAppMode();
   const sourceChain = getChainByNetworkId(chains, transaction.sourceNetwork);
@@ -44,13 +45,15 @@ export const TransactionListItem = ({
 
   // Look up token in the local token list first
   const { getToken } = useTokens();
-  const localToken = originChain ? getToken(originChain.id, transaction.originTokenAddress) : undefined;
+  const localToken = originChain
+    ? getToken(originChain.id, transaction.originTokenAddress)
+    : undefined;
 
   // Only fetch from API if not found locally and not native
   const { data: tokenMetadata } = useTokenMetadata({
     chainId: originChain?.id || 0,
     tokenAddress: transaction.originTokenAddress,
-    enabled: !isNative && !localToken && Boolean(transaction.originTokenAddress && originChain),
+    enabled: !isNative && !localToken && Boolean(transaction.originTokenAddress && originChain)
   });
 
   // Priority: native currency > local token > API metadata > fallbacks
@@ -70,7 +73,7 @@ export const TransactionListItem = ({
     <div
       onClick={() => onSelect?.(transaction)}
       className={cn(
-        'rounded-2xl border border-border bg-surface shadow-sm transition hover:border-blue hover:shadow-md cursor-pointer',
+        'rounded-2xl border border-border bg-surface shadow-sm transition hover:border-blue hover:shadow-md cursor-pointer'
       )}
     >
       <div className="p-3 space-y-2">
@@ -86,7 +89,9 @@ export const TransactionListItem = ({
         </div>
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            {tokenLogo && <BadgeImageFallback src={tokenLogo} size="md" fallbackText={tokenSymbol} />}
+            {tokenLogo && (
+              <BadgeImageFallback src={tokenLogo} size="md" fallbackText={tokenSymbol} />
+            )}
             <span className="text-2xl font-bold text-black">
               {formattedAmount} {tokenSymbol}
             </span>
@@ -96,7 +101,9 @@ export const TransactionListItem = ({
           <div className="flex items-center justify-between rounded-lg bg-surface-muted px-3 py-2 text-sm text-grey w-full md:w-1/2">
             <div className="flex items-center gap-1">
               <span className="uppercase font-medium text-grey">Receiver:</span>
-              <span className="font-mono text-black">{shortenAddress(transaction.receiverAddress, 6)}</span>
+              <span className="font-mono text-black">
+                {shortenAddress(transaction.receiverAddress, 6)}
+              </span>
             </div>
             <div className="flex items-center">
               <CopyText
@@ -109,7 +116,10 @@ export const TransactionListItem = ({
                   type="button"
                   onClick={(event) => {
                     event.stopPropagation();
-                    window.open(`${destChain.explorer}/address/${transaction.receiverAddress}`, '_blank');
+                    window.open(
+                      `${destChain.explorer}/address/${transaction.receiverAddress}`,
+                      '_blank'
+                    );
                   }}
                   className="rounded p-1 hover:bg-surface cursor-pointer"
                 >
@@ -121,7 +131,9 @@ export const TransactionListItem = ({
           <div className="flex items-center justify-between rounded-lg bg-surface-muted px-3 py-2 text-sm text-grey w-full md:w-1/2">
             <div className="flex items-center gap-1">
               <span className="uppercase font-medium text-grey">Bridge tx:</span>
-              <span className="font-mono text-black">{shortenAddress(transaction.transactionHash, 6)}</span>
+              <span className="font-mono text-black">
+                {shortenAddress(transaction.transactionHash, 6)}
+              </span>
             </div>
             <div className="flex items-center">
               <CopyText
@@ -134,7 +146,10 @@ export const TransactionListItem = ({
                   type="button"
                   onClick={(event) => {
                     event.stopPropagation();
-                    window.open(`${sourceChain.explorer}/tx/${transaction.transactionHash}`, '_blank');
+                    window.open(
+                      `${sourceChain.explorer}/tx/${transaction.transactionHash}`,
+                      '_blank'
+                    );
                   }}
                   className="rounded p-1 hover:bg-surface cursor-pointer"
                 >

@@ -1,10 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useRef } from 'react';
-import { type InfiniteData, useInfiniteQuery } from '@tanstack/react-query';
-import { fetchTransactions } from '@/app/services/transactions';
 import type { TransactionFilters, TransactionsResponse } from '@/app/types/transaction';
+import type { InfiniteData } from '@tanstack/react-query';
+
 import { useAppMode } from '@/app/context/appMode';
+import { fetchTransactions } from '@/app/services/transactions';
+import { useInfiniteQuery } from '@tanstack/react-query';
+import { useEffect, useMemo, useRef } from 'react';
 
 const REFETCH_INTERVALS = [500, 1000, 2000, 3000];
 export const TOTAL_REFETCH_TIME = REFETCH_INTERVALS.reduce((acc, curr) => acc + curr, 0);
@@ -45,8 +47,8 @@ export const useTransactions = (params: {
         mode,
         filters: {
           ...filters,
-          startAfter: pageParam,
-        },
+          startAfter: pageParam
+        }
       });
       // only increment fetch count on initial load pages not on subsequent pages
       if (!pageParam && aggressiveRefetch) {
@@ -65,6 +67,6 @@ export const useTransactions = (params: {
       if (count >= REFETCH_INTERVALS.length) return false;
 
       return REFETCH_INTERVALS[count];
-    },
+    }
   });
 };

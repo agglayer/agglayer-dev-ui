@@ -1,0 +1,18 @@
+blockExoticSubdeps: true
+minimumReleaseAge: 1440
+minimumReleaseAgeExclude:
+  - '@polygonlabs/*'
+  - '@maticnetwork/*'
+  - '@agglayer/*'
+  - '@0xsequence/*'
+  - '@0xtrails/*'
+overrides:
+  '@wagmi/connectors': ^5.9.9
+trustPolicy: no-downgrade
+trustPolicyExclude:
+  - 'undici-types@6.21.0'
+  - 'eslint-import-resolver-typescript@3.10.1'
+  - 'semver@6.3.1'
+  - '@noble/curves@1.8.0'
+  - '@noble/hashes@1.7.0'
+  - 'slow-redact@0.3.2'

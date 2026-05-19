@@ -1,13 +1,18 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
-import { fetchTransactions } from '@/app/services/transactions';
 import type { TransactionStatus } from '@/app/types/transaction';
+
 import { useAppMode } from '@/app/context/appMode';
+import { fetchTransactions } from '@/app/services/transactions';
+import { useQuery } from '@tanstack/react-query';
 
 const READY_STATUS: TransactionStatus = 'READY_TO_CLAIM';
 
-export const useReadyToClaimCount = (params: { chainId?: number; address?: string; enabled?: boolean }) => {
+export const useReadyToClaimCount = (params: {
+  chainId?: number;
+  address?: string;
+  enabled?: boolean;
+}) => {
   const { chainId, address, enabled = true } = params;
   const { mode } = useAppMode();
 
@@ -21,11 +26,11 @@ export const useReadyToClaimCount = (params: { chainId?: number; address?: strin
         filters: {
           fromAddress: address,
           status: READY_STATUS,
-          limit: 1,
-        },
+          limit: 1
+        }
       });
       return response.pagination.total ?? 0;
     },
-    staleTime: 30 * 1000,
+    staleTime: 30 * 1000
   });
 };

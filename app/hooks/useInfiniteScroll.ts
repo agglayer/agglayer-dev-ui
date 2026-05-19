@@ -1,4 +1,5 @@
 import type { RefObject } from 'react';
+
 import { useEffect, useRef } from 'react';
 
 interface UseInfiniteScrollOptions {
@@ -16,7 +17,7 @@ export const useInfiniteScroll = ({
   enabled = true,
   threshold = 0,
   rootMargin = '0px',
-  rootRef,
+  rootRef
 }: UseInfiniteScrollOptions) => {
   const enabledRef = useRef(enabled);
 
@@ -42,8 +43,8 @@ export const useInfiniteScroll = ({
       {
         root,
         threshold,
-        rootMargin,
-      },
+        rootMargin
+      }
     );
 
     observer.observe(sentinel);

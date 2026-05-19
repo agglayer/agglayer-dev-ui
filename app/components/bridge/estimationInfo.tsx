@@ -1,8 +1,8 @@
 'use client';
 
-import { Clock, Coins } from 'lucide-react';
 import { cn } from '@/app/utils/common';
 import { formatDuration } from '@/app/utils/date';
+import { Clock, Coins } from 'lucide-react';
 
 interface EstimationInfoProps {
   etaMinutes?: number;
@@ -12,7 +12,13 @@ interface EstimationInfoProps {
   className?: string;
 }
 
-export const EstimationInfo = ({ etaMinutes, fee, nativeSymbol, isLoading, className }: EstimationInfoProps) => {
+export const EstimationInfo = ({
+  etaMinutes,
+  fee,
+  nativeSymbol,
+  isLoading,
+  className
+}: EstimationInfoProps) => {
   const hasEta = etaMinutes !== undefined;
   const hasFee = Boolean(fee) || Boolean(isLoading);
   const feePrefix = fee?.startsWith('<') ? '' : '~';
@@ -31,7 +37,9 @@ export const EstimationInfo = ({ etaMinutes, fee, nativeSymbol, isLoading, class
       {hasFee && (
         <div className="flex items-center gap-1.5">
           <Coins size={14} className="text-grey" />
-          <span>{isLoading ? 'Calculating...' : `Est. fee: ${feePrefix}${fee} ${nativeSymbol}`}</span>
+          <span>
+            {isLoading ? 'Calculating...' : `Est. fee: ${feePrefix}${fee} ${nativeSymbol}`}
+          </span>
         </div>
       )}
     </div>

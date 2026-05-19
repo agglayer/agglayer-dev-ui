@@ -1,12 +1,12 @@
 'use client';
 
+import { CopyText } from '@/app/components/copyText';
+import { Button } from '@/app/components/ui/button';
+import { WalletIcon } from '@/app/components/walletIcon';
 import { useWallet } from '@/app/context/walletContext';
 import { shortenAddress } from '@/app/utils/address';
-import { CopyText } from '@/app/components/copyText';
-import { WalletIcon } from '@/app/components/walletIcon';
-import { useState, useRef, useEffect } from 'react';
 import { ChevronDown } from 'lucide-react';
-import { Button } from '@/app/components/ui/button';
+import { useState, useRef, useEffect } from 'react';
 
 export const ConnectButton = () => {
   const { connect, address, status, disconnect, walletIcon } = useWallet();
@@ -46,7 +46,9 @@ export const ConnectButton = () => {
           <div className="absolute top-full right-0 mt-2 w-64 bg-surface border border-border rounded-xl  z-50">
             <div className="p-4">
               <div className="flex items-center justify-between gap-2 mb-3">
-                <div className="text-sm font-mono text-black break-all">{shortenAddress(address, 8)}</div>
+                <div className="text-sm font-mono text-black break-all">
+                  {shortenAddress(address, 8)}
+                </div>
                 <CopyText textToCopy={address} />
               </div>
               <button

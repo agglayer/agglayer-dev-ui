@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
-import { Modal } from '@/app/components/ui/modal';
 import type { Token } from '@/app/types/token';
+
 import { TokenSelectorListView } from '@/app/components/bridge/tokenSelectorListView';
 import { ManageTokensView } from '@/app/components/bridge/tokenSelectorManageView';
+import { Modal } from '@/app/components/ui/modal';
 import { useTokens } from '@/app/context/token';
+import { useState } from 'react';
 
 interface TokenSelectorProps {
   open: boolean;
@@ -16,7 +17,14 @@ interface TokenSelectorProps {
   chainName?: string;
 }
 
-export const TokenSelector = ({ open, onClose, selectedToken, onSelect, chainId, chainName }: TokenSelectorProps) => {
+export const TokenSelector = ({
+  open,
+  onClose,
+  selectedToken,
+  onSelect,
+  chainId,
+  chainName
+}: TokenSelectorProps) => {
   const { listTokens, customTokens, addCustomToken, removeCustomToken } = useTokens();
   const [search, setSearch] = useState('');
   const [customTokenAddress, setCustomTokenAddress] = useState('');

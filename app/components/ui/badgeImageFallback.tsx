@@ -1,6 +1,6 @@
+import { cn } from '@/app/utils/common';
 import Image from 'next/image';
 import { useState } from 'react';
-import { cn } from '@/app/utils/common';
 
 type Size = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 
@@ -16,7 +16,7 @@ const sizeClassMap: Record<Size, string> = {
   sm: 'size-6',
   md: 'size-8',
   lg: 'size-10',
-  xl: 'size-10',
+  xl: 'size-10'
 };
 
 const textSizeMap: Record<Size, string> = {
@@ -24,14 +24,14 @@ const textSizeMap: Record<Size, string> = {
   sm: 'text-xs',
   md: 'text-sm',
   lg: 'text-sm',
-  xl: 'text-base',
+  xl: 'text-base'
 };
 
 export const BadgeImageFallback: React.FC<BadgeImageFallbackProps> = ({
   src,
   size = 'md',
   className,
-  fallbackText,
+  fallbackText
 }) => {
   const [imageError, setImageError] = useState(false);
 
@@ -46,7 +46,7 @@ export const BadgeImageFallback: React.FC<BadgeImageFallbackProps> = ({
         className={cn(
           classes,
           'flex items-center justify-center bg-blue-subtle text-black font-semibold',
-          textSizeMap[size],
+          textSizeMap[size]
         )}
         aria-label={fallbackText}
       >

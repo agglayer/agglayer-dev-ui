@@ -1,11 +1,11 @@
 'use client';
 
-import { useMemo } from 'react';
-import { formatUnits } from 'viem';
-import { useQuery } from '@tanstack/react-query';
-import { usePublicClient } from 'wagmi';
 import { GAS_VALUES } from '@/app/constants/gasValues';
 import { formatTokenAmount } from '@/app/utils/format';
+import { useQuery } from '@tanstack/react-query';
+import { useMemo } from 'react';
+import { formatUnits } from 'viem';
+import { usePublicClient } from 'wagmi';
 
 interface UseGasEstimateParams {
   chainId: number;
@@ -33,7 +33,7 @@ export const useGasEstimate = (params: UseGasEstimateParams) => {
     queryFn: async () => {
       if (!publicClient) throw new Error('MISSING_CLIENT');
       return publicClient.getGasPrice();
-    },
+    }
   });
 
   const isL1 = networkId === 0;
@@ -66,6 +66,6 @@ export const useGasEstimate = (params: UseGasEstimateParams) => {
     feeWei: feeEstimate.feeWei,
     feeFormatted: feeEstimate.feeFormatted,
     isLoading,
-    gasPrice,
+    gasPrice
   };
 };

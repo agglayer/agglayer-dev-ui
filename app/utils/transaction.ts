@@ -1,10 +1,14 @@
-import { type Hex, isHex } from 'viem';
-import type { ClaimAssetParams, TransactionParams } from '@agglayer/sdk';
-import { formatTokenAmount, toBigInt } from './format';
-import { fromWei } from '@/app/utils/bigNumber';
-import { isValidEthereumAddress } from '@/app/utils/address';
-import { Transaction } from '@/app/types/transaction';
 import type { ClaimProof } from '@/app/services/claimProof';
+import type { Transaction } from '@/app/types/transaction';
+import type { Hex } from 'viem';
+
+import { isValidEthereumAddress } from '@/app/utils/address';
+import { fromWei } from '@/app/utils/bigNumber';
+import { isHex } from 'viem';
+
+import type { ClaimAssetParams, TransactionParams } from '@agglayer/sdk';
+
+import { formatTokenAmount, toBigInt } from './format';
 
 export const formatTransactionAmount = (amount: string, decimals: number): string => {
   try {
@@ -29,7 +33,7 @@ export const mapTransactionRequest = (params: TransactionParams) => {
   return {
     to,
     data,
-    value: toBigInt(params.value),
+    value: toBigInt(params.value)
   };
 };
 
@@ -46,7 +50,10 @@ export const computeGlobalIndex = (depositCount: number, sourceNetworkId: number
     ? BigInt(depositCount) + GLOBAL_INDEX_MAINNET_FLAG
     : BigInt(depositCount) + BigInt(sourceNetworkId - 1) * GLOBAL_INDEX_NETWORK_OFFSET;
 
-export const buildClaimAssetParams = (params: { transaction: Transaction; proof: ClaimProof }): ClaimAssetParams => {
+export const buildClaimAssetParams = (params: {
+  transaction: Transaction;
+  proof: ClaimProof;
+}): ClaimAssetParams => {
   const { transaction, proof } = params;
   const metadata = isHex(transaction.metadata) ? transaction.metadata : ZERO_HEX;
 
@@ -61,6 +68,6 @@ export const buildClaimAssetParams = (params: { transaction: Transaction; proof:
     destinationNetwork: transaction.destinationNetwork,
     destinationAddress: transaction.receiverAddress,
     amount: BigInt(transaction.amount),
-    metadata,
+    metadata
   };
 };

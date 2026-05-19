@@ -1,5 +1,6 @@
-import { cn } from '@/app/utils/common';
 import type { LucideIcon } from 'lucide-react';
+
+import { cn } from '@/app/utils/common';
 import { TriangleAlert, Info } from 'lucide-react';
 
 interface AlertProps {
@@ -13,13 +14,13 @@ export const Alert: React.FC<AlertProps> = ({ title, message, type = 'warning', 
   const typeToClasses: Record<string, string> = {
     warning: 'bg-orange-light text-black',
     danger: 'bg-red-light text-black',
-    info: 'bg-grey-light text-black',
+    info: 'bg-grey-light text-black'
   };
 
   const typeToIcon: Record<string, LucideIcon> = {
     warning: TriangleAlert,
     danger: TriangleAlert,
-    info: Info,
+    info: Info
   };
 
   const Icon = typeToIcon[type];

@@ -1,19 +1,19 @@
 'use client';
 
-import { useCallback, useState } from 'react';
-import { usePathname } from 'next/navigation';
-import { Loader2, Menu } from 'lucide-react';
-import { ROUTES } from '@/app/constants/routes';
 import { ConnectButton } from '@/app/components/connectButton';
-import { Logo } from '@/app/components/ui/logo';
-import { useAppMode } from '@/app/context/appMode';
-import { useReadyToClaimCount } from '@/app/hooks/useReadyToClaimCount';
-import { setTransactionInitialStatus } from '@/app/components/transactions/intialStatus';
+import { NAV_ITEMS } from '@/app/components/header/constants';
 import { HeaderNavLink } from '@/app/components/header/headerNavLink';
 import { HeaderPopover } from '@/app/components/header/headerPopover';
 import { MobileMenu } from '@/app/components/header/mobileMenu';
-import { NAV_ITEMS } from '@/app/components/header/constants';
+import { setTransactionInitialStatus } from '@/app/components/transactions/intialStatus';
+import { Logo } from '@/app/components/ui/logo';
+import { ROUTES } from '@/app/constants/routes';
+import { useAppMode } from '@/app/context/appMode';
 import { useWallet } from '@/app/context/walletContext';
+import { useReadyToClaimCount } from '@/app/hooks/useReadyToClaimCount';
+import { Loader2, Menu } from 'lucide-react';
+import { usePathname } from 'next/navigation';
+import { useCallback, useState } from 'react';
 
 export const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -28,7 +28,7 @@ export const Header = () => {
   const { data: readyCount } = useReadyToClaimCount({
     chainId: effectiveChainId,
     address,
-    enabled: Boolean(address),
+    enabled: Boolean(address)
   });
 
   const readyCountValue = typeof readyCount === 'number' ? readyCount : 0;
@@ -43,7 +43,7 @@ export const Header = () => {
       }
       closeMenu();
     },
-    [closeMenu, hasReadyCount],
+    [closeMenu, hasReadyCount]
   );
 
   const readyCountBadge = hasReadyCount ? (
@@ -72,7 +72,10 @@ export const Header = () => {
                 </HeaderNavLink>
               ))}
             </nav>
-            <div className="ml-auto hidden md:flex items-center gap-2" data-test-id="header-desktop">
+            <div
+              className="ml-auto hidden md:flex items-center gap-2"
+              data-test-id="header-desktop"
+            >
               <ConnectButton />
               <HeaderPopover hasModeOptions={hasModeOptions} />
             </div>
