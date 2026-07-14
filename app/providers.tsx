@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-import { AggLayerSDKProvider } from '@/app/context/aggLayerSdk';
+import { AggkitAggregatorProvider, AggLayerSDKProvider } from '@/app/context/aggLayerSdk';
 import { AppModeProvider } from '@/app/context/appMode';
 import { RefetchProvider } from '@/app/context/refetch';
 import { TokenProvider } from '@/app/context/token';
@@ -11,9 +11,11 @@ export const Providers = ({ children }: { children: ReactNode }) => {
     <AppModeProvider>
       <WalletProvider>
         <AggLayerSDKProvider>
-          <RefetchProvider>
-            <TokenProvider>{children}</TokenProvider>
-          </RefetchProvider>
+          <AggkitAggregatorProvider>
+            <RefetchProvider>
+              <TokenProvider>{children}</TokenProvider>
+            </RefetchProvider>
+          </AggkitAggregatorProvider>
         </AggLayerSDKProvider>
       </WalletProvider>
     </AppModeProvider>

@@ -6,5 +6,5 @@ export default defineConfig([
   ...recommended({ globals: 'browser' }),
   ...typescript({ tsconfigRootDir: import.meta.dirname }),
   ...frontend(),
-  globalIgnores(['.next/**', 'out/**', 'build/**', 'dist/**', 'next-env.d.ts'])
+  globalIgnores(['.next/**', '.next-partial-failure/**', 'out/**', 'build/**', 'dist/**', 'next-env.d.ts'])
 ]);

@@ -72,6 +72,7 @@ export const TransactionListItem = ({
   return (
     <div
       onClick={() => onSelect?.(transaction)}
+      data-test-id={`transaction-row-${transaction.transactionHash}`}
       className={cn(
         'rounded-2xl border border-border bg-surface shadow-sm transition hover:border-blue hover:shadow-md cursor-pointer'
       )}

@@ -1,6 +1,7 @@
 import type { Token } from '@/app/types/token';
 import type { Locator, Page } from '@playwright/test';
 
+import { E2E_BRIDGE_SUCCESS_TIMEOUT_MS } from '@/app/constants/e2e';
 import { STORAGE_KEYS } from '@/app/utils/storage';
 import { expect } from '@playwright/test';
 
@@ -19,6 +20,7 @@ class BridgePage {
   readonly bridgeSuccessView: Locator;
   readonly bridgeSuccessExplorerLink: Locator;
   readonly bridgeSuccessCta: Locator;
+  readonly transactionsRefreshButton: Locator;
 
   constructor({ page }: { page: Page }) {
     this.page = page;
@@ -35,6 +37,7 @@ class BridgePage {
     this.bridgeSuccessView = page.getByTestId('bridge-success-view');
     this.bridgeSuccessExplorerLink = page.getByTestId('bridge-success-explorer-link');
     this.bridgeSuccessCta = page.getByTestId('bridge-success-go-to-transactions');
+    this.transactionsRefreshButton = page.getByTestId('transactions-refresh');
   }
 
   async navigate(): Promise<void> {
@@ -63,9 +66,9 @@ class BridgePage {
     await this.transactionModal.waitFor();
   }
 
-  async waitForBridgeSuccess(): Promise<void> {
+  async waitForBridgeSuccess(timeoutMs: number = E2E_BRIDGE_SUCCESS_TIMEOUT_MS): Promise<void> {
     await expect(this.transactionModalHeadline).toContainText('Transaction successful', {
-      timeout: 120_000
+      timeout: timeoutMs
     });
     await this.bridgeSuccessView.waitFor();
   }
@@ -119,6 +122,14 @@ class BridgePage {
 
   getBridgeStep(step: 'approve' | 'bridge') {
     return this.page.getByTestId(`bridge-step-${step}`);
+  }
+
+  getTransactionRow(transactionHash: string) {
+    return this.page.getByTestId(`transaction-row-${transactionHash}`);
+  }
+
+  async refreshActivity(): Promise<void> {
+    await this.transactionsRefreshButton.click();
   }
 }
 

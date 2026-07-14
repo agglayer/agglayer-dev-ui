@@ -8,6 +8,12 @@ minimumReleaseAgeExclude:
   - '@0xtrails/*'
 overrides:
   '@wagmi/connectors': ^5.9.9
+  # feat/aggkit-backend: link the local SDK build (branch feat/aggkit-bridge-client
+  # in ../sdk) instead of the last npm-published beta. Not a real pnpm workspace
+  # (sdk is a sibling repo, not a package.json `packages:` entry) — see
+  # handoff-sdk.md §4 for the link rationale. Revert to a semver range once the
+  # aggkit SDK surface ships to npm (tracked for S15).
+  '@agglayer/sdk': 'file:../sdk'
 trustPolicy: no-downgrade
 trustPolicyExclude:
   - 'undici-types@6.21.0'

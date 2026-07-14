@@ -23,7 +23,9 @@ export type AppChain = {
 type BaseModeConfig = {
   label: string;
   bridgeAddress: string;
-  proofApiUrl: string;
+  // Map of L2 networkId -> aggkit REST base URL (no `/bridge/v1` suffix).
+  // May be empty for a mode with no aggkit backend configured yet.
+  aggkitBridgeApis: Record<number, string>;
 };
 
 export type DisabledAppModeConfig = BaseModeConfig & {

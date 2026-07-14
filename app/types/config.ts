@@ -1,5 +1,6 @@
 import type { AppChain } from '@/app/types/appMode';
 import type {
+  aggkitBridgeApisSchema,
   jsonAppModeConfigSchema,
   jsonChainConfigSchema,
   jsonConfigSchema,
@@ -27,3 +28,4 @@ export type JsonNativeCurrencyConfig = z.infer<typeof JsonNativeCurrencyConfigSc
 export type JsonChainConfig = z.infer<typeof jsonChainConfigSchema>;
 export type JsonAppModeConfig = z.infer<typeof jsonAppModeConfigSchema>;
 export type JsonConfig = z.infer<typeof jsonConfigSchema>;
+export type JsonAggkitBridgeApis = z.infer<typeof aggkitBridgeApisSchema>;

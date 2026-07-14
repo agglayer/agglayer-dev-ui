@@ -19,6 +19,9 @@
 
 # next.js
 /.next/
+# Alternate dev distDir used by the partial-failure E2E project's dev server
+# (see playwright.config.ts / next.config.ts NEXT_DIST_DIR).
+/.next-partial-failure/
 /out/
 
 # production

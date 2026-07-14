@@ -3,7 +3,7 @@
 import { Button } from '@/app/components/ui/button';
 import { Modal } from '@/app/components/ui/modal';
 import { EXTERNAL_LINKS } from '@/app/config';
-import { CircleCheck, CircleX, ExternalLink } from 'lucide-react';
+import { CircleCheck, CircleX, ExternalLink, Info } from 'lucide-react';
 import Link from 'next/link';
 
 type ClaimResultStatus = 'success' | 'error';
@@ -27,6 +27,17 @@ const isUserRejection = (message?: string): boolean => {
   );
 };
 
+// useClaimExecution sets this exact message when its own pre-flight
+// `bridge.isClaimed()` check (not a thrown exception) finds the deposit
+// already settled -- e.g. raced by an external autoclaimer between the row
+// rendering "Ready to claim" and the user's click. Unlike a thrown
+// error's `.message` (RPC/viem internals, not meant for end users), this
+// string is hand-authored specifically to be user-facing (see
+// useClaimExecution.ts), so it's safe -- and more reassuring than the
+// generic "contact support" copy -- to show verbatim instead of masking it.
+const isAlreadyClaimed = (message?: string): boolean =>
+  message === 'This deposit has already been claimed';
+
 export const ClaimResultModal = ({
   open,
   onClose,
@@ -39,11 +50,13 @@ export const ClaimResultModal = ({
 
   const txExplorerUrl = explorerUrl && claimTxHash ? `${explorerUrl}/tx/${claimTxHash}` : undefined;
   const userRejected = isUserRejection(errorMessage);
+  const alreadyClaimed = isAlreadyClaimed(errorMessage);
   const supportUrl = EXTERNAL_LINKS.CONTACT_SUPPORT;
   const hasSupportUrl = !!supportUrl?.trim();
 
   const getErrorMessage = () => {
     if (userRejected) return 'User rejected the request.';
+    if (alreadyClaimed) return 'Your funds have already arrived at the destination address.';
     if (!hasSupportUrl) return 'Something went wrong. Please try again.';
 
     return (
@@ -73,7 +86,16 @@ export const ClaimResultModal = ({
             </div>
           </>
         )}
-        {status === 'error' && (
+        {status === 'error' && alreadyClaimed && (
+          <>
+            <Info aria-hidden className="size-12 text-blue" />
+            <div className="space-y-2">
+              <h2 className="text-xl font-bold">Already claimed</h2>
+              <p className="text-sm text-grey">{getErrorMessage()}</p>
+            </div>
+          </>
+        )}
+        {status === 'error' && !alreadyClaimed && (
           <>
             <CircleX aria-hidden className="size-12 text-red" />
             <div className="space-y-2">

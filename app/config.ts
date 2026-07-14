@@ -1,32 +1,51 @@
 import type { AppChain, AppMode, AppModeConfig, EnabledAppModeConfig } from '@/app/types/appMode';
-import type { ChainEntry } from '@/app/types/config';
+import type { ChainEntry, JsonAggkitBridgeApis } from '@/app/types/config';
 import type { Chain } from 'wagmi/chains';
 
-import {
-  buildWagmiChain,
-  createChainEntry,
-  toNonEmptyChainArray,
-  toProofApiUrl
-} from '@/app/utils/config';
+import { buildWagmiChain, createChainEntry, toNonEmptyChainArray } from '@/app/utils/config';
 import rawJsonConfig from '@/config.json';
 import { APP_MODES } from '@/config/appModes.mjs';
+import { aggkitBridgeApisSchema } from '@/config/configSchema.mjs';
 import { parseConfigOrThrow } from '@/config/configValidator.mjs';
 
 const configJson = parseConfigOrThrow(rawJsonConfig, { sourceName: 'config.json' });
 
-const resolveBridgeHubApiBaseUrl = (): string => {
-  const envOverride = process.env.NEXT_PUBLIC_BRIDGE_HUB_API?.trim();
-  const configuredBaseUrl =
-    envOverride && envOverride.length > 0 ? envOverride : configJson.bridgeHubApiBaseUrl;
+// Devnet's aggkit REST port is ephemeral per enclave recreate (kurtosis assigns
+// it at runtime); this env var lets a bring-up script inject the live proxy
+// URL without editing config.json. Keyed by L2 networkId, same shape as
+// config.json's per-mode `aggkitBridgeApis` (design.md §6.2).
+const resolveAggkitBridgeApisOverride = (): JsonAggkitBridgeApis | undefined => {
+  const envOverride = process.env.NEXT_PUBLIC_AGGKIT_BRIDGE_APIS?.trim();
+  if (!envOverride) return undefined;
 
+  let parsedJson: unknown;
   try {
-    return new URL(configuredBaseUrl).toString().replace(/\/+$/, '');
+    parsedJson = JSON.parse(envOverride);
   } catch {
-    throw new Error('APP_CONFIG_INVALID: NEXT_PUBLIC_BRIDGE_HUB_API must be a valid URL');
+    throw new Error('APP_CONFIG_INVALID: NEXT_PUBLIC_AGGKIT_BRIDGE_APIS must be valid JSON');
   }
+
+  const parsed = aggkitBridgeApisSchema.safeParse(parsedJson);
+  if (!parsed.success) {
+    throw new Error(
+      'APP_CONFIG_INVALID: NEXT_PUBLIC_AGGKIT_BRIDGE_APIS must be a JSON object of ' +
+        'networkId -> url'
+    );
+  }
+
+  return parsed.data;
 };
 
-const bridgeHubApiBaseUrl = resolveBridgeHubApiBaseUrl();
+const aggkitBridgeApisOverride = resolveAggkitBridgeApisOverride();
+
+const resolveAggkitBridgeApis = (
+  modeAggkitBridgeApis: JsonAggkitBridgeApis
+): Record<number, string> => {
+  const merged = { ...modeAggkitBridgeApis, ...aggkitBridgeApisOverride };
+  return Object.fromEntries(
+    Object.entries(merged).map(([networkId, url]) => [Number(networkId), url])
+  );
+};
 
 // Add custom RPC URLs on a per-chain basis as needed.
 export const customRpcUrls: Record<string, { url: string }[]> = {
@@ -64,7 +83,7 @@ const toEnabledChains = (chains: AppChain[]): EnabledAppModeConfig['chains'] | u
 const buildModeConfig = (modeKey: string): AppModeConfig => {
   const modeConfigJson = configJson.appModes.configs[modeKey];
   if (!modeConfigJson) {
-    return { label: modeKey, bridgeAddress: '', proofApiUrl: '', chains: [] };
+    return { label: modeKey, bridgeAddress: '', aggkitBridgeApis: {}, chains: [] };
   }
 
   const chains = modeConfigJson.chainKeys.map((chainKey) => CHAIN_REGISTRY[chainKey].app);
@@ -72,7 +91,7 @@ const buildModeConfig = (modeKey: string): AppModeConfig => {
   const base = {
     label: modeConfigJson.label,
     bridgeAddress: modeConfigJson.bridgeAddress,
-    proofApiUrl: toProofApiUrl(bridgeHubApiBaseUrl, modeConfigJson.proofApiSuffix)
+    aggkitBridgeApis: resolveAggkitBridgeApis(modeConfigJson.aggkitBridgeApis)
   };
 
   const enabledChains = toEnabledChains(chains);

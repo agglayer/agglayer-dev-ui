@@ -7,6 +7,12 @@ const nonEmptyString = z.string().trim().min(1);
 const urlString = z.string().url();
 const optionalUrlString = z.union([urlString, z.literal('')]);
 const addressString = z.string().regex(/^0x[a-fA-F0-9]{40}$/);
+// JSON object keys are always strings; network ids are validated as digit strings
+// so they can be parsed to number when the aggregator config is built (app/config.ts).
+const networkIdKey = z.string().regex(/^\d+$/);
+// Exported so app/config.ts can validate the NEXT_PUBLIC_AGGKIT_BRIDGE_APIS
+// env override against the same shape, rather than re-declaring it.
+export const aggkitBridgeApisSchema = z.record(networkIdKey, urlString);
 
 export const JsonNativeCurrencyConfigSchema = z
   .object({
@@ -34,7 +40,9 @@ export const jsonAppModeConfigSchema = z
   .object({
     label: nonEmptyString,
     bridgeAddress: addressString,
-    proofApiSuffix: nonEmptyString,
+    // May be {} for modes that don't yet have an aggkit backend configured
+    // (e.g. mainnet/testnet before their aggkit instances are stood up).
+    aggkitBridgeApis: aggkitBridgeApisSchema,
     chainKeys: z.array(nonEmptyString),
     defaultFromChainKey: nonEmptyString.optional(),
     defaultToChainKey: nonEmptyString.optional()
@@ -43,7 +51,6 @@ export const jsonAppModeConfigSchema = z
 
 export const jsonConfigSchema = z
   .object({
-    bridgeHubApiBaseUrl: urlString,
     externalLinks: z
       .object({
         privacyPolicy: optionalUrlString,

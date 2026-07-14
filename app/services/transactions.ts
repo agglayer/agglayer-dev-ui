@@ -1,71 +1,41 @@
-import type { AppMode } from '@/app/types/appMode';
-import type { TransactionsResponse, TransactionFilters } from '@/app/types/transaction';
+import type { TransactionFilters, TransactionsResponse } from '@/app/types/transaction';
 
-import { APP_MODE_CONFIG } from '@/app/config';
-import { getProofApiBaseUrl } from '@/app/utils/appMode';
+import type { AggkitBridgeAggregator } from '@agglayer/sdk';
 
-const getEnvironmentNetworkIds = (mode: AppMode): number[] =>
-  APP_MODE_CONFIG[mode].chains.map((chain) => chain.networkId);
-
-const formatAllowedNetworkIds = (
-  requestedIds: number[] | undefined,
-  allowedIds: number[]
-): string | undefined => {
-  if (!requestedIds?.length) return undefined;
-
-  const allowed = new Set(allowedIds);
-  const filtered = requestedIds.filter((id) => allowed.has(id));
-  if (!filtered.length) return undefined;
-
-  return [...new Set(filtered)].join(',');
-};
-
-const buildTransactionsUrl = (params: { mode: AppMode; filters?: TransactionFilters }): string => {
-  const url = new URL(`${getProofApiBaseUrl(params.mode)}/transactions`);
-  const allowedNetworkIds = getEnvironmentNetworkIds(params.mode);
-  const fallbackNetworkIds =
-    allowedNetworkIds.length > 0 ? [...new Set(allowedNetworkIds)].join(',') : undefined;
-
-  const sourceNetworkIds =
-    formatAllowedNetworkIds(params.filters?.sourceNetworkIds, allowedNetworkIds) ??
-    fallbackNetworkIds;
-  const destinationNetworkIds =
-    formatAllowedNetworkIds(params.filters?.destinationNetworkIds, allowedNetworkIds) ??
-    fallbackNetworkIds;
-
-  if (params.filters?.fromAddress) url.searchParams.set('fromAddress', params.filters.fromAddress);
-  if (sourceNetworkIds) url.searchParams.set('sourceNetworkIds', sourceNetworkIds);
-  if (destinationNetworkIds) url.searchParams.set('destinationNetworkIds', destinationNetworkIds);
-  if (params.filters?.updatedSince !== undefined)
-    url.searchParams.set('updatedSince', params.filters.updatedSince.toString());
-  if (params.filters?.status) url.searchParams.set('status', params.filters.status);
-  if (params.filters?.order) url.searchParams.set('order', params.filters.order);
-  if (params.filters?.limit) url.searchParams.set('limit', params.filters.limit.toString());
-  if (params.filters?.startAfter) url.searchParams.set('startAfter', params.filters.startAfter);
-
-  return url.toString();
-};
-
+// Thin wrapper over AggkitBridgeAggregator.getActivity (design.md §1 row 1, §2).
+// The old bridge-hub `/transactions` endpoint supported server-side
+// sourceNetworkIds/destinationNetworkIds/updatedSince/status filtering; aggkit
+// has no equivalents (design.md §9 risks #1, #2). sourceNetworkIds/
+// destinationNetworkIds/updatedSince are dropped (the aggregator always fans
+// out across every configured network, and block_timestamp DESC sort already
+// surfaces newest first); `status` is applied client-side below since it's
+// still exposed as a UI filter (e.g. useReadyToClaimCount, transactionsView's
+// status tabs).
 export const fetchTransactions = async (params: {
-  mode: AppMode;
+  aggregator: AggkitBridgeAggregator;
   filters?: TransactionFilters;
 }): Promise<TransactionsResponse> => {
-  const url = buildTransactionsUrl({ mode: params.mode, filters: params.filters });
-  const res = await fetch(url, {
-    headers: { accept: 'application/json' }
+  const { aggregator, filters = {} } = params;
+
+  if (!filters.fromAddress) {
+    throw new Error('TRANSACTIONS_MISSING_FROM_ADDRESS');
+  }
+
+  const page = await aggregator.getActivity({
+    fromAddress: filters.fromAddress,
+    ...(filters.limit !== undefined ? { pageSize: filters.limit } : {}),
+    ...(filters.startAfter !== undefined ? { cursor: filters.startAfter } : {}),
+    ...(filters.order !== undefined ? { order: filters.order } : {})
   });
 
-  if (!res.ok) {
-    const msg = await res.text().catch(() => '');
-    throw new Error(`TRANSACTIONS_${res.status}: ${msg || 'Request failed'}`);
-  }
+  const data = filters.status
+    ? page.data.filter((transaction) => transaction.status === filters.status)
+    : page.data;
 
-  const json: TransactionsResponse = await res.json();
-
-  const isSuccess = json.status === 'success';
-  if (!isSuccess || !json.data) {
-    throw new Error(json.error || 'TRANSACTIONS_INVALID_RESPONSE');
-  }
-
-  return json;
+  return {
+    status: 'success',
+    data,
+    pagination: page.pagination,
+    failedNetworks: page.failedNetworks
+  };
 };
