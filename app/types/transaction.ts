@@ -1,5 +1,7 @@
 import type { Hex } from 'viem';
 
+import type { AggkitFailedNetwork } from '@agglayer/sdk';
+
 export type TransactionStatus = 'BRIDGED' | 'LEAF_INCLUDED' | 'READY_TO_CLAIM' | 'CLAIMED';
 
 export interface Transaction {
@@ -27,7 +29,6 @@ export interface Transaction {
   originTokenNetwork: number;
   timestamp: number;
   leafIndex: number;
-  leafIndexForProof?: number;
 }
 
 export interface TransactionsResponse {
@@ -39,6 +40,10 @@ export interface TransactionsResponse {
     nextStartAfterCursor?: string;
   };
   error?: string;
+  // Per-network fan-out failures from AggkitBridgeAggregator.getActivity
+  // (design.md §2.4). A network failing does not fail the whole page — its
+  // rows are simply absent. Consumed by the partial-failure UI (S8).
+  failedNetworks?: AggkitFailedNetwork[];
 }
 
 export interface TransactionFilters {

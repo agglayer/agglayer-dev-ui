@@ -23,7 +23,7 @@ with code in this repository.
 
 `agglayer-dev-ui` is a configurable, self-hosted bridging interface
 powered by the [Agglayer SDK](https://github.com/agglayer/sdk) and the
-[Bridge Hub API](https://github.com/agglayer/agglayer-bridge-hub-api).
+[aggkit bridge service](https://github.com/agglayer/aggkit) REST API.
 It is a Next.js 16 **static-export** app (`output: 'export'`) deployed
 to Cloudflare Workers via `wrangler`. There are no API routes, no
 middleware, no SSR.

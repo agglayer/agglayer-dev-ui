@@ -8,11 +8,10 @@ import type {
 } from '@/app/types/transaction';
 import type { Hex } from 'viem';
 
-import { useAggNative } from '@/app/context/aggLayerSdk';
-import { useAppMode } from '@/app/context/appMode';
+import { useAggkitAggregator, useAggNative } from '@/app/context/aggLayerSdk';
 import { useWallet } from '@/app/context/walletContext';
 import { useSenderAccount } from '@/app/hooks/useSenderAccount';
-import { fetchClaimProof } from '@/app/services/claimProof';
+import { toClaimProof } from '@/app/services/claimProof';
 import { isValidEthereumAddress } from '@/app/utils/address';
 import {
   buildClaimAssetParams,
@@ -32,8 +31,8 @@ interface UseClaimExecutionParams {
 export const useClaimExecution = (params: UseClaimExecutionParams) => {
   const { bridgeAddress, onComplete } = params;
   const native = useAggNative();
+  const aggregator = useAggkitAggregator();
   const config = useConfig();
-  const { mode } = useAppMode();
   const { address } = useWallet();
   const senderAccount = useSenderAccount();
   const { sendTransactionAsync } = useSendTransaction();
@@ -76,6 +75,12 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
       let localClaimHash: Hex | undefined;
 
       try {
+        // isClaimed's leafIndex is the local deposit index (deposit_count),
+        // NOT the L1-info-tree index used for the claim proof below — these
+        // are different quantities that only coincide by chance in a
+        // single-L2 devnet (design.md §7.1). resolveLeafIndex now always
+        // returns deposit_count; the proof's leaf index comes fresh from
+        // getClaimInputs, never from this row.
         const leafIndex = resolveLeafIndex(transaction);
         const bridge = native.bridge(bridgeAddress, destinationChainId);
 
@@ -102,12 +107,12 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
           return;
         }
 
-        const proof = await fetchClaimProof({
-          mode,
-          sourceNetworkId: transaction.sourceNetwork,
-          leafIndex,
+        const { proof: rawProof } = await aggregator.getClaimInputs({
+          originNetworkId: transaction.sourceNetwork,
+          destinationNetworkId: transaction.destinationNetwork,
           depositCount: transaction.depositCount
         });
+        const proof = toClaimProof(rawProof);
 
         const claimParams = buildClaimAssetParams({ transaction, proof });
         const claimTx = await bridge.buildClaimAsset(claimParams, walletAddress);
@@ -161,7 +166,41 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
           claimTxHash: localClaimHash
         });
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Claim failed';
+        // The pre-flight `isClaimed()` check above only rules out the deposit
+        // being claimed at the START of this call -- an external claimer
+        // (e.g. an autoclaimer racing the same READY_TO_CLAIM deposit) can
+        // still land its claim in the few hundred ms it takes us to fetch
+        // the proof and estimate gas, so our own claimAsset call reverts
+        // on-chain with the bridge's `AlreadyClaimed()` custom error (which
+        // viem's default estimateGas error decoding reports as a generic
+        // "Execution reverted for an unknown reason" -- confirmed live in S12
+        // manual validation by replaying the exact revert selector,
+        // `0x646cf558`, against `AlreadyClaimed()`'s signature hash).
+        //
+        // A single immediate re-check of `isClaimed()` was NOT reliable in
+        // that same S12 session: it read back `false` immediately after the
+        // revert, while an independent `cast call isClaimed(...)` moments
+        // later against the same leafIndex/network read back `true`. Retrying
+        // with a short backoff gives the read a chance to catch up with the
+        // state the failed estimateGas call already observed, without
+        // pretending a single fast re-check is authoritative.
+        const bridgeClient = native.bridge(bridgeAddress, destinationChainId);
+        const isClaimedParams = {
+          leafIndex: resolveLeafIndex(transaction),
+          sourceBridgeNetwork: transaction.sourceNetwork
+        };
+        let raceLostToAnotherClaimer = false;
+        for (const delayMs of [0, 400, 1000]) {
+          if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
+          raceLostToAnotherClaimer = await bridgeClient.isClaimed(isClaimedParams).catch(() => false);
+          if (raceLostToAnotherClaimer) break;
+        }
+
+        const message = raceLostToAnotherClaimer
+          ? 'This deposit has already been claimed'
+          : error instanceof Error
+            ? error.message
+            : 'Claim failed';
         const errorState = { message, txHash: localClaimHash };
         setState({
           isExecuting: false,
@@ -180,7 +219,16 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
         });
       }
     },
-    [address, bridgeAddress, config, mode, native, onComplete, sendTransactionAsync, senderAccount]
+    [
+      address,
+      aggregator,
+      bridgeAddress,
+      config,
+      native,
+      onComplete,
+      sendTransactionAsync,
+      senderAccount
+    ]
   );
 
   const reset = useCallback(() => {

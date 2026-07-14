@@ -1,5 +1,4 @@
 {
-  "bridgeHubApiBaseUrl": "http://localhost:8080",
   "externalLinks": {
     "privacyPolicy": "https://polygon.technology/privacy-policy",
     "termsOfUse": "https://polygon.technology/terms-of-use",
@@ -11,7 +10,11 @@
       "name": "Ethereum",
       "rpcUrl": "https://eth.merkle.io",
       "explorerUrl": "https://etherscan.io",
-      "currency": { "name": "Ether", "symbol": "ETH", "decimals": 18 },
+      "currency": {
+        "name": "Ether",
+        "symbol": "ETH",
+        "decimals": 18
+      },
       "iconUrl": "https://raw.githubusercontent.com/lifinance/types/main/src/assets/icons/chains/ethereum.svg",
       "networkId": 0,
       "isTestnet": false,
@@ -22,7 +25,11 @@
       "name": "Katana",
       "rpcUrl": "https://rpc.katana.network",
       "explorerUrl": "https://katanascan.com",
-      "currency": { "name": "Ether", "symbol": "ETH", "decimals": 18 },
+      "currency": {
+        "name": "Ether",
+        "symbol": "ETH",
+        "decimals": 18
+      },
       "iconUrl": "https://raw.githubusercontent.com/lifinance/types/main/src/assets/icons/chains/katana.svg",
       "networkId": 20,
       "isTestnet": false,
@@ -33,7 +40,11 @@
       "name": "Forknet",
       "rpcUrl": "https://rpc-forknet.t.conduit.xyz",
       "explorerUrl": "https://forkscan.org/",
-      "currency": { "name": "Ether", "symbol": "ETH", "decimals": 18 },
+      "currency": {
+        "name": "Ether",
+        "symbol": "ETH",
+        "decimals": 18
+      },
       "iconUrl": "https://explorer-forknet.t.conduit.xyz/assets/configs/network_icon_dark.svg",
       "networkId": 22,
       "isTestnet": false,
@@ -44,7 +55,11 @@
       "name": "Sepolia",
       "rpcUrl": "https://ethereum-sepolia-rpc.publicnode.com",
       "explorerUrl": "https://sepolia.etherscan.io",
-      "currency": { "name": "Sepolia Ether", "symbol": "ETH", "decimals": 18 },
+      "currency": {
+        "name": "Sepolia Ether",
+        "symbol": "ETH",
+        "decimals": 18
+      },
       "iconUrl": "https://raw.githubusercontent.com/lifinance/types/main/src/assets/icons/chains/ethereum.svg",
       "networkId": 0,
       "isTestnet": true,
@@ -55,11 +70,45 @@
       "name": "Bokuto",
       "rpcUrl": "https://rpc-katana-bokuto.t.conduit.xyz",
       "explorerUrl": "https://bokuto.katanascan.com/",
-      "currency": { "name": "Ether", "symbol": "ETH", "decimals": 18 },
+      "currency": {
+        "name": "Ether",
+        "symbol": "ETH",
+        "decimals": 18
+      },
       "iconUrl": "https://raw.githubusercontent.com/lifinance/types/main/src/assets/icons/chains/katana.svg",
       "networkId": 37,
       "isTestnet": true,
       "eta": 180
+    },
+    "DEVNET_L1": {
+      "id": 271828,
+      "name": "Devnet L1",
+      "rpcUrl": "http://127.0.0.1:8545",
+      "explorerUrl": "https://explorer.private/",
+      "currency": {
+        "name": "Ether",
+        "symbol": "ETH",
+        "decimals": 18
+      },
+      "iconUrl": "https://raw.githubusercontent.com/lifinance/types/main/src/assets/icons/chains/ethereum.svg",
+      "networkId": 0,
+      "isTestnet": true,
+      "eta": 1
+    },
+    "DEVNET_L2": {
+      "id": 2151908,
+      "name": "Devnet L2",
+      "rpcUrl": "http://127.0.0.1:8546",
+      "explorerUrl": "https://explorer.private/",
+      "currency": {
+        "name": "Ether",
+        "symbol": "ETH",
+        "decimals": 18
+      },
+      "iconUrl": "https://raw.githubusercontent.com/lifinance/types/main/src/assets/icons/chains/katana.svg",
+      "networkId": 1,
+      "isTestnet": true,
+      "eta": 1
     }
   },
   "appModes": {
@@ -68,24 +117,43 @@
       "mainnet": {
         "label": "Mainnet",
         "bridgeAddress": "0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe",
-        "proofApiSuffix": "mainnet",
-        "chainKeys": ["MAINNET", "KATANA", "FORKNET"],
+        "aggkitBridgeApis": {
+          "20": "https://PLACEHOLDER-katana-aggkit",
+          "22": "https://PLACEHOLDER-forknet-aggkit"
+        },
+        "chainKeys": [
+          "MAINNET",
+          "KATANA",
+          "FORKNET"
+        ],
         "defaultFromChainKey": "MAINNET",
         "defaultToChainKey": "KATANA"
       },
       "testnet": {
         "label": "Testnet",
         "bridgeAddress": "0x528e26b25a34a4A5d0dbDa1d57D318153d2ED582",
-        "proofApiSuffix": "testnet",
-        "chainKeys": ["SEPOLIA", "BOKUTO"],
+        "aggkitBridgeApis": {
+          "37": "https://PLACEHOLDER-bokuto-aggkit"
+        },
+        "chainKeys": [
+          "SEPOLIA",
+          "BOKUTO"
+        ],
         "defaultFromChainKey": "SEPOLIA",
         "defaultToChainKey": "BOKUTO"
       },
       "devnet": {
         "label": "Devnet",
-        "bridgeAddress": "0x1348947e282138d8f377b467F7D9c2EB0F335d1f",
-        "proofApiSuffix": "devnet",
-        "chainKeys": []
+        "bridgeAddress": "0xC8cbEBf950B9Df44d987c8619f092beA980fF038",
+        "aggkitBridgeApis": {
+          "1": "http://127.0.0.1:8555/aggkitapi"
+        },
+        "chainKeys": [
+          "DEVNET_L1",
+          "DEVNET_L2"
+        ],
+        "defaultFromChainKey": "DEVNET_L1",
+        "defaultToChainKey": "DEVNET_L2"
       }
     }
   }

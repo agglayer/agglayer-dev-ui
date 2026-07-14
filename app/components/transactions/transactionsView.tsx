@@ -7,6 +7,7 @@ import { getTransactionInitialStatus } from '@/app/components/transactions/intia
 import { TransactionDetailsModal } from '@/app/components/transactions/transactionDetailsModal/transactionDetailsModal';
 import { TransactionFilters } from '@/app/components/transactions/transactionFilters';
 import { TransactionList } from '@/app/components/transactions/transactionList';
+import { Alert } from '@/app/components/ui/alert';
 import { Button } from '@/app/components/ui/button';
 import { Card } from '@/app/components/ui/card';
 import { useAppMode } from '@/app/context/appMode';
@@ -58,7 +59,8 @@ export const TransactionsView = () => {
     fetchNextPage,
     error,
     refetch,
-    isRefetching
+    isRefetching,
+    failedNetworks
   } = useTransactions({
     chainId: effectiveChainId,
     filters: queryFilters,
@@ -96,6 +98,19 @@ export const TransactionsView = () => {
   }, [data]);
 
   const totalCount = data?.pages[0]?.pagination.total ?? 0;
+
+  // Partial fan-out failures (design.md §2.4): the aggregator still returns
+  // results from healthy networks, so this is surfaced as a non-blocking
+  // notice rather than the full error state (which is reserved for the case
+  // where every configured network failed and `error` is set below).
+  const failedNetworkNames = useMemo(
+    () =>
+      (failedNetworks ?? []).map(
+        (failure) => getChainByNetworkId(chains, failure.networkId)?.name ?? 'Unknown network'
+      ),
+    [failedNetworks, chains]
+  );
+  const hasPartialFailure = !error && failedNetworkNames.length > 0;
 
   const destChain = claimExecution.state.destinationChainId
     ? getChainById(chains, claimExecution.state.destinationChainId)
@@ -172,6 +187,7 @@ export const TransactionsView = () => {
           <button
             type="button"
             aria-label="Refresh activity"
+            data-test-id="transactions-refresh"
             onClick={handleManualRefetch}
             disabled={isRefetching || isLoading}
             className={cn(
@@ -220,6 +236,14 @@ export const TransactionsView = () => {
             </Button>
           </div>
         </div>
+      )}
+
+      {isConnected && hasPartialFailure && (
+        <Alert
+          type="warning"
+          title="Some networks are temporarily unavailable"
+          message={`We couldn't load activity from ${failedNetworkNames.join(', ')}. Showing results from the remaining networks — this will retry automatically.`}
+        />
       )}
 
       {isConnected && !error && (

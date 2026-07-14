@@ -1,10 +1,10 @@
-import { E2E_NATIVE_BRIDGE_AMOUNT } from '@/app/constants/e2e';
+import { E2E_BRIDGE_SUCCESS_TIMEOUT_MS, E2E_NATIVE_BRIDGE_AMOUNT } from '@/app/constants/e2e';
 import { expect, test } from '@playwright/test';
 
 import { BridgePage } from './models/bridge-page';
 
 test('bridges native token', async ({ page }) => {
-  test.setTimeout(180_000);
+  test.setTimeout(E2E_BRIDGE_SUCCESS_TIMEOUT_MS + 60_000);
   const bridgePage = new BridgePage({ page });
 
   await bridgePage.navigate();

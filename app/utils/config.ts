@@ -30,8 +30,6 @@ export const toNonEmptyChainArray = (chains: Chain[]): readonly [Chain, ...Chain
   return [first, ...rest];
 };
 
-export const toProofApiUrl = (baseUrl: string, suffix: string): string => `${baseUrl}/${suffix}/`;
-
 export const buildWagmiChain = (config: JsonChainConfig): Chain => ({
   id: config.id,
   name: config.name,

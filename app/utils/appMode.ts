@@ -12,4 +12,5 @@ export const isEnabledModeConfig = (config: AppModeConfig): config is EnabledApp
 export const getEnabledModes = (): AppMode[] =>
   APP_MODES.filter((mode) => isEnabledModeConfig(APP_MODE_CONFIG[mode]));
 
-export const getProofApiBaseUrl = (mode: AppMode): string => APP_MODE_CONFIG[mode].proofApiUrl;
+export const getAggkitBridgeApis = (mode: AppMode): Record<number, string> =>
+  APP_MODE_CONFIG[mode].aggkitBridgeApis;

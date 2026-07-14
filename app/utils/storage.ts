@@ -1,3 +1,7 @@
+// Intentionally retained across the aggkit rebrand for localStorage
+// backward-compatibility: this prefixes users' saved appMode/customTokens keys.
+// Renaming it would orphan existing users' stored data, so a rename requires a
+// one-time migration (see RELEASE.md residual risk #6).
 const APP_PREFIX = 'bridge-hub-ui';
 
 const getBrowserStorage = (): Storage | null => {
