@@ -30,6 +30,20 @@ const aggregateFailedNetworks = (
 const REFETCH_INTERVALS = [500, 1000, 2000, 3000];
 export const TOTAL_REFETCH_TIME = REFETCH_INTERVALS.reduce((acc, curr) => acc + curr, 0);
 
+// Aggkit has no push/subscription and status is derived per fetch, so the
+// activity view polls to stay live. Fast cadence while any loaded tx is still
+// non-terminal (its spinner/status must advance); a slower idle cadence
+// otherwise so newly-submitted/indexed deposits (e.g. an L2->L1 withdrawal that
+// isn't indexed within the initial burst) still appear without a manual refresh
+// or navigating away and back. Polling only runs while the page is mounted and
+// the tab is focused (react-query default).
+const PENDING_POLL_INTERVAL = 5000;
+const IDLE_POLL_INTERVAL = 10000;
+
+const hasNonTerminalTransaction = (
+  pages: TransactionsResponse[] | undefined
+): boolean => (pages ?? []).some((page) => page.data.some((tx) => tx.status !== 'CLAIMED'));
+
 export const useTransactions = (params: {
   chainId?: number;
   filters?: TransactionFilters;
@@ -80,13 +94,22 @@ export const useTransactions = (params: {
     initialPageParam: undefined,
     staleTime: 30 * 1000,
     refetchInterval: (query) => {
-      if (!aggressiveRefetch) return false;
       if (query.state.status === 'error') return false;
 
+      // Initial fast burst right after a user action (bridge submit) for snappy
+      // feedback while the deposit first appears / starts progressing.
       const count = fetchCountRef.current;
-      if (count >= REFETCH_INTERVALS.length) return false;
+      if (aggressiveRefetch && count < REFETCH_INTERVALS.length) {
+        return REFETCH_INTERVALS[count];
+      }
 
-      return REFETCH_INTERVALS[count];
+      // Then keep the view live: poll fast while any loaded tx is still
+      // non-terminal so its status (BRIDGED -> LEAF_INCLUDED -> READY_TO_CLAIM
+      // -> CLAIMED) advances, and poll at a slower idle cadence otherwise so a
+      // newly-appearing deposit still shows up on its own.
+      return hasNonTerminalTransaction(query.state.data?.pages)
+        ? PENDING_POLL_INTERVAL
+        : IDLE_POLL_INTERVAL;
     }
   });
 

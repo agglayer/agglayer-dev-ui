@@ -204,6 +204,14 @@ const upsertConfigJsonDevnet = ({ l1RpcUrl, l2RpcUrl, l1ChainId, l2ChainId, aggk
     defaultToChainKey: 'DEVNET_L2'
   };
 
+  // Make devnet the default app mode locally so the wallet (Reown/wagmi) targets
+  // the enclave chains instead of the committed default (testnet -> Sepolia). The
+  // Reown appkit fixes its defaultNetwork from DEFAULT_APP_MODE at module load
+  // (app/context/wallet.tsx), so without this a wallet connect tries to add
+  // Sepolia. This mutation is local-only (this script is the devnet-prep tool);
+  // the committed config.json keeps default: 'testnet' for production (S15).
+  configJson.appModes.default = 'devnet';
+
   // Fail loudly before writing anything if this would produce an invalid
   // config.json (same schema + semantic validation the app runs at startup).
   parseConfigOrThrow(configJson, { sourceName: 'config.json (kurtosisDevnetEnv.mjs preview)' });
@@ -256,16 +264,29 @@ const main = async () => {
   assertEnclaveExists(enclave);
 
   const proxyBaseUrl = resolvePort(enclave, PROXY_SERVICE, PROXY_PORT_ID);
+  // Direct EL RPC ports: used only for this script's host-side validation
+  // (chainId + bridge bytecode). The browser/wallet must NOT use these — geth/
+  // op-reth send no CORS headers, so eth calls from the app/wallet fail. The
+  // haproxy proxy (agglayer-dev-ui-proxy-001) exposes /l1rpc and /l2rpc with
+  // `Access-Control-Allow-Origin: *`, so those are what we write into config.json.
   const l1RpcUrl = resolvePort(enclave, L1_EL_SERVICE, L1_EL_PORT_ID);
   const l2RpcUrl = resolvePort(enclave, L2_EL_SERVICE, L2_EL_PORT_ID);
   const aggkitRestUrl = resolvePort(enclave, AGGKIT_REST_SERVICE, AGGKIT_REST_PORT_ID);
   const aggkitBridgeApiUrl = `${proxyBaseUrl}/aggkitapi`;
+  const l1RpcProxyUrl = `${proxyBaseUrl}/l1rpc`;
+  const l2RpcProxyUrl = `${proxyBaseUrl}/l2rpc`;
 
   const [l1ChainId, l2ChainId] = await Promise.all([fetchChainId(l1RpcUrl), fetchChainId(l2RpcUrl)]);
   await assertBridgeContractDeployed(l1RpcUrl);
   const proxyHealth = await checkAggkitHealthViaProxy(proxyBaseUrl);
 
-  upsertConfigJsonDevnet({ l1RpcUrl, l2RpcUrl, l1ChainId, l2ChainId, aggkitBridgeApiUrl });
+  upsertConfigJsonDevnet({
+    l1RpcUrl: l1RpcProxyUrl,
+    l2RpcUrl: l2RpcProxyUrl,
+    l1ChainId,
+    l2ChainId,
+    aggkitBridgeApiUrl
+  });
   upsertEnvLocal({ aggkitBridgeApiUrl });
 
   process.stdout.write(
@@ -275,8 +296,8 @@ const main = async () => {
       `  -> NEXT_PUBLIC_AGGKIT_BRIDGE_APIS["${L2_NETWORK_ID}"] = ${aggkitBridgeApiUrl}`,
       `  -> proxy aggkit health check: ${proxyHealth.ok ? 'OK' : `FAILED (${proxyHealth.status ?? 'no response'})`}`,
       `Direct aggkit REST (reference/health only, NOT used by the browser): ${aggkitRestUrl}`,
-      `L1 RPC (DEVNET_L1, networkId ${L1_NETWORK_ID}): ${l1RpcUrl} (chainId ${l1ChainId})`,
-      `L2 RPC (DEVNET_L2, networkId ${L2_NETWORK_ID}): ${l2RpcUrl} (chainId ${l2ChainId})`,
+      `L1 RPC (DEVNET_L1, networkId ${L1_NETWORK_ID}): ${l1RpcProxyUrl} (chainId ${l1ChainId}; direct ${l1RpcUrl})`,
+      `L2 RPC (DEVNET_L2, networkId ${L2_NETWORK_ID}): ${l2RpcProxyUrl} (chainId ${l2ChainId}; direct ${l2RpcUrl})`,
       `Bridge address: ${BRIDGE_ADDRESS} (verified: bytecode present on L1)`,
       `Wrote: ${path.relative(REPO_ROOT, CONFIG_JSON_PATH)} (chains.DEVNET_L1/DEVNET_L2, appModes.configs.devnet)`,
       `Wrote: ${path.relative(REPO_ROOT, ENV_LOCAL_PATH)}`,

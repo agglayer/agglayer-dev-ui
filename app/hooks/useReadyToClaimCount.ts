@@ -27,6 +27,10 @@ export const useReadyToClaimCount = (params: {
       if (!chainId || !address) throw new Error('MISSING_PARAMS');
       return aggregator.getReadyToClaimCount({ fromAddress: address });
     },
-    staleTime: 30 * 1000
+    staleTime: 30 * 1000,
+    // Poll steadily so the badge reflects deposits becoming claimable (aggkit
+    // has no push and status is derived per fetch). The count is bounded per
+    // design §3.7; 15s keeps it fresh without hammering the fan-out.
+    refetchInterval: 15 * 1000
   });
 };
