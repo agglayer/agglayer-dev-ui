@@ -16,7 +16,7 @@ import {
   useWalletInfo
 } from '@reown/appkit/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useChainId, useChains, useSwitchChain, WagmiProvider } from 'wagmi';
 
 const projectId = process.env.NEXT_PUBLIC_PROJECT_ID!;
@@ -88,6 +88,32 @@ const AppKitWalletProvider = ({ children }: { readonly children: ReactNode }) =>
   const chainId = useChainId();
   const { switchChain } = useSwitchChain();
   const currentChain = useCurrentChain({ status: status ?? 'disconnected', chainId });
+
+  // On wallet connect, steer the wallet to the app's default source chain
+  // (DEFAULT_WAGMI_CHAIN, derived from the default app mode) instead of leaving
+  // it on whatever it connected with (e.g. Ethereum mainnet). This triggers the
+  // wallet's add/switch-network prompt at connect time rather than only when a
+  // bridge is initiated. Attempted once per connection so we don't fight a user
+  // who deliberately switches away or rejects the prompt.
+  const hasAutoSwitched = useRef(false);
+  useEffect(() => {
+    if (status !== 'connected') {
+      hasAutoSwitched.current = false;
+      return;
+    }
+    if (hasAutoSwitched.current) {
+      return;
+    }
+    hasAutoSwitched.current = true;
+    if (chainId === DEFAULT_WAGMI_CHAIN.id) {
+      return;
+    }
+    try {
+      switchChain({ chainId: DEFAULT_WAGMI_CHAIN.id });
+    } catch (error) {
+      console.error('Failed to switch to the default network on connect', error);
+    }
+  }, [status, chainId, switchChain]);
 
   const value = useMemo<WalletContextValue>(
     () => ({
