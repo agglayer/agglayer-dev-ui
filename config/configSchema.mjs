@@ -49,8 +49,32 @@ export const jsonAppModeConfigSchema = z
   })
   .strict();
 
+const routeAutoclaimSchema = z
+  .object({
+    // Whether an autoclaim service is expected to claim this route on the user's
+    // behalf. When false, the manual "Claim tokens" button shows as soon as the
+    // deposit is READY_TO_CLAIM (legacy behavior).
+    expectedAutoclaim: z.boolean(),
+    // Grace period (milliseconds, measured from when the deposit first becomes
+    // READY_TO_CLAIM) to wait for the autoclaim service before surfacing the
+    // manual claim button. Only used when expectedAutoclaim is true.
+    waitForAutoclaimMs: z.number().int().min(0).optional()
+  })
+  .strict();
+
+// Per-route autoclaim UX config. Optional in config.json — app/config.ts applies
+// per-route defaults for any route omitted here.
+export const autoclaimConfigSchema = z
+  .object({
+    l1_to_l2: routeAutoclaimSchema.optional(),
+    l2_to_l1: routeAutoclaimSchema.optional(),
+    l2_to_l2: routeAutoclaimSchema.optional()
+  })
+  .strict();
+
 export const jsonConfigSchema = z
   .object({
+    autoclaim: autoclaimConfigSchema.optional(),
     externalLinks: z
       .object({
         privacyPolicy: optionalUrlString,

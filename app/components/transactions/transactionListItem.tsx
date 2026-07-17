@@ -9,6 +9,7 @@ import { BadgeImageFallback } from '@/app/components/ui/badgeImageFallback';
 import { Button } from '@/app/components/ui/button';
 import { useAppMode } from '@/app/context/appMode';
 import { useTokens } from '@/app/context/token';
+import { useAutoclaimGate } from '@/app/hooks/useAutoclaimGate';
 import { useTokenMetadata } from '@/app/hooks/useTokenMetadata';
 import { shortenAddress } from '@/app/utils/address';
 import { getChainByNetworkId } from '@/app/utils/chains';
@@ -37,6 +38,10 @@ export const TransactionListItem = ({
   const destChain = getChainByNetworkId(chains, transaction.destinationNetwork);
   const isClaimable = transaction.status === 'READY_TO_CLAIM';
   const isPending = transaction.status === 'BRIDGED' || transaction.status === 'LEAF_INCLUDED';
+  // Per-route autoclaim grace period: 'no-autoclaim' shows the button now,
+  // 'waiting' shows a "claim manually now" hint while autoclaim is expected,
+  // 'overdue' shows the button plus a "taking longer than expected" note.
+  const autoclaimGate = useAutoclaimGate(transaction);
 
   const isNative = isNativeToken(transaction.originTokenAddress);
 
@@ -163,26 +168,49 @@ export const TransactionListItem = ({
         {isPending && sourceChain?.eta && (
           <TransactionETA timestamp={transaction.timestamp} etaMinutes={sourceChain.eta} />
         )}
-        {isClaimable && (
-          <Button
-            onClick={(event) => {
-              event.stopPropagation();
-              onClaim?.(transaction);
-            }}
-            size="md"
-            className="w-full"
-            disabled={isAnyClaiming}
-          >
-            {claimStep === 'claiming' ? (
-              <>
-                <Loader2 className="animate-spin size-4 mr-2" />
-                Claiming...
-              </>
-            ) : (
-              'Claim tokens'
-            )}
-          </Button>
-        )}
+        {isClaimable &&
+          (autoclaimGate === 'waiting' ? (
+            <p className="text-sm text-grey text-center">
+              Waiting for auto claim,{' '}
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onClaim?.(transaction);
+                }}
+                disabled={isAnyClaiming}
+                className="text-blue underline hover:no-underline cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {claimStep === 'claiming' ? 'claiming…' : 'claim manually now'}
+              </button>
+            </p>
+          ) : (
+            <div className="space-y-1">
+              <Button
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onClaim?.(transaction);
+                }}
+                size="md"
+                className="w-full"
+                disabled={isAnyClaiming}
+              >
+                {claimStep === 'claiming' ? (
+                  <>
+                    <Loader2 className="animate-spin size-4 mr-2" />
+                    Claiming...
+                  </>
+                ) : (
+                  'Claim tokens'
+                )}
+              </Button>
+              {autoclaimGate === 'overdue' && (
+                <p className="text-xs text-grey text-center">
+                  Auto claim is taking more time than expected, you can claim manually instead
+                </p>
+              )}
+            </div>
+          ))}
       </div>
     </div>
   );

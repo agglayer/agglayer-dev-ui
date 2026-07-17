@@ -16,6 +16,9 @@ const createStorageKey = (key: string): string => `${APP_PREFIX}:${key}`;
 export const STORAGE_KEYS = {
   APP_MODE: createStorageKey('appMode'),
   CUSTOM_TOKENS: createStorageKey('customTokens'),
+  // Map of bridgeHash -> epoch ms when the deposit was first observed
+  // READY_TO_CLAIM, so the autoclaim grace period survives refreshes.
+  AUTOCLAIM_READY_AT: createStorageKey('autoclaimReadyAt'),
 } as const;
 
 export const StorageUtils = {
