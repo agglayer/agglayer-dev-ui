@@ -4,6 +4,11 @@
     "termsOfUse": "https://polygon.technology/terms-of-use",
     "contactSupport": "https://support.polygon.technology/support/home"
   },
+  "autoclaim": {
+    "l1_to_l2": { "expectedAutoclaim": true, "waitForAutoclaimMs": 60000 },
+    "l2_to_l1": { "expectedAutoclaim": false },
+    "l2_to_l2": { "expectedAutoclaim": true, "waitForAutoclaimMs": 120000 }
+  },
   "chains": {
     "MAINNET": {
       "id": 1,
@@ -83,7 +88,7 @@
     "DEVNET_L1": {
       "id": 271828,
       "name": "Devnet L1",
-      "rpcUrl": "http://127.0.0.1:8545",
+      "rpcUrl": "http://127.0.0.1:8555/l1rpc",
       "explorerUrl": "https://explorer.private/",
       "currency": {
         "name": "Ether",
@@ -98,7 +103,7 @@
     "DEVNET_L2": {
       "id": 2151908,
       "name": "Devnet L2",
-      "rpcUrl": "http://127.0.0.1:8546",
+      "rpcUrl": "http://127.0.0.1:8555/l2rpc",
       "explorerUrl": "https://explorer.private/",
       "currency": {
         "name": "Ether",

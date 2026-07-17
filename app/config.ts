@@ -1,5 +1,11 @@
 import type { AppChain, AppMode, AppModeConfig, EnabledAppModeConfig } from '@/app/types/appMode';
-import type { ChainEntry, JsonAggkitBridgeApis } from '@/app/types/config';
+import type {
+  AutoclaimConfig,
+  AutoclaimRouteConfig,
+  ChainEntry,
+  JsonAggkitBridgeApis,
+  RouteType
+} from '@/app/types/config';
 import type { Chain } from 'wagmi/chains';
 
 import { buildWagmiChain, createChainEntry, toNonEmptyChainArray } from '@/app/utils/config';
@@ -9,6 +15,34 @@ import { aggkitBridgeApisSchema } from '@/config/configSchema.mjs';
 import { parseConfigOrThrow } from '@/config/configValidator.mjs';
 
 const configJson = parseConfigOrThrow(rawJsonConfig, { sourceName: 'config.json' });
+
+// Per-route autoclaim UX defaults. config.json's optional `autoclaim` block
+// overrides these per route; any omitted route (or omitted waitForAutoclaimMs)
+// falls back here. Wait periods are measured from when a deposit first becomes
+// READY_TO_CLAIM (see useAutoclaimGate).
+export const DEFAULT_AUTOCLAIM_CONFIG: AutoclaimConfig = {
+  l1_to_l2: { expectedAutoclaim: true, waitForAutoclaimMs: 60_000 },
+  l2_to_l1: { expectedAutoclaim: false, waitForAutoclaimMs: 0 },
+  l2_to_l2: { expectedAutoclaim: true, waitForAutoclaimMs: 120_000 }
+};
+
+export const AUTOCLAIM_CONFIG: AutoclaimConfig = (() => {
+  const overrides = configJson.autoclaim ?? {};
+  const resolveRoute = (route: RouteType): AutoclaimRouteConfig => {
+    const override = overrides[route];
+    if (!override) return DEFAULT_AUTOCLAIM_CONFIG[route];
+    return {
+      expectedAutoclaim: override.expectedAutoclaim,
+      waitForAutoclaimMs:
+        override.waitForAutoclaimMs ?? DEFAULT_AUTOCLAIM_CONFIG[route].waitForAutoclaimMs
+    };
+  };
+  return {
+    l1_to_l2: resolveRoute('l1_to_l2'),
+    l2_to_l1: resolveRoute('l2_to_l1'),
+    l2_to_l2: resolveRoute('l2_to_l2')
+  };
+})();
 
 // Devnet's aggkit REST port is ephemeral per enclave recreate (kurtosis assigns
 // it at runtime); this env var lets a bring-up script inject the live proxy
