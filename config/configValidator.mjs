@@ -98,7 +98,18 @@ const getModeConfigErrors = (modeKey, modeConfig, chainsByKey) => {
  * hand-edit can't silently produce "3 chains configured, 1 backend, the third
  * chain's rows never appear and nothing says why". `aggkitBridgeApis: {}` is the
  * documented "mode not yet configured" escape hatch (configSchema.mjs's own
- * comment) and is exempt from both checks below.
+ * comment) and is exempt from every check below.
+ *
+ * The duplicate-networkId check closes the same gap reached from the other side.
+ * `networkId` — not the chain id — is what keys `aggkitBridgeApis` and what the
+ * SDK aggregator keys its per-network clients by, so two chains sharing one
+ * networkId collapse to a single backend client and one chain's rows silently
+ * merge into the other's. The key-agreement checks alone do not catch it: with
+ * DEVNET_L2_001 and DEVNET_L2_002 both on networkId 1 and a single `{"1": url}`
+ * entry, every chain finds a matching key and every key matches some chain.
+ * `scripts/kurtosisDevnetEnv.mjs` derives networkId from the kurtosis
+ * deployment suffix, a convention rather than a protocol guarantee (design.md
+ * §9 risk 7), so a mis-derivation is exactly how this shape would arise.
  *
  * @param {string} modeKey
  * @param {JsonConfig['appModes']['configs'][string]} modeConfig
@@ -133,7 +144,20 @@ const getChainsAggkitBridgeApiErrors = (modeKey, modeConfig, chainsByKey) => {
         `appModes.configs.${modeKey}.aggkitBridgeApis: key "${networkIdKey}" does not match the networkId of any chain in chainKeys`
     );
 
-  return [...missingApiEntryErrors, ...unmatchedApiKeyErrors];
+  const firstChainKeyByNetworkId = new Map();
+  const duplicateNetworkIdErrors = nonL1ChainEntries.flatMap(({ chainKey, networkId }) => {
+    const existingChainKey = firstChainKeyByNetworkId.get(networkId);
+    if (existingChainKey) {
+      return [
+        `appModes.configs.${modeKey}.chainKeys: chains "${existingChainKey}" and "${chainKey}" share networkId ${networkId}; each network needs a distinct networkId to get its own aggkitBridgeApis backend`
+      ];
+    }
+
+    firstChainKeyByNetworkId.set(networkId, chainKey);
+    return [];
+  });
+
+  return [...missingApiEntryErrors, ...unmatchedApiKeyErrors, ...duplicateNetworkIdErrors];
 };
 
 /**

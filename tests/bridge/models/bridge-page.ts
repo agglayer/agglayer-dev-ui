@@ -190,6 +190,77 @@ class BridgePage {
   async clickClaim(transactionHash: string): Promise<void> {
     await this.getClaimButton(transactionHash).click();
   }
+
+  /**
+   * Bridges L1 -> L2 and waits for the deposit to autoclaim, crediting the
+   * destination L2's per-origin `LocalBalanceTree` by `amount`.
+   *
+   * Any spec whose subject is an L2-SOURCED transfer of a token that did not
+   * originate on that L2 (native ETH originates on L1, network 0) must call
+   * this first. `bridgeAsset` decrements `AgglayerBridgeL2`'s
+   * `LocalBalanceTree[originNetwork][token]` before releasing funds
+   * (`contracts/sovereignChains/AgglayerBridgeL2.sol`
+   * `_decreaseLocalBalanceTree`), and that tree is credited ONLY by a *claimed*
+   * inbound deposit (`_increaseLocalBalanceTree`) -- never by the L2's genesis
+   * native allocation, which bypasses the bridge entirely. Without a credit the
+   * transfer reverts `LocalBalanceTreeUnderflow(originNetwork, originToken,
+   * amount, available)` inside `eth_estimateGas`, which surfaces only as a
+   * `waitForBridgeSuccess` timeout rather than a legible error.
+   *
+   * Funding the credit here, rather than inheriting one from whichever spec
+   * happened to run earlier, is what makes such a spec independent of suite
+   * order, of sharding, of `-g` filters and of accumulated enclave state.
+   *
+   * Leaves the browser on the transactions route; callers driving a further
+   * chain-pair selection must `navigate()` + `connectWallet()` again.
+   */
+  async fundLocalBalanceTree({
+    fromChainId,
+    toChainId,
+    amount,
+    claimTimeoutMs
+  }: {
+    fromChainId: number;
+    toChainId: number;
+    amount: string;
+    claimTimeoutMs: number;
+  }): Promise<void> {
+    await this.selectChainPair(fromChainId, toChainId);
+    await this.fillAmount(amount);
+    await this.submitBridge();
+    await this.waitForTransactionModal();
+    await this.waitForBridgeSuccess();
+
+    const explorerHref = await this.bridgeSuccessExplorerLink.getAttribute('href');
+    const transactionHash = explorerHref?.match(/0x[a-fA-F0-9]{64}$/)?.[0];
+    if (!transactionHash) {
+      throw new Error(
+        'E2E: could not read the top-up deposit transaction hash from the success view'
+      );
+    }
+
+    await this.bridgeSuccessCta.click();
+
+    const row = this.getTransactionRow(transactionHash);
+    await expect(row).toBeVisible();
+
+    await expect
+      .poll(
+        async () => {
+          await this.refreshActivity();
+          return row
+            .getByText('Completed')
+            .isVisible()
+            .catch(() => false);
+        },
+        {
+          message: `Waiting for the ${fromChainId}->${toChainId} top-up deposit to reach Completed (CLAIMED)`,
+          timeout: claimTimeoutMs,
+          intervals: [5_000]
+        }
+      )
+      .toBe(true);
+  }
 }
 
 export { BridgePage };

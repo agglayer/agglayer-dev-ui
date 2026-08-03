@@ -48,67 +48,25 @@ test('L2-1→L1 native withdrawal requires a manual claim click to reach Complet
   await bridgePage.navigate();
   await bridgePage.connectWallet();
 
-  // Top-up (S12 red-run finding): the L2-1->L1 native withdrawal below calls
-  // the bridge contract's bridgeAsset, which -- for any token whose origin
-  // network isn't the local one, e.g. native ETH's origin is L1 (network 0)
-  // -- decrements AgglayerBridgeL2's per-origin LocalBalanceTree before
-  // releasing funds (contracts/sovereignChains/AgglayerBridgeL2.sol
-  // _decreaseLocalBalanceTree). That tree is only credited by a *claimed*
-  // L1->L2-1 deposit (_increaseLocalBalanceTree), never by L2-1's genesis
-  // native allocation, which bypasses the bridge entirely. So unless
-  // something else already claimed an L1->L2-1 deposit of at least
-  // E2E_NATIVE_BRIDGE_AMOUNT onto L2-1 first, this withdrawal reverts with
-  // LocalBalanceTreeUnderflow(originNetwork=0, originToken=0x0, amount,
-  // available=0) -- confirmed live via `cast 4byte-decode` against the
-  // eth_estimateGas revert data during S12 triage. Depending on
-  // claim-autoclaim.spec.ts (which credits exactly one
-  // E2E_NATIVE_BRIDGE_AMOUNT, and l2-to-l2.spec.ts which spends exactly one
-  // back out) running first and leaving a surplus made this spec order- and
-  // enclave-state-dependent -- it deterministically failed whenever it ran
-  // right after l2-to-l2.spec.ts in the same enclave (their credit/debit net
-  // to exactly zero). Funding its own top-up here makes the assertion this
-  // spec exists for -- the manual-claim UI flow -- independent of what else
-  // has run against this enclave.
-  await bridgePage.selectChainPair(E2E_FROM_CHAIN_ID, E2E_TO_CHAIN_ID);
-  await bridgePage.fillAmount(E2E_NATIVE_BRIDGE_AMOUNT);
-  await bridgePage.submitBridge();
-  await bridgePage.waitForTransactionModal();
-  await bridgePage.waitForBridgeSuccess();
+  // Top-up (S12 red-run finding): the L2-1->L1 native withdrawal below spends
+  // L2-1's LocalBalanceTree credit for origin-network-0 native ETH -- see
+  // BridgePage.fundLocalBalanceTree for why that credit must be funded here and
+  // not inherited from whichever spec ran earlier. This spec deterministically
+  // failed whenever it ran right after l2-to-l2.spec.ts in the same enclave
+  // (their credit/debit netted to exactly zero); confirmed live via
+  // `cast 4byte-decode` against the eth_estimateGas revert data during S12
+  // triage. l2-to-l2.spec.ts funds its own credit the same way as of S14.
+  await bridgePage.fundLocalBalanceTree({
+    fromChainId: E2E_FROM_CHAIN_ID,
+    toChainId: E2E_TO_CHAIN_ID,
+    amount: E2E_NATIVE_BRIDGE_AMOUNT,
+    claimTimeoutMs: E2E_CLAIM_TIMEOUT_MS
+  });
 
-  const topUpExplorerHref = await bridgePage.bridgeSuccessExplorerLink.getAttribute('href');
-  const topUpTransactionHash = topUpExplorerHref?.match(/0x[a-fA-F0-9]{64}$/)?.[0];
-  if (!topUpTransactionHash) {
-    throw new Error(
-      'E2E: could not read the top-up deposit transaction hash from the success view'
-    );
-  }
-  await bridgePage.bridgeSuccessCta.click();
-
-  const topUpRow = bridgePage.getTransactionRow(topUpTransactionHash);
-  await expect(topUpRow).toBeVisible();
-
-  await expect
-    .poll(
-      async () => {
-        await bridgePage.refreshActivity();
-        return topUpRow
-          .getByText('Completed')
-          .isVisible()
-          .catch(() => false);
-      },
-      {
-        message: 'Waiting for the L1->L2-1 top-up deposit to reach Completed (CLAIMED)',
-        timeout: E2E_CLAIM_TIMEOUT_MS,
-        intervals: [5_000]
-      }
-    )
-    .toBe(true);
-
-  // bridgeSuccessCta (BridgeSuccessView.handleGoToTransactions) does
-  // router.push(ROUTES.TRANSACTIONS) -- a real route change, so
-  // from-chain-selector (the bridge form, on '/') isn't on the page here.
-  // Navigate back before driving the withdrawal leg's own chain-pair
-  // selection.
+  // fundLocalBalanceTree ends on the transactions route (bridgeSuccessCta ->
+  // router.push(ROUTES.TRANSACTIONS)), so from-chain-selector (the bridge form,
+  // on '/') isn't on the page here. Navigate back before driving the withdrawal
+  // leg's own chain-pair selection.
   await bridgePage.navigate();
   await bridgePage.connectWallet();
 
