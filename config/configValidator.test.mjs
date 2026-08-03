@@ -88,4 +88,29 @@ describe('parseConfigOrThrow — chains <-> aggkitBridgeApis cross-field validat
 
     expect(() => parseConfigOrThrow(config)).not.toThrow();
   });
+
+  // E1/E2 both pass in this shape -- every chain finds a matching key and every
+  // key matches some chain -- yet the two L2s collapse onto one aggkit backend
+  // client, silently merging one chain's rows into the other's.
+  it('E3: throws when two non-L1 chains in a mode share a networkId', () => {
+    const config = buildConfig();
+    config.chains.DEVNET_L2_002.networkId = 1;
+    config.appModes.configs.devnet.aggkitBridgeApis = {
+      1: 'https://aggkit.example/aggkitapi'
+    };
+
+    expect(() => parseConfigOrThrow(config)).toThrow(
+      /chains "DEVNET_L2_001" and "DEVNET_L2_002" share networkId 1/
+    );
+  });
+
+  it('E3: allows several L1 chains to share networkId 0', () => {
+    const config = buildConfig();
+    // networkId 0 never keys an aggkitBridgeApis entry, so duplicates there are
+    // harmless -- only non-L1 networks map to a backend client.
+    config.chains.DEVNET_L1_ALT = chain({ id: 271829, name: 'Devnet L1 Alt', networkId: 0 });
+    config.appModes.configs.devnet.chainKeys.push('DEVNET_L1_ALT');
+
+    expect(() => parseConfigOrThrow(config)).not.toThrow();
+  });
 });

@@ -85,10 +85,22 @@ export const E2E_L2_CHAIN_IDS: number[] = (() => {
   return parsed.length >= 2 ? parsed : fallback;
 })();
 
-// Route-specific budgets. Cite the measurement in the code comment:
-// L2->L2 send->claimed, conservative idle-enclave figure ~2m11s (S3c latency
-// table) -> 2.3x margin. S6's busier-enclave sample was ~87s.
-const DEFAULT_L2_TO_L2_CLAIM_TIMEOUT_MS = 300_000;
+// Route-specific budgets. Cite the measurement in the code comment.
+//
+// L2->L2 send->claimed. Early samples were ~87s (S6, busy enclave) and ~2m11s
+// (S3c, idle enclave), which is where the previous 300s budget came from. S14
+// measured ~5m30s on a longer-lived enclave and blew straight through it: the
+// dominant term is not autoclaim but SOURCE-side settlement -- L2-1's aggsender
+// must get a certificate covering the deposit's block settled on L1 before the
+// deposit even appears in the L1 info tree (`/l1-info-tree-index` 500s with
+// "not been included on the L1 Info Tree yet" until then). That wait grows with
+// enclave age/load and with any certificate already in flight -- and
+// l2-to-l2.spec.ts now funds its own L1->L2-1 top-up first, which deliberately
+// puts one there. Sampled range is 87s..330s, a ~3.8x spread, so this is
+// budgeted well above the worst observation rather than just over it. NOT
+// related to `MinimumNewCertificateInterval: 5m0s`, which is a maximum-idle
+// heartbeat and not a floor on certificate spacing.
+const DEFAULT_L2_TO_L2_CLAIM_TIMEOUT_MS = 600_000;
 // L2->L1 send->claim-proof-ready, conservative ~8m34s (S3c criterion 3) ->
 // +~17%. S6's busier-enclave sample was <=4m21s.
 const DEFAULT_PROOF_READY_TIMEOUT_MS = 600_000;

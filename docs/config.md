@@ -256,6 +256,24 @@ pnpm run validate:config
 
 CI also runs this command before deployment. The app also validates config at startup through `config/configValidator.mjs`.
 
+Beyond the schema, the validator enforces three cross-field rules per app mode so a
+mis-generated devnet config cannot silently drop a chain's data:
+
+| Rule | Rejected when |
+|---|---|
+| Every non-L1 chain has a backend | A chain in `chainKeys` with `networkId !== 0` has no `aggkitBridgeApis` entry for that networkId |
+| Every backend has a chain | An `aggkitBridgeApis` key matches no `networkId` among the mode's `chainKeys` |
+| networkIds are unique | Two chains in `chainKeys` share a `networkId` (L1 chains, `networkId 0`, are exempt) |
+
+The third rule matters because `networkId` — not the chain id — is what keys
+`aggkitBridgeApis` and what the SDK keys its per-network clients by. Two chains sharing a
+networkId would collapse onto one backend and merge one chain's transactions into the
+other's, while still satisfying the first two rules.
+
+Setting a mode's `aggkitBridgeApis` to `{}` marks it "not yet configured" and exempts it
+from all three rules. That is how the mainnet/testnet placeholder modes stay valid before
+real proxy URLs exist.
+
 If validation fails with errors like `Unrecognized key: "proofApiSuffix"` or `Unrecognized key: "bridgeHubApiBaseUrl"`, see the "Migration from Bridge Hub API" section above.
 
 ## Checklist: add a chain
