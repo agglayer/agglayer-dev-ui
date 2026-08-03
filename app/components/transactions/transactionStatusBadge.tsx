@@ -47,6 +47,7 @@ export const TransactionStatusBadge = ({ status, className }: TransactionStatusB
 
   return (
     <div
+      data-test-id="transaction-status"
       className={cn(
         'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-semibold',
         variantStyle,

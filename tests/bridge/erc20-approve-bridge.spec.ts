@@ -4,7 +4,8 @@ import {
   E2E_BRIDGE_SUCCESS_TIMEOUT_MS,
   E2E_ERC20_ADDRESS,
   E2E_ERC20_BRIDGE_AMOUNT,
-  E2E_FROM_CHAIN_ID
+  E2E_FROM_CHAIN_ID,
+  E2E_TO_CHAIN_ID
 } from '@/app/constants/e2e';
 import { fetchErc20Metadata } from '@/tests/e2e/erc20Metadata';
 import { expect, test } from '@playwright/test';
@@ -44,6 +45,9 @@ test('bridges ERC20 with approval step', async ({ page }) => {
 
   await bridgePage.navigate();
   await bridgePage.connectWallet();
+  // Explicit chain-pair selection rather than relying on config.json's
+  // defaultFromChainKey/defaultToChainKey (design.md §6.1).
+  await bridgePage.selectChainPair(E2E_FROM_CHAIN_ID, E2E_TO_CHAIN_ID);
   await bridgePage.openTokenSelector();
   await bridgePage.selectToken(erc20.symbol);
   await bridgePage.fillAmount(E2E_ERC20_BRIDGE_AMOUNT);
