@@ -170,10 +170,11 @@ export const TransactionListItem = ({
         )}
         {isClaimable &&
           (autoclaimGate === 'waiting' ? (
-            <p className="text-sm text-grey text-center">
+            <p className="text-sm text-grey text-center" data-test-id="autoclaim-waiting-note">
               Waiting for auto claim,{' '}
               <button
                 type="button"
+                data-test-id="claim-manually-now-button"
                 onClick={(event) => {
                   event.stopPropagation();
                   onClaim?.(transaction);
@@ -194,6 +195,7 @@ export const TransactionListItem = ({
                 size="md"
                 className="w-full"
                 disabled={isAnyClaiming}
+                data-test-id="claim-tokens-button"
               >
                 {claimStep === 'claiming' ? (
                   <>
@@ -205,7 +207,7 @@ export const TransactionListItem = ({
                 )}
               </Button>
               {autoclaimGate === 'overdue' && (
-                <p className="text-xs text-grey text-center">
+                <p className="text-xs text-grey text-center" data-test-id="autoclaim-overdue-note">
                   Auto claim is taking more time than expected, you can claim manually instead
                 </p>
               )}

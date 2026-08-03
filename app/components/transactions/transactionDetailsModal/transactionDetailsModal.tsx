@@ -168,6 +168,7 @@ export const TransactionDetailsModal = ({
             }}
             size="md"
             className="w-full"
+            data-test-id="claim-tokens-button-modal"
           >
             {claimStep === 'claiming' ? (
               <>

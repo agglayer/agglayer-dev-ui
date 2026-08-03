@@ -77,7 +77,9 @@ export const TransactionFilters = ({
           clearable
           disabled={disabled}
           onClear={clearStatus}
-          onSelect={(option) => handleStatusChange((option.value as TransactionStatus) || null)}
+          onSelect={(option) =>
+            handleStatusChange(option.value === 'all' ? null : (option.value as TransactionStatus))
+          }
           className="min-w-35"
         />
       </div>
