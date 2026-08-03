@@ -1,6 +1,6 @@
 import type { Token } from '@/app/types/token';
 
-import { E2E_PRIVATE_KEY } from '@/app/constants/e2e';
+import { E2E_FROM_CHAIN_ID, E2E_PRIVATE_KEY, E2E_TO_CHAIN_ID } from '@/app/constants/e2e';
 import { formatTokenBalance } from '@/app/utils/tokens';
 import { getE2EFromChain, getE2EFromChainRpcUrl } from '@/tests/e2e/chainRpc';
 import { expect, test } from '@playwright/test';
@@ -38,6 +38,9 @@ test('token selector shows token symbol and native balance when wallet is connec
 
   await bridgePage.navigate();
   await bridgePage.connectWallet();
+  // Explicit chain-pair selection rather than relying on config.json's
+  // defaultFromChainKey/defaultToChainKey (design.md §6.1).
+  await bridgePage.selectChainPair(E2E_FROM_CHAIN_ID, E2E_TO_CHAIN_ID);
   await bridgePage.openTokenSelector();
 
   const rawBalance = await client.getBalance({ address: account.address });

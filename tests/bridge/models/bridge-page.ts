@@ -1,9 +1,22 @@
 import type { Token } from '@/app/types/token';
 import type { Locator, Page } from '@playwright/test';
 
+import { ALL_WAGMI_CHAINS } from '@/app/config';
 import { E2E_BRIDGE_SUCCESS_TIMEOUT_MS } from '@/app/constants/e2e';
 import { STORAGE_KEYS } from '@/app/utils/storage';
 import { expect } from '@playwright/test';
+
+// Chain names shown by the from/to selectors come from config.json (via
+// BridgeFromSection/BridgeToSection's chainOptions -> chain.name), so this
+// looks the display name up by chainId rather than hardcoding it here --
+// see assertChainPair below.
+const getChainNameById = (chainId: number): string => {
+  const chain = ALL_WAGMI_CHAINS.find((candidate) => candidate.id === chainId);
+  if (!chain) {
+    throw new Error(`E2E: chain ${chainId} is not configured in config.json's chains.`);
+  }
+  return chain.name;
+};
 
 class BridgePage {
   private readonly page: Page;
@@ -21,6 +34,8 @@ class BridgePage {
   readonly bridgeSuccessExplorerLink: Locator;
   readonly bridgeSuccessCta: Locator;
   readonly transactionsRefreshButton: Locator;
+  readonly fromChainSelector: Locator;
+  readonly toChainSelector: Locator;
 
   constructor({ page }: { page: Page }) {
     this.page = page;
@@ -38,6 +53,8 @@ class BridgePage {
     this.bridgeSuccessExplorerLink = page.getByTestId('bridge-success-explorer-link');
     this.bridgeSuccessCta = page.getByTestId('bridge-success-go-to-transactions');
     this.transactionsRefreshButton = page.getByTestId('transactions-refresh');
+    this.fromChainSelector = page.getByTestId('from-chain-selector');
+    this.toChainSelector = page.getByTestId('to-chain-selector');
   }
 
   async navigate(): Promise<void> {
@@ -130,6 +147,48 @@ class BridgePage {
 
   async refreshActivity(): Promise<void> {
     await this.transactionsRefreshButton.click();
+  }
+
+  // The destination dropdown excludes the currently-selected source
+  // (createChainOptions(chains, excludeChainId), bridgeCard.tsx) and
+  // selectFromChain auto-swaps the to-chain if you pick the current to-chain
+  // (useBridge.ts's selectFromChain) -- so callers must select the from-chain
+  // before the to-chain, which selectChainPair below enforces.
+  async selectFromChain(chainId: number): Promise<void> {
+    await this.fromChainSelector.click();
+    await this.page.getByTestId(`from-chain-selector-option-${chainId}`).click();
+  }
+
+  async selectToChain(chainId: number): Promise<void> {
+    await this.toChainSelector.click();
+    await this.page.getByTestId(`to-chain-selector-option-${chainId}`).click();
+  }
+
+  async assertChainPair(fromChainId: number, toChainId: number): Promise<void> {
+    await expect(this.fromChainSelector).toContainText(getChainNameById(fromChainId));
+    await expect(this.toChainSelector).toContainText(getChainNameById(toChainId));
+  }
+
+  async selectChainPair(fromChainId: number, toChainId: number): Promise<void> {
+    await this.selectFromChain(fromChainId);
+    await this.selectToChain(toChainId);
+    await this.assertChainPair(fromChainId, toChainId);
+  }
+
+  getTransactionStatus(transactionHash: string): Locator {
+    return this.getTransactionRow(transactionHash).getByTestId('transaction-status');
+  }
+
+  getClaimButton(transactionHash: string): Locator {
+    return this.getTransactionRow(transactionHash).getByTestId('claim-tokens-button');
+  }
+
+  getClaimManuallyNowButton(transactionHash: string): Locator {
+    return this.getTransactionRow(transactionHash).getByTestId('claim-manually-now-button');
+  }
+
+  async clickClaim(transactionHash: string): Promise<void> {
+    await this.getClaimButton(transactionHash).click();
   }
 }
 

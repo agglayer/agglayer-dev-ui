@@ -29,7 +29,9 @@ export const E2E_WALLET_ADDRESS: Address | undefined = E2E_PRIVATE_KEY
 export type E2EBackendMode = 'devnet' | 'testnet';
 
 const resolveBackendMode = (): E2EBackendMode =>
-  normalizeEnvValue(process.env.E2E_BACKEND_MODE).toLowerCase() === 'testnet' ? 'testnet' : 'devnet';
+  normalizeEnvValue(process.env.E2E_BACKEND_MODE).toLowerCase() === 'testnet'
+    ? 'testnet'
+    : 'devnet';
 
 export const E2E_BACKEND_MODE: E2EBackendMode = resolveBackendMode();
 
@@ -49,6 +51,56 @@ export const E2E_FROM_CHAIN_ID = (() => {
   if (envOverride) return parsePositiveInt(envOverride, DEVNET_FROM_CHAIN_ID);
   return E2E_BACKEND_MODE === 'testnet' ? TESTNET_FROM_CHAIN_ID : DEVNET_FROM_CHAIN_ID;
 })();
+
+// Devnet L2-1 (params-aggkit-l2l2-run1.yml l2_chain_id: 20201).
+const DEVNET_TO_CHAIN_ID = 20201;
+// Bokuto -- testnet-mode default only.
+const TESTNET_TO_CHAIN_ID = 737373;
+
+export const E2E_TO_CHAIN_ID = (() => {
+  const envOverride = normalizeEnvValue(process.env.E2E_TO_CHAIN_ID);
+  if (envOverride) return parsePositiveInt(envOverride, DEVNET_TO_CHAIN_ID);
+  return E2E_BACKEND_MODE === 'testnet' ? TESTNET_TO_CHAIN_ID : DEVNET_TO_CHAIN_ID;
+})();
+
+// design.md §6.4: the full set of devnet L2 chain ids (L2-1, L2-2, ...),
+// comma-separated by scripts/kurtosisDevnetEnv.mjs into E2E_L2_CHAIN_IDS.
+// Used by tests/bridge/l2-to-l2.spec.ts to reach the second L2
+// (params-aggkit-l2l2-run2.yml l2_chain_id: 20202) without hardcoding a
+// suffix that the discovery script (design.md §5.1) could reassign.
+// Devnet-only: testnet mode has a single L2 (Bokuto), so the fallback below
+// has only one entry in testnet mode, which the L2->L2 spec's
+// `E2E_BACKEND_MODE !== 'devnet'` skip guard relies on never being reached.
+const DEVNET_L2_CHAIN_IDS = [DEVNET_TO_CHAIN_ID, 20202];
+const TESTNET_L2_CHAIN_IDS = [TESTNET_TO_CHAIN_ID];
+
+export const E2E_L2_CHAIN_IDS: number[] = (() => {
+  const fallback = E2E_BACKEND_MODE === 'testnet' ? TESTNET_L2_CHAIN_IDS : DEVNET_L2_CHAIN_IDS;
+  const envOverride = normalizeEnvValue(process.env.E2E_L2_CHAIN_IDS);
+  if (!envOverride) return fallback;
+  const parsed = envOverride
+    .split(',')
+    .map((part) => parsePositiveInt(part.trim(), Number.NaN))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  return parsed.length >= 2 ? parsed : fallback;
+})();
+
+// Route-specific budgets. Cite the measurement in the code comment:
+// L2->L2 send->claimed, conservative idle-enclave figure ~2m11s (S3c latency
+// table) -> 2.3x margin. S6's busier-enclave sample was ~87s.
+const DEFAULT_L2_TO_L2_CLAIM_TIMEOUT_MS = 300_000;
+// L2->L1 send->claim-proof-ready, conservative ~8m34s (S3c criterion 3) ->
+// +~17%. S6's busier-enclave sample was <=4m21s.
+const DEFAULT_PROOF_READY_TIMEOUT_MS = 600_000;
+
+export const E2E_L2_TO_L2_CLAIM_TIMEOUT_MS = parsePositiveInt(
+  normalizeEnvValue(process.env.E2E_L2_TO_L2_CLAIM_TIMEOUT_MS),
+  DEFAULT_L2_TO_L2_CLAIM_TIMEOUT_MS
+);
+export const E2E_PROOF_READY_TIMEOUT_MS = parsePositiveInt(
+  normalizeEnvValue(process.env.E2E_PROOF_READY_TIMEOUT_MS),
+  DEFAULT_PROOF_READY_TIMEOUT_MS
+);
 
 // Sepolia USDC -- the one fixed, always-funded ERC20 available in testnet
 // mode.

@@ -1,4 +1,10 @@
-import { E2E_BACKEND_MODE, E2E_CLAIM_TIMEOUT_MS, E2E_NATIVE_BRIDGE_AMOUNT } from '@/app/constants/e2e';
+import {
+  E2E_BACKEND_MODE,
+  E2E_CLAIM_TIMEOUT_MS,
+  E2E_FROM_CHAIN_ID,
+  E2E_NATIVE_BRIDGE_AMOUNT,
+  E2E_TO_CHAIN_ID
+} from '@/app/constants/e2e';
 import { expect, test } from '@playwright/test';
 
 import { BridgePage } from './models/bridge-page';
@@ -7,19 +13,16 @@ import { BridgePage } from './models/bridge-page';
 // aggkit image (the `feat-autoclaim-l2-lx` tag) auto-claims L1->L2 deposits
 // externally -- independent of the dev-ui and independent of
 // bridge-spammer-001 -- typically within ~10-90s of the deposit reaching
-// READY_TO_CLAIM. No deposit stays READY_TO_CLAIM long enough to reliably
-// drive a "click Claim tokens" UI test: S12 measured a browser-driven click
-// still losing the race by as little as 0.36s after readiness, across
-// several timed attempts. A manual-claim UI test therefore cannot be written
-// against this environment without waiting forever for a state
-// (READY_TO_CLAIM that survives a click) that this enclave will not produce.
+// READY_TO_CLAIM.
 //
-// Instead, this spec asserts the one reachable, deterministic outcome: the
-// deposit progresses BRIDGED -> ... -> CLAIMED ("Completed") entirely on its
-// own, without this test ever clicking a claim button. `useClaimExecution`'s
-// manual-claim code path itself is exercised and asserted correct in the
-// (uninstrumented, since it needs live timing races) S12 manual validation,
-// not by an automated spec -- see manual-validation.md §3 for that evidence.
+// L1->L2 autoclaim regression only; the manual claim path is asserted in
+// manual-claim.spec.ts on the L2->L1 route, which is non-autoclaiming by
+// configuration (config.json autoclaim.l2_to_l1.expectedAutoclaim: false --
+// no [[AutoClaim.Claimers]] targets NetworkID=0 on either instance, design.md
+// §3.7/§6.3) rather than by race. This spec asserts the one reachable,
+// deterministic outcome on the L1->L2 route: the deposit progresses
+// BRIDGED -> ... -> CLAIMED ("Completed") entirely on its own, without this
+// test ever clicking a claim button.
 //
 // Devnet-only: real Sepolia/Bokuto testnet infrastructure has no such
 // autoclaimer, so this is skipped rather than asserting a behavior testnet
@@ -38,6 +41,9 @@ test('L1→L2 deposit reaches Completed via built-in aggkit autoclaim (no manual
 
   await bridgePage.navigate();
   await bridgePage.connectWallet();
+  // Explicit chain-pair selection rather than relying on config.json's
+  // defaultFromChainKey/defaultToChainKey (design.md §6.1/§6.3).
+  await bridgePage.selectChainPair(E2E_FROM_CHAIN_ID, E2E_TO_CHAIN_ID);
   await bridgePage.fillAmount(E2E_NATIVE_BRIDGE_AMOUNT);
   await bridgePage.submitBridge();
   await bridgePage.waitForTransactionModal();
@@ -62,7 +68,10 @@ test('L1→L2 deposit reaches Completed via built-in aggkit autoclaim (no manual
     .poll(
       async () => {
         await bridgePage.refreshActivity();
-        return row.getByText('Completed').isVisible().catch(() => false);
+        return row
+          .getByText('Completed')
+          .isVisible()
+          .catch(() => false);
       },
       {
         message: 'Waiting for the built-in aggkit autoclaim to reach Completed (CLAIMED)',

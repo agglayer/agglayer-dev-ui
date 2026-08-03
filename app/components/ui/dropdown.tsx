@@ -23,6 +23,7 @@ interface DropdownProps {
   className?: string;
   clearable?: boolean;
   onClear?: () => void;
+  testId?: string;
 }
 
 export const Dropdown = ({
@@ -34,7 +35,8 @@ export const Dropdown = ({
   disabled,
   className,
   clearable = false,
-  onClear
+  onClear,
+  testId
 }: DropdownProps) => {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -78,6 +80,7 @@ export const Dropdown = ({
           disabled={disabled}
           onClick={() => setOpen((prev) => !prev)}
           className="flex flex-1 items-center justify-between gap-3 text-left cursor-pointer"
+          data-test-id={testId}
         >
           <span className="flex items-center gap-2 text-sm">
             {selected?.icon}
@@ -121,6 +124,7 @@ export const Dropdown = ({
                   'flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-surface-muted transition-colors cursor-pointer',
                   selectedValue === option.value && 'bg-surface-muted'
                 )}
+                data-test-id={testId ? `${testId}-option-${option.value}` : undefined}
               >
                 {option.icon}
                 <div className="flex flex-col">
