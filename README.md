@@ -51,8 +51,8 @@ node scripts/kurtosisDevnetEnv.mjs --enclave cdk
 
 It resolves the enclave's ephemeral ports live (`kurtosis port print`), then:
 
-- writes `config.json`'s `chains.DEVNET_L1` / `chains.DEVNET_L2` and `appModes.configs.devnet` with the live L1/L2 RPC URLs, chain ids (read via `eth_chainId`), and bridge address (verified deployed via `eth_getCode`);
-- writes `.env.local` with `NEXT_PUBLIC_AGGKIT_BRIDGE_APIS` pointed at the enclave's CORS-safe haproxy proxy (`<proxy>/aggkitapi`, never the direct aggkit REST port) and `E2E_PRIVATE_KEY` set to a pre-funded devnet key.
+- writes `config.json`'s `chains` with `DEVNET_L1`, `DEVNET_L2_001`, `DEVNET_L2_002` (for 2-L2 enclaves) and `appModes.configs.devnet` with the live L1/L2 RPC URLs, chain ids (read via `eth_chainId`), and bridge address (verified deployed via `eth_getCode`);
+- writes `.env.local` with `NEXT_PUBLIC_AGGKIT_BRIDGE_APIS` pointed at the enclave's CORS-safe haproxy proxy (same URL under both networkId keys, routed via `?network_id=`), `E2E_PRIVATE_KEY` set to a pre-funded devnet key, and for 2-L2 enclaves: `E2E_TO_CHAIN_ID` and `E2E_L2_CHAIN_IDS`.
 
 Re-run it after every enclave recreate (ports are ephemeral). It fails with a clear error if the named enclave doesn't exist. Only supports Kurtosis-based devnets.
 
@@ -81,6 +81,11 @@ Required `.env.local` variables for E2E:
 - `NEXT_PUBLIC_PROJECT_ID`
 - `NEXT_PUBLIC_AGGKIT_BRIDGE_APIS` (devnet mode: written by `scripts/kurtosisDevnetEnv.mjs`)
 
+**2-L2 devnet E2E-specific variables** (both set by `kurtosisDevnetEnv.mjs` for 2-L2 enclaves):
+
+- `E2E_TO_CHAIN_ID` — destination chain ID for L2→L2 tests (e.g., `20202` for L2-2)
+- `E2E_L2_CHAIN_IDS` — comma-separated list of all L2 chain IDs (e.g., `20201,20202`)
+
 Devnet mode also runs a Playwright `globalSetup` (`tests/e2e/globalSetup.ts`)
 before any spec: it resolves a usable ERC20 for
 `tests/bridge/erc20-approve-bridge.spec.ts`, reusing a known-good devnet
@@ -95,11 +100,40 @@ injected into `NEXT_PUBLIC_AGGKIT_BRIDGE_APIS`, exercising the S8
 partial-failure notice (`tests/bridge/partial-failure.spec.ts`) without
 disturbing the shared dev server the rest of the suite uses.
 
-`tests/bridge/claim-autoclaim.spec.ts` is devnet-only (skipped in testnet
-mode): this devnet's aggkit build auto-claims L1→L2 deposits externally
-within seconds, so no deposit stays claimable long enough to drive a manual
-"click Claim tokens" test. It instead asserts the deposit reaches Completed
-(CLAIMED) on its own -- see the comment at the top of that file for why.
+### Devnet-Specific Tests
+
+**`tests/bridge/claim-autoclaim.spec.ts`** — L1→L2-1 auto-claim
+- Devnet-only (skipped in testnet mode)
+- Asserts the deposit reaches Completed (CLAIMED) state via external L1ToL2BridgeDetector
+- This devnet's aggkit build auto-claims such deposits within seconds (~67s observed latency)
+- See the file's top comment for why autoclaim is expected behavior here
+
+**`tests/bridge/l2-to-l2.spec.ts`** — L2-1→L2-2 auto-claim
+- Devnet-only, 2-L2 mode only
+- Asserts the deposit reaches Completed (CLAIMED) state via external L2ToLxBridgeDetector
+- Timeout budget: `E2E_L2_TO_L2_CLAIM_TIMEOUT_MS` (300s default, see notes on certificate cadence below)
+- **Certificate cadence note:** AggKit's aggsender enforces `MinimumNewCertificateInterval: 5m0s` between certificate windows. A deposit submitted just after a window closes can wait up to 5 minutes for the next one. The 300s timeout leaves **zero margin** against unlucky timing. If timeouts occur, budget 7–8 minutes instead, or keep L1 block production fast enough to stay ahead of L2 block height.
+
+**`tests/bridge/manual-claim.spec.ts`** — L2-1→L1 manual claim
+- Devnet-only, required for both single-L2 and 2-L2 enclaves
+- Now funds its own L1→L2-1 top-up deposit (via `claim-autoclaim.spec.ts` flow) before testing the L2→L1 withdrawal
+- This makes the spec independent of run order and other specs' side effects
+- Typical latency: ~3.9–8.3 minutes until "Ready to claim" (certificate settlement + L1 info tree sync)
+- **Shared wallet state note:** The E2E wallet's balance and the enclave's transaction/certificate history accumulate across test runs on the same enclave. This spec now tops up its own balance, so isolation is preserved; future specs requiring absolute balance assertions should account for this accumulation.
+
+### E2E Specs by Mode
+
+| Spec | Mode | Assertion |
+|------|------|-----------|
+| smoke | all | Page loads, wallet connects |
+| token-selector | all | Token selector shows symbol + balance |
+| native-bridge | all | Native token bridge works |
+| erc20-approve-bridge | all | ERC20 approval + bridge works |
+| claim-autoclaim | devnet | L1→L2 autoclaim reaches Completed |
+| l2-to-l2 | devnet (2-L2 only) | L2→L2 autoclaim reaches Completed |
+| manual-claim | devnet | L2→L1 manual claim reaches Completed |
+| partial-failure | devnet | UI partial-failure notice surfaces |
+| preflight | devnet | Chain sync-status, E2E wallet funded |
 
 ## Configuration
 
