@@ -19,9 +19,24 @@ The `aggkitBridgeApis` object in each app mode maps L2 network IDs (as strings) 
     "configs": {
       "devnet": {
         "aggkitBridgeApis": {
-          "1": "http://127.0.0.1:33460"
+          "1": "http://127.0.0.1:33460/aggkitapi",
+          "2": "http://127.0.0.1:33460/aggkitapi"
         }
       }
+    }
+  }
+}
+```
+
+**Important:** In a multi-L2 devnet (2 L2s or more), the `aggkitBridgeApis` map can have **identical URLs for multiple network IDs**. This is correct and necessary — the URL points to the AggKit proxy, which multiplexes all networks via the `network_id` query parameter. The URL itself does not change per chain; the routing happens server-side based on the query parameter.
+
+For mainnet/testnet modes with distinct per-network bridge services, use distinct URLs per network:
+```json
+{
+  "mainnet": {
+    "aggkitBridgeApis": {
+      "20": "https://katana-aggkit.example.com",
+      "22": "https://forknet-aggkit.example.com"
     }
   }
 }
@@ -31,21 +46,53 @@ If set, the `NEXT_PUBLIC_AGGKIT_BRIDGE_APIS` environment variable (a JSON string
 
 ### Kurtosis / Local Devnet Setup
 
-When running agglayer against a Kurtosis enclave (local devnet), the aggkit service is accessed through an enclave proxy. Use the proxy's HTTP port and append `/aggkitapi`:
+When running agglayer against a Kurtosis enclave (local devnet), the aggkit service is accessed through an enclave proxy. The proxy routes RPC calls by path and aggkit bridge calls by network ID query parameter.
 
-1. Get the proxy port from the enclave:
+**Automated setup (recommended):**
+
 ```bash
-kurtosis port print cdk agglayer-dev-ui-proxy-001 http
+cd /path/to/agglayer-dev-ui
+
+# Run this after bringing up the enclave
+node scripts/kurtosisDevnetEnv.mjs --enclave cdk [--l2-suffixes 001,002] [--proxy-service <name>]
+```
+
+This script automatically:
+1. Discovers L2 suffixes from the enclave (defaults to `[001, 002]`, or override with `--l2-suffixes`)
+2. Resolves all RPC URLs (L1 and both L2s)
+3. Discovers the haproxy proxy service name (defaults to automatic discovery, or override with `--proxy-service`)
+4. Writes `config.json` with `chains.DEVNET_L1`, `chains.DEVNET_L2_001`, `chains.DEVNET_L2_002`
+5. Writes `.env.local` with `NEXT_PUBLIC_AGGKIT_BRIDGE_APIS` pointing to `{1, 2}` under the same proxy URL
+
+**Manual setup:**
+
+1. Get the proxy port:
+```bash
+kurtosis port print cdk agglayer-dev-ui-proxy-002 http
 # Example output: 127.0.0.1:33460
 ```
 
-2. Set `NEXT_PUBLIC_AGGKIT_BRIDGE_APIS` with the L2 networkId as key:
+2. Set `NEXT_PUBLIC_AGGKIT_BRIDGE_APIS` with all L2 network IDs pointing to the same proxy URL:
 ```bash
-# For a devnet L2 with networkId=1:
-export NEXT_PUBLIC_AGGKIT_BRIDGE_APIS='{"1":"http://127.0.0.1:33460/aggkitapi"}'
+# For a 2-L2 devnet (both under the same proxy):
+export NEXT_PUBLIC_AGGKIT_BRIDGE_APIS='{"1":"http://127.0.0.1:33460/aggkitapi","2":"http://127.0.0.1:33460/aggkitapi"}'
 ```
 
-3. (For **mainnet/testnet modes**: ensure the mode's `aggkitBridgeApis` in `config.json` contains the correct per-network URLs; the env override above only affects the active mode.)
+3. Ensure `config.json` has matching `chainKeys` for all configured networks.
+
+### RPC URL Semantics
+
+The haproxy proxy (`agglayer-dev-ui-proxy-00X`) routes RPC calls by path:
+
+| Path | Chain | RPC Endpoint |
+|------|-------|--------------|
+| `/l1rpc` | L1 | L1 EL RPC |
+| `/l2rpc` | L2-1 | L2-1 RPC (back-compat alias, never "current") |
+| `/l2rpc-001` | L2-1 | L2-1 RPC |
+| `/l2rpc-002` | L2-2 | L2-2 RPC |
+| `/aggkitapi` | All (via `?network_id=`) | AggKit proxy multiplexer |
+
+The dev-ui app automatically constructs these paths from the configured chains and `appModes.configs.devnet.chainKeys`; no manual URL construction is needed.
 
 ## External Links
 
