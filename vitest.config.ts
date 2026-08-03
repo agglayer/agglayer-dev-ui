@@ -19,7 +19,11 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
-    include: ['app/**/*.{test,spec}.{ts,tsx}', 'src/**/*.{test,spec}.{ts,tsx}'],
+    include: [
+      'app/**/*.{test,spec}.{ts,tsx}',
+      'src/**/*.{test,spec}.{ts,tsx}',
+      'config/**/*.{test,spec}.mjs'
+    ],
     exclude: ['node_modules/**', '.next/**', 'out/**', 'tests/**']
   }
 });

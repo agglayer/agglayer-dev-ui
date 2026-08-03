@@ -3,7 +3,10 @@ import { jsonConfigSchema } from './configSchema.mjs';
 
 const APP_MODE_SET = new Set(APP_MODES);
 const MIN_ENABLED_MODE_CHAIN_COUNT = 2;
-const DEFAULT_CHAIN_KEY_FIELDS = /** @type {const} */ (['defaultFromChainKey', 'defaultToChainKey']);
+const DEFAULT_CHAIN_KEY_FIELDS = /** @type {const} */ ([
+  'defaultFromChainKey',
+  'defaultToChainKey'
+]);
 
 /**
  * @typedef {import('zod').infer<typeof jsonConfigSchema>} JsonConfig
@@ -31,7 +34,7 @@ const getDuplicateChainIdErrors = (chainsByKey) => {
     const existingChainKey = firstChainKeyById.get(chainConfig.id);
     if (existingChainKey) {
       return [
-        `chains.${chainKey}.id: duplicate chain id "${chainConfig.id}" (already used by "${existingChainKey}")`,
+        `chains.${chainKey}.id: duplicate chain id "${chainConfig.id}" (already used by "${existingChainKey}")`
       ];
     }
 
@@ -47,7 +50,10 @@ const getDuplicateChainIdErrors = (chainsByKey) => {
 const getUnsupportedModeKeyErrors = (modeConfigsByKey) =>
   Object.keys(modeConfigsByKey)
     .filter((modeKey) => !APP_MODE_SET.has(modeKey))
-    .map((modeKey) => `appModes.configs.${modeKey}: unsupported mode key; expected one of ${APP_MODES.join(', ')}`);
+    .map(
+      (modeKey) =>
+        `appModes.configs.${modeKey}: unsupported mode key; expected one of ${APP_MODES.join(', ')}`
+    );
 
 /**
  * @param {string} modeKey
@@ -65,15 +71,69 @@ const getModeConfigErrors = (modeKey, modeConfig, chainsByKey) => {
 
   const missingModeChainKeyErrors = modeConfig.chainKeys
     .filter((chainKey) => !chainsByKey[chainKey])
-    .map((chainKey) => `appModes.configs.${modeKey}.chainKeys: chain key "${chainKey}" does not exist in chains`);
+    .map(
+      (chainKey) =>
+        `appModes.configs.${modeKey}.chainKeys: chain key "${chainKey}" does not exist in chains`
+    );
 
   const invalidDefaultChainKeyErrors = DEFAULT_CHAIN_KEY_FIELDS.flatMap((fieldName) => {
     const configuredChainKey = modeConfig[fieldName];
     if (!configuredChainKey || modeChainKeySet.has(configuredChainKey)) return [];
-    return [`appModes.configs.${modeKey}.${fieldName}: "${configuredChainKey}" must be listed in chainKeys`];
+    return [
+      `appModes.configs.${modeKey}.${fieldName}: "${configuredChainKey}" must be listed in chainKeys`
+    ];
   });
 
-  return [...duplicateModeChainKeyErrors, ...missingModeChainKeyErrors, ...invalidDefaultChainKeyErrors];
+  return [
+    ...duplicateModeChainKeyErrors,
+    ...missingModeChainKeyErrors,
+    ...invalidDefaultChainKeyErrors,
+    ...getChainsAggkitBridgeApiErrors(modeKey, modeConfig, chainsByKey)
+  ];
+};
+
+/**
+ * design.md §1.2: a mode's `aggkitBridgeApis` and its `chainKeys` must agree on
+ * which non-L1 (networkId !== 0) networks exist, so a bad devnet-script run or a
+ * hand-edit can't silently produce "3 chains configured, 1 backend, the third
+ * chain's rows never appear and nothing says why". `aggkitBridgeApis: {}` is the
+ * documented "mode not yet configured" escape hatch (configSchema.mjs's own
+ * comment) and is exempt from both checks below.
+ *
+ * @param {string} modeKey
+ * @param {JsonConfig['appModes']['configs'][string]} modeConfig
+ * @param {JsonConfig['chains']} chainsByKey
+ * @returns {string[]}
+ */
+const getChainsAggkitBridgeApiErrors = (modeKey, modeConfig, chainsByKey) => {
+  const aggkitBridgeApis = modeConfig.aggkitBridgeApis;
+  const isIntentionallyUnconfigured = Object.keys(aggkitBridgeApis).length === 0;
+  if (isIntentionallyUnconfigured) return [];
+
+  // Chains missing from chainsByKey are already reported by
+  // missingModeChainKeyErrors above; skip them here rather than double-report.
+  const nonL1ChainEntries = modeConfig.chainKeys
+    .filter((chainKey) => chainsByKey[chainKey] && chainsByKey[chainKey].networkId !== 0)
+    .map((chainKey) => ({ chainKey, networkId: chainsByKey[chainKey].networkId }));
+
+  const missingApiEntryErrors = nonL1ChainEntries
+    .filter(({ networkId }) => !(String(networkId) in aggkitBridgeApis))
+    .map(
+      ({ chainKey, networkId }) =>
+        `appModes.configs.${modeKey}.aggkitBridgeApis: missing entry for chain "${chainKey}" (networkId ${networkId})`
+    );
+
+  const configuredNetworkIdKeys = new Set(
+    nonL1ChainEntries.map(({ networkId }) => String(networkId))
+  );
+  const unmatchedApiKeyErrors = Object.keys(aggkitBridgeApis)
+    .filter((networkIdKey) => !configuredNetworkIdKeys.has(networkIdKey))
+    .map(
+      (networkIdKey) =>
+        `appModes.configs.${modeKey}.aggkitBridgeApis: key "${networkIdKey}" does not match the networkId of any chain in chainKeys`
+    );
+
+  return [...missingApiEntryErrors, ...unmatchedApiKeyErrors];
 };
 
 /**
@@ -112,7 +172,7 @@ const validateSemantics = (config) => {
     ...unsupportedModeKeyErrors,
     ...missingEnabledModeError,
     ...missingDefaultModeConfigError,
-    ...modeConfigErrors,
+    ...modeConfigErrors
   ];
 };
 
@@ -129,12 +189,16 @@ export const parseConfigOrThrow = (configJson, options = {}) => {
       const issuePath = formatZodPath(issue.path);
       return `${issuePath}: ${issue.message}`;
     });
-    throw new Error(`${sourceName} schema validation failed:\n${lines.map((line) => `- ${line}`).join('\n')}`);
+    throw new Error(
+      `${sourceName} schema validation failed:\n${lines.map((line) => `- ${line}`).join('\n')}`
+    );
   }
 
   const semanticErrors = validateSemantics(parsedConfig.data);
   if (semanticErrors.length > 0) {
-    throw new Error(`${sourceName} semantic validation failed:\n${semanticErrors.map((line) => `- ${line}`).join('\n')}`);
+    throw new Error(
+      `${sourceName} semantic validation failed:\n${semanticErrors.map((line) => `- ${line}`).join('\n')}`
+    );
   }
 
   return parsedConfig.data;
