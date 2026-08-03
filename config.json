@@ -5,9 +5,17 @@
     "contactSupport": "https://support.polygon.technology/support/home"
   },
   "autoclaim": {
-    "l1_to_l2": { "expectedAutoclaim": true, "waitForAutoclaimMs": 60000 },
-    "l2_to_l1": { "expectedAutoclaim": false },
-    "l2_to_l2": { "expectedAutoclaim": true, "waitForAutoclaimMs": 120000 }
+    "l1_to_l2": {
+      "expectedAutoclaim": true,
+      "waitForAutoclaimMs": 120000
+    },
+    "l2_to_l1": {
+      "expectedAutoclaim": false
+    },
+    "l2_to_l2": {
+      "expectedAutoclaim": true,
+      "waitForAutoclaimMs": 300000
+    }
   },
   "chains": {
     "MAINNET": {
@@ -100,10 +108,10 @@
       "isTestnet": true,
       "eta": 1
     },
-    "DEVNET_L2": {
-      "id": 2151908,
-      "name": "Devnet L2",
-      "rpcUrl": "http://127.0.0.1:8555/l2rpc",
+    "DEVNET_L2_001": {
+      "id": 20201,
+      "name": "Devnet L2-001",
+      "rpcUrl": "http://127.0.0.1:8555/l2rpc-001",
       "explorerUrl": "https://explorer.private/",
       "currency": {
         "name": "Ether",
@@ -112,6 +120,21 @@
       },
       "iconUrl": "https://raw.githubusercontent.com/lifinance/types/main/src/assets/icons/chains/katana.svg",
       "networkId": 1,
+      "isTestnet": true,
+      "eta": 1
+    },
+    "DEVNET_L2_002": {
+      "id": 20202,
+      "name": "Devnet L2-002",
+      "rpcUrl": "http://127.0.0.1:8555/l2rpc-002",
+      "explorerUrl": "https://explorer.private/",
+      "currency": {
+        "name": "Ether",
+        "symbol": "ETH",
+        "decimals": 18
+      },
+      "iconUrl": "https://raw.githubusercontent.com/lifinance/types/main/src/assets/icons/chains/katana.svg",
+      "networkId": 2,
       "isTestnet": true,
       "eta": 1
     }
@@ -126,11 +149,7 @@
           "20": "https://PLACEHOLDER-katana-aggkit",
           "22": "https://PLACEHOLDER-forknet-aggkit"
         },
-        "chainKeys": [
-          "MAINNET",
-          "KATANA",
-          "FORKNET"
-        ],
+        "chainKeys": ["MAINNET", "KATANA", "FORKNET"],
         "defaultFromChainKey": "MAINNET",
         "defaultToChainKey": "KATANA"
       },
@@ -140,10 +159,7 @@
         "aggkitBridgeApis": {
           "37": "https://PLACEHOLDER-bokuto-aggkit"
         },
-        "chainKeys": [
-          "SEPOLIA",
-          "BOKUTO"
-        ],
+        "chainKeys": ["SEPOLIA", "BOKUTO"],
         "defaultFromChainKey": "SEPOLIA",
         "defaultToChainKey": "BOKUTO"
       },
@@ -151,14 +167,12 @@
         "label": "Devnet",
         "bridgeAddress": "0xC8cbEBf950B9Df44d987c8619f092beA980fF038",
         "aggkitBridgeApis": {
-          "1": "http://127.0.0.1:8555/aggkitapi"
+          "1": "http://127.0.0.1:8555/aggkitapi",
+          "2": "http://127.0.0.1:8555/aggkitapi"
         },
-        "chainKeys": [
-          "DEVNET_L1",
-          "DEVNET_L2"
-        ],
+        "chainKeys": ["DEVNET_L1", "DEVNET_L2_001", "DEVNET_L2_002"],
         "defaultFromChainKey": "DEVNET_L1",
-        "defaultToChainKey": "DEVNET_L2"
+        "defaultToChainKey": "DEVNET_L2_001"
       }
     }
   }
