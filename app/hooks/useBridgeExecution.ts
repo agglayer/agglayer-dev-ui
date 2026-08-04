@@ -152,6 +152,9 @@ export const useBridgeExecution = (params: { fromChainId: number }) => {
           bridgeTxHash: localBridgeHash
         });
       } catch (error) {
+        // The modal deliberately shows a generic message (see
+        // formatErrorMessage) — log the real error so failures are diagnosable.
+        console.error('[bridge-execution]', error);
         const message = error instanceof Error ? error.message : 'Transaction failed';
         setState({
           isExecuting: false,
