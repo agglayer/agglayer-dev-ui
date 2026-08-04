@@ -1,10 +1,15 @@
 'use client';
 
 import { useCallback } from 'react';
-import { useChainId, useSwitchChain } from 'wagmi';
+import { useAccount, useSwitchChain } from 'wagmi';
 
 export const useEnforceCorrectChain = () => {
-  const walletChainId = useChainId();
+  // The connected wallet's actual chain (follows the connector's chainChanged
+  // events), NOT useChainId(): wagmi's store chain can diverge from a real
+  // extension wallet's per-dapp chain, which makes this guard skip a needed
+  // switch and the subsequent send throw ChainMismatch before the wallet is
+  // ever asked to sign.
+  const { chainId: walletChainId } = useAccount();
   const { switchChainAsync } = useSwitchChain();
 
   return useCallback(
@@ -12,6 +17,6 @@ export const useEnforceCorrectChain = () => {
       if (walletChainId === targetId) return;
       await switchChainAsync({ chainId: targetId });
     },
-    [walletChainId, switchChainAsync],
+    [walletChainId, switchChainAsync]
   );
 };
