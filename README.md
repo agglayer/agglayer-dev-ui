@@ -134,6 +134,67 @@ disturbing the shared dev server the rest of the suite uses.
 | manual-claim | devnet | L2→L1 manual claim reaches Completed |
 | partial-failure | devnet | UI partial-failure notice surfaces |
 | preflight | devnet | Chain sync-status, E2E wallet funded |
+| tracker | devnet | Bridge tracker progress bar + detail timeline render correctly |
+
+## Bridge Tracking
+
+Each non-`CLAIMED` transaction row polls aggkit's `tracker/v1` API (via the SDK's
+`AggkitBridgeAggregator.getBridgeTracking`, `app/hooks/useBridgeTracking.ts`) every 5 seconds and
+renders its step-by-step progress:
+
+- **`app/components/transactions/trackerProgressBar.tsx`** — a row of dots + connector lines in
+  the activity list, one dot per expected step of that bridge's route: 4 steps for L1→L2, 6 for
+  L2→L1, 7 for L2→L2.
+- **`app/components/transactions/trackerDetail.tsx`** — the full timeline (same dots, plus label,
+  status, start/end dates, and a per-step result detail) shown in the transaction details modal.
+
+**Dot colors** (`DOT_CLASSES` in `trackerProgressBar.tsx`):
+
+| Status | Meaning | Style |
+|---|---|---|
+| `done` | Step complete | Filled green |
+| `inProgress` | Step currently running | Filled blue, pulsing |
+| `pending` | Step not started yet | Hollow grey ring |
+| `error` | Step failed (tracker retries in the background) | Filled red |
+
+**Render rules:**
+- Nothing renders while `all_steps` is `null` — either the tracker hasn't resolved the bridge's
+  route yet, or it has given up entirely (see the SDK's `getBridgeTracking` docs for terminal
+  semantics).
+- Both the progress bar and the detail view have an explicit guard on `transaction.status ===
+  'CLAIMED'`: `useBridgeTracking` disables its query once a row is `CLAIMED`, but disabling a
+  react-query query doesn't clear already-cached data, so a row that transitions live from
+  non-`CLAIMED` → `CLAIMED` while mounted would otherwise keep showing its last-fetched, all-`done`
+  steps. The status check is the actual hide signal, not the presence of `data`.
+- If the tracker gives up resolving the transaction at all (`tracking_status === 'error'` with
+  `bridge_status: null`), the detail view shows a "Tracking unavailable" info alert instead of a
+  timeline.
+
+**Step → copy mapping** (`app/utils/trackerSteps.ts`, keyed on the wire's `step_name`):
+
+| `step_name` | Label |
+|---|---|
+| `WaitingGERUpdate` | Waiting for the global exit root update on L1 |
+| `WaitingLERUpdate` | Waiting for the local exit root update on `{source}` |
+| `PendingInclusion` | Waiting for inclusion in an agglayer certificate |
+| `CertificatePending` | Waiting for the certificate to settle |
+| `WaitL1SettledGER` | Waiting for settlement to confirm on L1 |
+| `WaitingGERInjection` | Waiting for the exit root to reach `{destination}` |
+| `WaitingClaim` | Ready — waiting for the claim on `{destination}` |
+| `Claimed` | Claimed |
+
+Tooltips (progress bar) and step labels (detail view) fall back to "the source"/"the destination"
+when chain metadata hasn't resolved yet.
+
+**Testids for E2E authors** (`data-test-id`, see `tests/bridge/models/bridge-page.ts`):
+
+- `tracker-progress` — the progress bar container for a transaction row
+- `tracker-step-<i>` — one dot in the progress bar (`data-step` = `step_name`, `data-status` =
+  step status)
+- `tracker-detail` — the tracker section of the transaction details modal
+- `tracker-detail-step-<i>` — one timeline entry in the detail view
+
+Covered by `tests/bridge/tracker.spec.ts`.
 
 ## Configuration
 
