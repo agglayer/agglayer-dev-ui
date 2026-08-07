@@ -37,7 +37,15 @@ export const TrackerProgressBar = ({ transaction }: TrackerProgressBarProps) => 
   const { data } = useBridgeTracking(transaction);
   const steps = data?.all_steps;
 
-  if (!steps || steps.length === 0) return null;
+  // Explicit CLAIMED guard (S10a): useBridgeTracking disables its query once
+  // status is CLAIMED, but disabling a react-query query only stops future
+  // refetches -- it does NOT clear already-cached `data` for that query key.
+  // A row that transitions live from non-CLAIMED -> CLAIMED while mounted
+  // (rather than loading already-CLAIMED) keeps serving its last-fetched,
+  // fully-`done` `all_steps` from cache, so relying on `data`/`steps` alone
+  // does not actually hide the bar on that transition. Check `status`
+  // directly rather than depending on cache semantics.
+  if (transaction.status === 'CLAIMED' || !steps || steps.length === 0) return null;
 
   const sourceName = getChainByNetworkId(chains, transaction.sourceNetwork)?.name;
   const destinationName = getChainByNetworkId(chains, transaction.destinationNetwork)?.name;
