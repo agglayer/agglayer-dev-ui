@@ -107,7 +107,7 @@ describe('useBridgeTracking', () => {
     expect(getBridgeTracking).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps polling through a step-level error (tracking_status stays running)', async () => {
+  it("keeps polling through a step-level error (tracking_status 'error' but bridge_status populated)", async () => {
     const getBridgeTracking = vi.fn().mockResolvedValue(l2l2RunningStepErrorFixture);
     mockAggregator(getBridgeTracking);
 

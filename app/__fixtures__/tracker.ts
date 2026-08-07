@@ -311,14 +311,19 @@ export const l2l2RunningFixture: AggkitTrackingData = {
 
 // SYNTHESIZED (not a captured fixture -- per S9 context pack, no captured
 // fixture has a step-level error, so this is l2l2RunningFixture with step 4
-// (WaitingGERInjection) turned into a step-level `error`. tracking_status
-// stays 'running' and bridge_status stays populated: per
-// useBridgeTracking.ts's isTrackingTerminal, a step-level error is NOT the
-// tracker's giving-up terminal (that's tracking_status 'error' with
-// bridge_status null) -- the tracker retries these on its own, so polling
-// must continue.
+// (WaitingGERInjection) turned into a step-level `error`. Per aggkit
+// v0.11.0-rc4 (bridgetracker/domain/tracking_data.go: TrackingStatus derives
+// from the step at step_index, so a step in `error` makes tracking_status
+// 'error'; API.md's WebSocket section spells out the same), the top-level
+// tracking_status here is 'error' -- NOT 'running' -- while bridge_status
+// stays populated. That populated bridge_status is exactly what
+// distinguishes this retryable state from the tracker's giving-up terminal
+// (tracking_status 'error' with bridge_status null, errorGiveupFixture
+// below): per useBridgeTracking.ts's isTrackingTerminal, polling must
+// continue here.
 export const l2l2RunningStepErrorFixture: AggkitTrackingData = {
   ...l2l2RunningFixture,
+  tracking_status: 'error',
   all_steps: l2l2RunningFixture.all_steps!.map((step) =>
     step.step_index === 4
       ? {
