@@ -158,7 +158,15 @@ export const TrackerDetail = ({ transaction }: TrackerDetailProps) => {
   const { chains } = useAppMode();
   const { data } = useBridgeTracking(transaction);
 
-  if (!data) return null;
+  // Explicit CLAIMED guard (S10a, mirrors trackerProgressBar.tsx): the
+  // caller (transactionDetailsModal.tsx) already gates mounting this
+  // component on `tx.status !== 'CLAIMED'`, which covers a fresh modal open
+  // on an already-completed row. This second guard is defense-in-depth for
+  // any other caller/path, and for the same reason trackerProgressBar.tsx
+  // needs one -- disabling useBridgeTracking's query on CLAIMED does not
+  // clear its already-cached `data`, so `data` alone is not a reliable
+  // "hide on CLAIMED" signal.
+  if (transaction.status === 'CLAIMED' || !data) return null;
 
   // Giving-up terminal (useBridgeTracking.ts's isTrackingTerminal): the
   // tracker could not resolve this tx as a bridge at all. No steps exist.

@@ -17,6 +17,7 @@ vi.mock('@/app/hooks/useBridgeTracking', () => ({
 }));
 
 import {
+  l1l2FinishedFixture,
   l1l2RunningFixture,
   l2l2RunningFixture,
   registeredFixture
@@ -109,6 +110,22 @@ describe('TrackerProgressBar', () => {
     mockTracking(l2l2RunningFixture);
     const { container } = render(<TrackerProgressBar transaction={makeTransaction()} />);
     expect(container.querySelectorAll('[data-test-id^="tracker-step-"]')).toHaveLength(7);
+  });
+
+  // S10a regression: a LIVE transition, not a row that loads already-CLAIMED
+  // (that's the 'hook disabled, data undefined' case above). Here the mocked
+  // hook keeps returning the same finished fixture across the rerender --
+  // simulating react-query's real behavior of a disabled query still serving
+  // its last-cached `data` -- so this only passes because the component
+  // checks `transaction.status` directly rather than trusting `data`/`steps`
+  // alone. Without that guard, this rerender would still find the bar.
+  it('hides the bar on a live CLAIMED transition even though the tracker cache is still warm', () => {
+    mockTracking(l1l2FinishedFixture);
+    const { container, rerender } = render(<TrackerProgressBar transaction={makeTransaction()} />);
+    expect(container.querySelectorAll('[data-test-id^="tracker-step-"]')).toHaveLength(4);
+
+    rerender(<TrackerProgressBar transaction={makeTransaction({ status: 'CLAIMED' })} />);
+    expect(container.querySelector('[data-test-id="tracker-progress"]')).not.toBeInTheDocument();
   });
 
   it('tooltip copy for the inProgress step names the destination chain and its status', () => {

@@ -19,6 +19,7 @@ vi.mock('@/app/hooks/useBridgeTracking', () => ({
 
 import {
   errorGiveupFixture,
+  l1l2FinishedFixture,
   l2l1FinishedFixture,
   l2l2RunningStepErrorFixture
 } from '@/app/__fixtures__/tracker';
@@ -105,6 +106,23 @@ describe('TrackerDetail', () => {
     expect(screen.getByText('Claim tx')).toBeInTheDocument();
     const claimTx = (l2l1FinishedFixture.all_steps![4].result as { claim_tx: string }).claim_tx;
     expect(screen.getByText(shortenAddress(claimTx, 6))).toBeInTheDocument();
+  });
+
+  // S10a regression (mirrors trackerProgressBar.test.tsx): a LIVE transition,
+  // not a row that loads already-CLAIMED (the first test above covers that,
+  // and it's also already gated by the caller -- transactionDetailsModal.tsx
+  // only mounts TrackerDetail while tx.status !== 'CLAIMED'). Here the mocked
+  // hook keeps returning the same finished fixture across the rerender,
+  // simulating a disabled react-query query still serving its last-cached
+  // `data`, so this only passes because the component checks
+  // `transaction.status` directly.
+  it('hides the timeline on a live CLAIMED transition even though the tracker cache is still warm', () => {
+    mockTracking(l1l2FinishedFixture);
+    const { container, rerender } = render(<TrackerDetail transaction={makeTransaction()} />);
+    expect(container.querySelector('[data-test-id="tracker-detail"]')).toBeInTheDocument();
+
+    rerender(<TrackerDetail transaction={makeTransaction({ status: 'CLAIMED' })} />);
+    expect(container.querySelector('[data-test-id="tracker-detail"]')).not.toBeInTheDocument();
   });
 
   it('renders a warning alert for a step-level error while the rest of the timeline still shows (non-terminal)', () => {
