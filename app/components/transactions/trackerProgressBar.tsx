@@ -18,7 +18,7 @@ interface TrackerProgressBarProps {
 // Dot fill per step status (design.md §Tracker / S7 context pack): done is
 // filled green, inProgress is a highlighted blue that pulses, pending is a
 // hollow ring, error is filled red.
-const DOT_CLASSES: Record<AggkitStepStatus, string> = {
+export const DOT_CLASSES: Record<AggkitStepStatus, string> = {
   done: 'border-green bg-green',
   inProgress: 'border-blue bg-blue animate-pulse',
   pending: 'border-grey-light bg-transparent',

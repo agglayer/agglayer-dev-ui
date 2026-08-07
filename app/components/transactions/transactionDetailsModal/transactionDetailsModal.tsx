@@ -3,6 +3,7 @@
 import type { ClaimStep, Transaction } from '@/app/types/transaction';
 
 import { CopyText } from '@/app/components/copyText';
+import { TrackerDetail } from '@/app/components/transactions/trackerDetail';
 import { TransactionDetailsHeader } from '@/app/components/transactions/transactionDetailsModal/transactionDetailsHeader';
 import { Alert } from '@/app/components/ui/alert';
 import { Button } from '@/app/components/ui/button';
@@ -153,6 +154,8 @@ export const TransactionDetailsModal = ({
             </div>
           </div>
         </div>
+
+        {tx.status !== 'CLAIMED' && <TrackerDetail transaction={tx} />}
 
         {isDifferentAddress && (
           <Alert
