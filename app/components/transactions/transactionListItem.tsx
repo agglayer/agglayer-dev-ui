@@ -3,6 +3,7 @@
 import type { ClaimStep, Transaction } from '@/app/types/transaction';
 
 import { CopyText } from '@/app/components/copyText';
+import { TrackerProgressBar } from '@/app/components/transactions/trackerProgressBar';
 import { TransactionETA } from '@/app/components/transactions/transactionEta';
 import { TransactionStatusBadge } from '@/app/components/transactions/transactionStatusBadge';
 import { BadgeImageFallback } from '@/app/components/ui/badgeImageFallback';
@@ -213,6 +214,7 @@ export const TransactionListItem = ({
               )}
             </div>
           ))}
+        <TrackerProgressBar transaction={transaction} />
       </div>
     </div>
   );
