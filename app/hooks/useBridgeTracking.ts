@@ -13,23 +13,34 @@ import type { AggkitTrackingData } from '@agglayer/sdk';
 const TRACKING_POLL_INTERVAL = 5000;
 
 // Rate-limit budget (enclave-notes.md / design.md §Tracker): the aggkit
-// proxy's haproxy allows 50 req/IP/s, and ALL of a tab's traffic (activity
-// polling + this hook, across every rendered row) funnels through that one
-// proxy IP. This hook is only ever mounted per CURRENTLY RENDERED, non-
-// completed row (no background subscription list independent of what's on
-// screen), so a page of N such rows costs N requests / TRACKING_POLL_INTERVAL
-// = N/5 req/s -- e.g. a 20-row page costs 4 req/s, a 50-row page costs
-// 10 req/s, both comfortably under the 50 req/s budget even before counting
-// react-query's natural staggering (each row's query mounts at a slightly
-// different time, so the N requests are not sent in lockstep).
+// proxy allows 50 req/IP/s (MaxRequestsPerIPAndSecond, kurtosis-cdk
+// static_files/additional_services/aggkit-proxy/config.toml), and ALL of a
+// tab's traffic (activity polling + this hook, across every rendered row)
+// funnels through haproxy's single source IP. This hook is only ever mounted
+// per RENDERED, non-completed row (no background subscription list
+// independent of what's in the list), so N such rows cost N requests /
+// TRACKING_POLL_INTERVAL = N/5 req/s -- e.g. the initial 20-row page costs
+// 4 req/s. CAVEAT: transactionList.tsx is not virtualized and its infinite
+// scroll keeps every loaded page's rows mounted, so N accumulates by 20 per
+// "load more"; together with the activity poll (which refetches EVERY loaded
+// page each cycle), a list scrolled to ~8-9 pages of all-pending rows
+// (~170+) approaches the 50 req/s ceiling. That takes an unrealistically
+// pending-heavy devnet history to hit, so it is accepted rather than
+// mitigated (virtualizing the list or capping polled rows would be the fix
+// if it ever bites); react-query's natural staggering (each row's query
+// mounts at a slightly different time) also spreads the load within a
+// second, though a tab refocus after >staleTime can still fire all N
+// tracker queries in one burst (react-query then retries any 429s).
 const isTrackingTerminal = (data: AggkitTrackingData | undefined): boolean => {
   if (!data) return false;
   if (data.tracking_status === 'finished') return true;
   // The giving-up terminal: the tracker could not resolve the bridge at all
   // (tx not found / not a bridge tx), reported as tracking_status 'error'
   // with bridge_status still null. A step-level error inside an all_steps[i]
-  // entry is NOT this -- the tracker retries those on its own, so
-  // tracking_status stays 'running' there and polling must continue.
+  // entry ALSO reports tracking_status 'error' (aggkit derives it from the
+  // step at step_index -- bridgetracker/domain/tracking_data.go), but with
+  // bridge_status populated; the tracker retries those on its own, so the
+  // bridge_status null check below is what keeps polling through them.
   if (data.tracking_status === 'error' && data.bridge_status === null) return true;
   return false;
 };
