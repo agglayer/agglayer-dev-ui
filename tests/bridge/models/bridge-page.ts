@@ -36,6 +36,12 @@ class BridgePage {
   readonly transactionsRefreshButton: Locator;
   readonly fromChainSelector: Locator;
   readonly toChainSelector: Locator;
+  // Tracker UX (S6-S9 / S10 context pack): trackerDetail/closeModalButton are
+  // page-scoped rather than row-scoped -- the details Modal renders via
+  // createPortal(document.body) (modal.tsx), so it's not a DOM descendant of
+  // the transaction row that triggers it.
+  readonly trackerDetail: Locator;
+  readonly closeModalButton: Locator;
 
   constructor({ page }: { page: Page }) {
     this.page = page;
@@ -55,6 +61,8 @@ class BridgePage {
     this.transactionsRefreshButton = page.getByTestId('transactions-refresh');
     this.fromChainSelector = page.getByTestId('from-chain-selector');
     this.toChainSelector = page.getByTestId('to-chain-selector');
+    this.trackerDetail = page.getByTestId('tracker-detail');
+    this.closeModalButton = page.getByRole('button', { name: 'Close modal' });
   }
 
   async navigate(): Promise<void> {
@@ -177,6 +185,35 @@ class BridgePage {
 
   getTransactionStatus(transactionHash: string): Locator {
     return this.getTransactionRow(transactionHash).getByTestId('transaction-status');
+  }
+
+  // trackerProgressBar.tsx: row-scoped -- renders nothing while all_steps is
+  // null and nothing for CLAIMED rows (useBridgeTracking disables its query
+  // there), so absence of this locator is itself meaningful (S7's chosen
+  // "bar disappears on CLAIMED" behavior).
+  getTrackerBar(transactionHash: string): Locator {
+    return this.getTransactionRow(transactionHash).getByTestId('tracker-progress');
+  }
+
+  getTrackerStep(transactionHash: string, index: number): Locator {
+    return this.getTrackerBar(transactionHash).getByTestId(`tracker-step-${index}`);
+  }
+
+  // transactionDetailsModal.tsx's TrackerDetail mounts only while
+  // tx.status !== 'CLAIMED' -- opening the modal after a row completes will
+  // never show `trackerDetail`. `transaction-status` is a plain span with no
+  // click stopPropagation (unlike the claim/external-link buttons elsewhere
+  // in the row), so clicking it reliably reaches the row's own onSelect.
+  async openTransactionDetails(transactionHash: string): Promise<void> {
+    await this.getTransactionStatus(transactionHash).click();
+  }
+
+  async closeTransactionDetailsModal(): Promise<void> {
+    await this.closeModalButton.click();
+  }
+
+  getTrackerDetailStep(index: number): Locator {
+    return this.trackerDetail.getByTestId(`tracker-detail-step-${index}`);
   }
 
   getClaimButton(transactionHash: string): Locator {
