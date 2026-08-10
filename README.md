@@ -169,6 +169,17 @@ renders its step-by-step progress:
 - If the tracker gives up resolving the transaction at all (`tracking_status === 'error'` with
   `bridge_status: null`), the detail view shows a "Tracking unavailable" info alert instead of a
   timeline.
+- **The tracker's `WaitingClaim` step and the row's `READY_TO_CLAIM` status (which gates the
+  "Claim tokens" button, `AggkitBridgeAggregator.toTransaction`) are driven by different
+  pipelines and are NOT synchronized** — see `plans/bridge-tracker/tracker-vs-claim-lag.md` for a
+  measured live timeline. The tracker's certificate-settlement resolver reads the settlement tx's
+  own L1 receipt directly; the row's status (and the claim mutation's own proof fetch,
+  `useClaimExecution.ts`) depend on aggkit's bridge-service completing its own, separate
+  L1-info-tree sync. The tracker routinely enters `WaitingClaim` some seconds to tens of seconds
+  before a claim is actually possible — this is expected, upstream (aggkit) behavior, not a
+  dev-ui bug, and the button's gating on `READY_TO_CLAIM` (not on the tracker step) is
+  intentionally the more conservative, correct source of truth. This is why `WaitingClaim`'s copy
+  says "Finalizing claim data…" rather than "Ready".
 
 **Step → copy mapping** (`app/utils/trackerSteps.ts`, keyed on the wire's `step_name`):
 
@@ -180,7 +191,7 @@ renders its step-by-step progress:
 | `CertificatePending` | Waiting for the certificate to settle |
 | `WaitL1SettledGER` | Waiting for settlement to confirm on L1 |
 | `WaitingGERInjection` | Waiting for the exit root to reach `{destination}` |
-| `WaitingClaim` | Ready — waiting for the claim on `{destination}` |
+| `WaitingClaim` | Finalizing claim data for `{destination}` |
 | `Claimed` | Claimed |
 
 Tooltips (progress bar) and step labels (detail view) fall back to "the source"/"the destination"
