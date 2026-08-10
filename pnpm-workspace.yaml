@@ -11,8 +11,18 @@ overrides:
   # feat/aggkit-backend: link the local SDK build (branch feat/aggkit-bridge-client
   # in ../sdk) instead of the last npm-published beta. Not a real pnpm workspace
   # (sdk is a sibling repo, not a package.json `packages:` entry) — see
-  # handoff-sdk.md §4 for the link rationale. Revert to a semver range once the
-  # aggkit SDK surface ships to npm (tracked for S15).
+  # handoff-sdk.md §4 for the link rationale.
+  #
+  # Known consequence: `pnpm install --frozen-lockfile` fails on GitHub CI
+  # (ENOENT scandir '<work>/agglayer-dev-ui/../sdk') because CI runners don't
+  # have a sibling sdk checkout. This is intentional for now, not a bug — local
+  # dev and local CI-equivalent checks (lint/typecheck/test) work fine since a
+  # sibling ../sdk checkout is present. Dependency ordering to clear it:
+  #   1. agglayer/sdk#28 (bridge tracker API) merges to sdk main.
+  #   2. A published sdk version containing that API is cut (manual
+  #      workflow_dispatch release).
+  #   3. Swap this override to that published semver — required before or
+  #      immediately after step 2 lands, so GitHub CI can install again.
   '@agglayer/sdk': 'file:../sdk'
 trustPolicy: no-downgrade
 trustPolicyExclude:
