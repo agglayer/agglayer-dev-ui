@@ -48,12 +48,20 @@ const isTrackingTerminal = (data: AggkitTrackingData | undefined): boolean => {
 // design.md §Tracker: polls AggkitBridgeAggregator.getBridgeTracking for a
 // single transaction row, keyed by its RECORDING network (sourceNetwork,
 // routed correctly by the aggregator even for L1/networkId 0) and hash.
-// Stops polling once tracking is terminal (finished, or gave up with
-// bridge_status still null); keeps polling through step-level errors and
-// through a tracker-side regression back to 'registered' (e.g. retention
-// re-registration) -- this hook never throws on null/missing fields, it
-// just returns whatever the API reports and lets consumers render
-// accordingly (e.g. nothing while all_steps is still null).
+// Only terminal tracking states (finished, or gave up with bridge_status
+// still null) stop polling -- plus CLAIMED, gated via `enabled` above.
+// Transient/hard query errors (e.g. react-query exhausting its default
+// retries on a proxy blip or rate-limit burst) do NOT stop polling: when
+// status is 'error', query.state.data is the last successful data (or
+// undefined pre-first-success), so refetchInterval falls through to
+// isTrackingTerminal on that and keeps polling at the normal cadence,
+// letting the row self-heal without a remount. Also keeps polling through
+// step-level errors and through a tracker-side regression back to
+// 'registered' (e.g. retention re-registration) -- this hook never throws
+// on null/missing fields, it just returns whatever the API reports and
+// lets consumers render accordingly (e.g. nothing while all_steps is still
+// null). Accepted trade-off: a permanently-failing request (e.g. a
+// hypothetical 400) would poll harmlessly every 5s rather than stop.
 export const useBridgeTracking = (transaction: Transaction) => {
   const { mode } = useAppMode();
   const aggregator = useAggkitAggregator();
@@ -65,7 +73,6 @@ export const useBridgeTracking = (transaction: Transaction) => {
     queryFn: () => aggregator.getBridgeTracking(sourceNetwork, transactionHash),
     staleTime: TRACKING_POLL_INTERVAL,
     refetchInterval: (query) => {
-      if (query.state.status === 'error') return false;
       return isTrackingTerminal(query.state.data) ? false : TRACKING_POLL_INTERVAL;
     }
   });
