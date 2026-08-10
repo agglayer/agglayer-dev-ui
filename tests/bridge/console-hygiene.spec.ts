@@ -11,8 +11,7 @@ import { expect, test } from '@playwright/test';
 
 import { BridgePage } from './models/bridge-page';
 
-// Regression test for the S6 interactive console-error QA triage
-// (plans/bridge-tracker-rc5/console-triage.md). That triage drove the real
+// Regression test for the S6 interactive console-error QA triage. That triage drove the real
 // AppKit UI (no E2E bypass) through the full 11-phase bridge journey and
 // classified every console error/warning + failed request observed. This
 // spec turns "no NEW console noise" into a property CI can enforce: it

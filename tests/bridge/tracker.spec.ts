@@ -11,12 +11,12 @@ import { expect, test } from '@playwright/test';
 
 import { BridgePage } from './models/bridge-page';
 
-// Bridge tracker UX (design.md §Tracker / S6-S9 landed feature): the
+// Bridge tracker UX (S6-S9 landed feature): the
 // useBridgeTracking hook polls aggkit's tracker API and
 // trackerProgressBar.tsx / trackerDetail.tsx render its `all_steps`. Like
 // the other route-specific specs in this directory, this depends on
 // devnet-specific infrastructure -- the tracker component
-// (`aggkit-proxy-001 --components=proxy,tracker`, enclave-notes.md) that
+// (`aggkit-proxy-001 --components=proxy,tracker`) that
 // testnet mode doesn't run, and the fixed step counts/latencies below are
 // devnet fixtures (see app/__fixtures__/tracker.ts).
 test.skip(

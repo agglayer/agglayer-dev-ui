@@ -12,9 +12,12 @@ pnpm install
 
 2) Configure the app:
 
-Edit `config.json` at the project root to set chains, app modes, aggkit bridge APIs, and external links. See [`docs/config.md`](docs/config.md) for the full guide.
+Edit `config.json` at the project root to set chains, app modes, aggkit bridge APIs, and external links. See [`docs/config.md`](docs/config.md) for the full guide. For deploying the UI alongside `aggkit-proxy` (DevOps-facing, incl. rollback), see [`docs/deployment.md`](docs/deployment.md).
 
-Set `NEXT_PUBLIC_PROJECT_ID` (WalletConnect project ID) in `.env.local`.
+Optionally set `NEXT_PUBLIC_PROJECT_ID` (WalletConnect project ID) in `.env.local`. It is not
+required: leaving it at the placeholder (or empty) runs AppKit in a graceful degraded `basic`
+mode — injected-wallet connect fully works, only WalletConnect-cloud features (wallet directory
+images, remote config) are skipped. Get a real id at https://cloud.reown.com.
 Optionally set `NEXT_PUBLIC_AGGKIT_BRIDGE_APIS` to override `config.json` per environment:
 
 ```bash
@@ -56,6 +59,8 @@ It resolves the enclave's ephemeral ports live (`kurtosis port print`), then:
 
 Re-run it after every enclave recreate (ports are ephemeral). It fails with a clear error if the named enclave doesn't exist. Only supports Kurtosis-based devnets.
 
+If your wallet shows a stuck/pending transaction or wrong balances after an enclave reset, see the kurtosis-cdk guide's [Troubleshooting § "After an enclave reset: recovering your wallet and UI"](https://github.com/0xPolygon/kurtosis-cdk/blob/feat/aggkit-bridge-ui-backend/docs/docs/advanced/aggkit-2l2-with-bridge-ui.md#after-an-enclave-reset-recovering-your-wallet-and-ui).
+
 ## Testing
 
 Playwright E2E defaults to the local Kurtosis `cdk` devnet (aggkit backend)
@@ -78,8 +83,10 @@ Security and ops notes:
 Required `.env.local` variables for E2E:
 
 - `E2E_PRIVATE_KEY`
-- `NEXT_PUBLIC_PROJECT_ID`
 - `NEXT_PUBLIC_AGGKIT_BRIDGE_APIS` (devnet mode: written by `scripts/kurtosisDevnetEnv.mjs`)
+
+(`NEXT_PUBLIC_PROJECT_ID` is not used in E2E mode — `app/context/wallet.tsx` skips
+`createAppKit` entirely under `NEXT_PUBLIC_E2E_ENABLED`, using a mocked wallet provider instead.)
 
 **2-L2 devnet E2E-specific variables** (both set by `kurtosisDevnetEnv.mjs` for 2-L2 enclaves):
 
@@ -171,8 +178,10 @@ renders its step-by-step progress:
   timeline.
 - **The tracker's `WaitingClaim` step and the row's `READY_TO_CLAIM` status (which gates the
   "Claim tokens" button, `AggkitBridgeAggregator.toTransaction`) are driven by different
-  pipelines and are NOT synchronized** — see `plans/bridge-tracker/tracker-vs-claim-lag.md` for a
-  measured live timeline. The tracker's certificate-settlement resolver reads the settlement tx's
+  pipelines and are NOT synchronized** — see upstream
+  [aggkit#1786](https://github.com/agglayer/aggkit/issues/1786) (OPEN); measured live on a
+  devnet L2→L1 bridge, the tracker entered `WaitingClaim` at T+18s while the claim proof was not
+  actually servable until T+40.5s. The tracker's certificate-settlement resolver reads the settlement tx's
   own L1 receipt directly; the row's status (and the claim mutation's own proof fetch,
   `useClaimExecution.ts`) depend on aggkit's bridge-service completing its own, separate
   L1-info-tree sync. The tracker routinely enters `WaitingClaim` some seconds to tens of seconds
