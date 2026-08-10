@@ -9,28 +9,26 @@ import { useQuery } from '@tanstack/react-query';
 import type { AggkitTrackingData } from '@agglayer/sdk';
 
 // Same cadence as useTransactions' PENDING_POLL_INTERVAL -- aggkit's tracker
-// has no push/subscription (design.md), so this hook polls too.
+// has no push/subscription, so this hook polls too.
 const TRACKING_POLL_INTERVAL = 5000;
 
-// Rate-limit budget (enclave-notes.md / design.md §Tracker): the aggkit
-// proxy allows 50 req/IP/s (MaxRequestsPerIPAndSecond, kurtosis-cdk
-// static_files/additional_services/aggkit-proxy/config.toml), and ALL of a
-// tab's traffic (activity polling + this hook, across every rendered row)
-// funnels through haproxy's single source IP. This hook is only ever mounted
-// per RENDERED, non-completed row (no background subscription list
-// independent of what's in the list), so N such rows cost N requests /
-// TRACKING_POLL_INTERVAL = N/5 req/s -- e.g. the initial 20-row page costs
-// 4 req/s. CAVEAT: transactionList.tsx is not virtualized and its infinite
-// scroll keeps every loaded page's rows mounted, so N accumulates by 20 per
-// "load more"; together with the activity poll (which refetches EVERY loaded
-// page each cycle), a list scrolled to ~8-9 pages of all-pending rows
-// (~170+) approaches the 50 req/s ceiling. That takes an unrealistically
-// pending-heavy devnet history to hit, so it is accepted rather than
-// mitigated (virtualizing the list or capping polled rows would be the fix
-// if it ever bites); react-query's natural staggering (each row's query
-// mounts at a slightly different time) also spreads the load within a
-// second, though a tab refocus after >staleTime can still fire all N
-// tracker queries in one burst (react-query then retries any 429s).
+// Load note: aggkit enforces no in-process rate limit
+// (MaxRequestsPerIPAndSecond is unenforced in RESTConfig-backed sections --
+// aggkit #1783; the kurtosis template pins it to the upstream default 0).
+// The load math below is therefore a capacity/courtesy note for the proxy
+// and any fronting infra limit an operator adds, not a hard budget: this
+// hook is only ever mounted per RENDERED, non-completed row (no background
+// subscription list independent of what's in the list), so N such rows
+// cost N requests / TRACKING_POLL_INTERVAL = N/5 req/s -- e.g. the initial
+// 20-row page costs 4 req/s. CAVEAT: transactionList.tsx is not virtualized
+// and its infinite scroll keeps every loaded page's rows mounted, so N
+// accumulates by 20 per "load more"; together with the activity poll
+// (which refetches EVERY loaded page each cycle), a list scrolled to ~8-9
+// pages of all-pending rows (~170+) is an unrealistically pending-heavy
+// devnet history, so it is accepted rather than mitigated (virtualizing
+// the list or capping polled rows would be the fix if it ever bites at
+// scale); react-query's natural staggering (each row's query mounts at a
+// slightly different time) also spreads the load within a second.
 const isTrackingTerminal = (data: AggkitTrackingData | undefined): boolean => {
   if (!data) return false;
   if (data.tracking_status === 'finished') return true;
@@ -45,7 +43,7 @@ const isTrackingTerminal = (data: AggkitTrackingData | undefined): boolean => {
   return false;
 };
 
-// design.md §Tracker: polls AggkitBridgeAggregator.getBridgeTracking for a
+// Polls AggkitBridgeAggregator.getBridgeTracking for a
 // single transaction row, keyed by its RECORDING network (sourceNetwork,
 // routed correctly by the aggregator even for L1/networkId 0) and hash.
 // Only terminal tracking states (finished, or gave up with bridge_status

@@ -192,22 +192,19 @@ On first load, the UI shows **only the native gas token** for each configured ch
 
 ## Environment Variables
 
-Required:
-
-| Variable | Description |
-|----------|-------------|
-| `NEXT_PUBLIC_PROJECT_ID` | WalletConnect project ID |
+Required: none.
 
 Optional:
 
 | Variable | Description |
 |----------|-------------|
+| `NEXT_PUBLIC_PROJECT_ID` | WalletConnect project ID; optional, placeholder → graceful degradation (see README) |
 | `NEXT_PUBLIC_AGGKIT_BRIDGE_APIS` | JSON string (`{"networkId":"url"}`); overrides the active mode's `aggkitBridgeApis` from `config.json`. Used for ephemeral devnet proxies. |
 
 Set them in `.env.local`:
 ```bash
 cp .env.example .env.local
-# Edit .env.local and set NEXT_PUBLIC_PROJECT_ID
+# Optionally set NEXT_PUBLIC_PROJECT_ID (see README for degraded-mode behavior)
 # Optionally set NEXT_PUBLIC_AGGKIT_BRIDGE_APIS for devnet/kurtosis setups
 ```
 

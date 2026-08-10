@@ -30,8 +30,8 @@ const STEP_LABELS: Record<AggkitBridgeStep, (params: TrackerStepLabelParams) => 
   // tokens" button (status READY_TO_CLAIM) and what /claim-proof needs to
   // serve a proof. Measured gap on a live devnet L2->L1 bridge: tracker
   // entered this step at T+18s, the claim was not actually possible (proof
-  // not servable) until T+40.5s -- see
-  // plans/bridge-tracker/tracker-vs-claim-lag.md. Saying "Ready" here would
+  // not servable) until T+40.5s -- upstream aggkit#1786 (OPEN):
+  // https://github.com/agglayer/aggkit/issues/1786. Saying "Ready" here would
   // read as a UI bug the moment a user notices the claim button hasn't
   // appeared yet.
   WaitingClaim: ({ destinationName }) =>
