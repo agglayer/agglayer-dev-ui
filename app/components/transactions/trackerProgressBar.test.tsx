@@ -134,8 +134,6 @@ describe('TrackerProgressBar', () => {
 
     const dot = container.querySelector('[data-test-id="tracker-step-2"]');
     const tooltip = dot?.parentElement?.querySelector('[role="tooltip"]');
-    expect(tooltip).toHaveTextContent(
-      'Ready — waiting for the claim on Devnet L2-001 — In progress'
-    );
+    expect(tooltip).toHaveTextContent('Finalizing claim data for Devnet L2-001 — In progress');
   });
 });

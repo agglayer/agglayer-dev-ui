@@ -23,8 +23,19 @@ const STEP_LABELS: Record<AggkitBridgeStep, (params: TrackerStepLabelParams) => 
   WaitL1SettledGER: () => 'Waiting for settlement to confirm on L1',
   WaitingGERInjection: ({ destinationName }) =>
     `Waiting for the exit root to reach ${destinationName || 'the destination'}`,
+  // Deliberately NOT "Ready" -- entering this step only means the tracker's
+  // fast path (a direct read of the settlement tx's own L1 receipt) has
+  // resolved; it does not mean aggkit's bridge-service has finished its own,
+  // separate L1-info-tree sync, which is what actually gates the "Claim
+  // tokens" button (status READY_TO_CLAIM) and what /claim-proof needs to
+  // serve a proof. Measured gap on a live devnet L2->L1 bridge: tracker
+  // entered this step at T+18s, the claim was not actually possible (proof
+  // not servable) until T+40.5s -- see
+  // plans/bridge-tracker/tracker-vs-claim-lag.md. Saying "Ready" here would
+  // read as a UI bug the moment a user notices the claim button hasn't
+  // appeared yet.
   WaitingClaim: ({ destinationName }) =>
-    `Ready — waiting for the claim on ${destinationName || 'the destination'}`,
+    `Finalizing claim data for ${destinationName || 'the destination'}`,
   Claimed: () => 'Claimed'
 };
 

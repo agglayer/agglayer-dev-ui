@@ -50,7 +50,7 @@ const L2_TO_L2_STEP_LABEL_PATTERNS = [
   /Waiting for the certificate to settle/,
   /Waiting for settlement to confirm on L1/,
   /Waiting for the exit root to reach .+/,
-  /Ready — waiting for the claim on .+/,
+  /Finalizing claim data for .+/,
   /Claimed/
 ];
 
