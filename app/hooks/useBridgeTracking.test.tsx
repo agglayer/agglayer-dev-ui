@@ -122,6 +122,24 @@ describe('useBridgeTracking', () => {
     expect(getBridgeTracking).toHaveBeenCalledTimes(3);
   });
 
+  it('keeps polling after the query hard-errors (react-query exhausts retries)', async () => {
+    const getBridgeTracking = vi.fn().mockRejectedValue(new Error('boom'));
+    mockAggregator(getBridgeTracking);
+
+    renderTracking(makeTransaction());
+    await advance(0);
+    expect(getBridgeTracking).toHaveBeenCalledTimes(1);
+
+    // A hard query error (e.g. a transient proxy blip) must not permanently
+    // freeze this row's tracker -- polling should self-heal at the normal
+    // cadence rather than stop until remount.
+    await advance(5000);
+    expect(getBridgeTracking).toHaveBeenCalledTimes(2);
+
+    await advance(5000);
+    expect(getBridgeTracking).toHaveBeenCalledTimes(3);
+  });
+
   it('never queries a CLAIMED row (query disabled)', async () => {
     const getBridgeTracking = vi.fn().mockResolvedValue(l1l2FinishedFixture);
     mockAggregator(getBridgeTracking);
