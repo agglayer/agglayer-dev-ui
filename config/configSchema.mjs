@@ -4,15 +4,44 @@ import { APP_MODES } from './appModes.mjs';
 
 const modeEnum = z.enum(APP_MODES);
 const nonEmptyString = z.string().trim().min(1);
-const urlString = z.string().url();
+// Every absolute URL in config.json must be http(s). zod's `.url()` only
+// requires that the value parse as a URL, so on its own it accepts
+// `javascript:...`, `data:...`, `file:...` and any other scheme. config.json is
+// mounted at container start (see entrypoint.sh / docs/docker.md), so it is an
+// untrusted input wherever someone other than the app owner can supply it, and
+// several of these values reach navigation sinks unmodified — `externalLinks.*`
+// and `explorerUrl` land in `<a href>` (app/components/header/constants.ts,
+// bridgeSuccessView.tsx, claimResultModal.tsx) and in
+// `window.open(...)` (app/components/transactions/transactionListItem.tsx:126,
+// transactionDetailsModal.tsx:107,139, bridge/tokenSelectorManageView.tsx:168).
+// A `javascript:` value there executes with the app's origin. Constrain the
+// scheme here, at the single choke point every loader shares
+// (config/configLoader.mjs's normalizeConfigOrThrow), rather than at each sink.
+const isHttpUrl = (value) => {
+  try {
+    const { protocol } = new URL(value);
+    return protocol === 'http:' || protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+const urlString = z
+  .string()
+  .url()
+  .refine(isHttpUrl, { message: 'must use the http or https scheme' });
 const optionalUrlString = z.union([urlString, z.literal('')]);
 const addressString = z.string().regex(/^0x[a-fA-F0-9]{40}$/);
 // JSON object keys are always strings; network ids are validated as digit strings
 // so they can be parsed to number when the aggregator config is built (app/config.ts).
 const networkIdKey = z.string().regex(/^\d+$/);
+// An origin-relative path: exactly one leading slash. `//host` (protocol-relative)
+// is deliberately rejected — it changes origin and would reintroduce the
+// cross-origin/SSRF surface that relative URLs exist to remove.
+const relativeUrlPath = z.string().regex(/^\/(?!\/)[^\s]*$/);
+const aggkitBaseUrlString = z.union([urlString, relativeUrlPath]);
 // Exported so app/config.ts can validate the NEXT_PUBLIC_AGGKIT_BRIDGE_APIS
 // env override against the same shape, rather than re-declaring it.
-export const aggkitBridgeApisSchema = z.record(networkIdKey, urlString);
+export const aggkitBridgeApisSchema = z.record(networkIdKey, aggkitBaseUrlString);
 
 export const JsonNativeCurrencyConfigSchema = z
   .object({

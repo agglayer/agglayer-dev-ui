@@ -12,7 +12,7 @@ pnpm install
 
 2) Configure the app:
 
-Edit `config.json` at the project root to set chains, app modes, aggkit bridge APIs, and external links. See [`docs/config.md`](docs/config.md) for the full guide. For deploying the UI alongside `aggkit-proxy` (DevOps-facing, incl. rollback), see [`docs/deployment.md`](docs/deployment.md).
+Edit `config.json` at the project root to set chains, app modes, aggkit bridge APIs, and external links. See [`docs/config.md`](docs/config.md) for the full guide. For deploying the UI alongside `aggkit-proxy` (DevOps-facing, incl. rollback), see [`docs/deployment.md`](docs/deployment.md). To run the app as a self-hosted Docker container instead, see [`docs/docker.md`](docs/docker.md).
 
 Optionally set `NEXT_PUBLIC_PROJECT_ID` (WalletConnect project ID) in `.env.local`. It is not
 required: leaving it at the placeholder (or empty) runs AppKit in a graceful degraded `basic`

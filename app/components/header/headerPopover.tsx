@@ -1,6 +1,6 @@
 'use client';
 
-import { MENU_LINKS } from '@/app/components/header/constants';
+import { getMenuLinks } from '@/app/components/header/constants';
 import { ModeSwitch } from '@/app/components/modeSwitch';
 import { useClickOutside } from '@/app/hooks/useClickOutside';
 import { cn } from '@/app/utils/common';
@@ -38,7 +38,7 @@ export const HeaderPopover = ({ hasModeOptions }: HeaderPopoverProps) => {
             </div>
           )}
           <div className={cn('space-y-1', hasModeOptions ? 'border-t border-border pt-2' : '')}>
-            {MENU_LINKS.map((item) => (
+            {getMenuLinks().map((item) => (
               <a
                 key={item.label}
                 href={item.href}

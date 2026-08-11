@@ -114,7 +114,10 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI
     },
     {
-      command: `pnpm exec next dev -p ${PARTIAL_FAILURE_PORT}`,
+      // Bypasses the `dev` script (which already chains the sync), so this
+      // command needs its own public/config.json sync -- see
+      // scripts/syncPublicConfig.mjs and design.md §1.4.
+      command: `node ./scripts/syncPublicConfig.mjs && pnpm exec next dev -p ${PARTIAL_FAILURE_PORT}`,
       env: {
         ...commonE2EEnv,
         NEXT_PUBLIC_AGGKIT_BRIDGE_APIS: bogusAggkitBridgeApis,

@@ -1,9 +1,16 @@
 'use client';
 
+import type { ResolvedAppConfig } from '@/app/config';
 import type { WalletContextValue } from '@/app/context/walletContext';
 import type { ReactNode } from 'react';
+import type { Chain } from 'wagmi/chains';
 
-import { ALL_WAGMI_CHAINS, customRpcUrls, DEFAULT_WAGMI_CHAIN, EXTERNAL_LINKS } from '@/app/config';
+import {
+  customRpcUrls,
+  getAllWagmiChains,
+  getDefaultWagmiChain,
+  getExternalLinks
+} from '@/app/config';
 import { IS_E2E_ENABLED } from '@/app/constants/e2e';
 import { e2eWalletAddress } from '@/app/context/e2eAccount';
 import { WalletContext } from '@/app/context/walletContext';
@@ -20,14 +27,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useChainId, useChains, useSwitchChain, WagmiProvider } from 'wagmi';
 
+// projectId/isDegradedProjectId are env-derived (NEXT_PUBLIC_PROJECT_ID),
+// not config -- they stay module-scope (design.md §2.1/§2.3).
 const projectId = process.env.NEXT_PUBLIC_PROJECT_ID!;
-const queryClient = new QueryClient();
-const wagmiAdapter = new WagmiAdapter({
-  ssr: true,
-  projectId,
-  customRpcUrls,
-  networks: [...ALL_WAGMI_CHAINS]
-});
 
 const urlOrUndefined = (value: string): string | undefined =>
   value.trim() === '' ? undefined : value;
@@ -69,12 +71,31 @@ const walletIds = {
 // all of this and behaves exactly as before.
 const isDegradedProjectId = isPlaceholderProjectId(projectId);
 
-if (!IS_E2E_ENABLED) {
+// createAppKit is a global side effect that needs config values
+// (chains/defaultChain/externalLinks) that are only available once
+// AppConfigGate has resolved -- so it can no longer run at module scope. It
+// runs instead inside WalletProvider's render (a useMemo, not a useEffect:
+// AppKitWalletProvider's child hooks -- useAppKit/useAppKitAccount/
+// useWalletInfo -- run before this component's own effects would, so an
+// effect-based init would leave them reading an uninitialized AppKit on the
+// first child render). The module-scope flag makes it idempotent under
+// StrictMode/concurrent-render double-invocation (design.md §2.2).
+let appKitInitialized = false;
+
+const ensureAppKit = (params: {
+  chains: readonly [Chain, ...Chain[]];
+  defaultChain: Chain;
+  externalLinks: ResolvedAppConfig['externalLinks'];
+  adapter: WagmiAdapter;
+}): void => {
+  if (appKitInitialized) return;
+  appKitInitialized = true;
+
   createAppKit({
-    adapters: [wagmiAdapter],
+    adapters: [params.adapter],
     projectId,
-    networks: [...ALL_WAGMI_CHAINS],
-    defaultNetwork: DEFAULT_WAGMI_CHAIN,
+    networks: [...params.chains],
+    defaultNetwork: params.defaultChain,
     customRpcUrls,
     metadata: {
       name: 'agglayer-dev-ui',
@@ -97,11 +118,11 @@ if (!IS_E2E_ENABLED) {
     themeVariables: {
       '--w3m-accent': '#7b3fe4'
     },
-    termsConditionsUrl: urlOrUndefined(EXTERNAL_LINKS.TERMS_OF_USE),
-    privacyPolicyUrl: urlOrUndefined(EXTERNAL_LINKS.PRIVACY_POLICY),
+    termsConditionsUrl: urlOrUndefined(params.externalLinks.TERMS_OF_USE),
+    privacyPolicyUrl: urlOrUndefined(params.externalLinks.PRIVACY_POLICY),
     featuredWalletIds: [walletIds.METAMASK]
   });
-}
+};
 
 const useCurrentChain = ({ status, chainId }: { status: string; chainId: number }) => {
   const chains = useChains();
@@ -122,11 +143,13 @@ const AppKitWalletProvider = ({ children }: { readonly children: ReactNode }) =>
   const currentChain = useCurrentChain({ status: status ?? 'disconnected', chainId });
 
   // On wallet connect, steer the wallet to the app's default source chain
-  // (DEFAULT_WAGMI_CHAIN, derived from the default app mode) instead of leaving
-  // it on whatever it connected with (e.g. Ethereum mainnet). This triggers the
-  // wallet's add/switch-network prompt at connect time rather than only when a
-  // bridge is initiated. Attempted once per connection so we don't fight a user
-  // who deliberately switches away or rejects the prompt.
+  // (getDefaultWagmiChain(), derived from the default app mode) instead of
+  // leaving it on whatever it connected with (e.g. Ethereum mainnet). This
+  // triggers the wallet's add/switch-network prompt at connect time rather
+  // than only when a bridge is initiated. Attempted once per connection so we
+  // don't fight a user who deliberately switches away or rejects the prompt.
+  // Safe to call getDefaultWagmiChain() here: this effect only ever runs
+  // after AppConfigGate has resolved (this component mounts behind the gate).
   const hasAutoSwitched = useRef(false);
   useEffect(() => {
     if (status !== 'connected') {
@@ -137,11 +160,12 @@ const AppKitWalletProvider = ({ children }: { readonly children: ReactNode }) =>
       return;
     }
     hasAutoSwitched.current = true;
-    if (chainId === DEFAULT_WAGMI_CHAIN.id) {
+    const defaultChainId = getDefaultWagmiChain().id;
+    if (chainId === defaultChainId) {
       return;
     }
     try {
-      switchChain({ chainId: DEFAULT_WAGMI_CHAIN.id });
+      switchChain({ chainId: defaultChainId });
     } catch (error) {
       console.error('Failed to switch to the default network on connect', error);
     }
@@ -202,16 +226,48 @@ const LocalWalletProvider = ({ children }: { readonly children: ReactNode }) => 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
 };
 
-const WalletProvider = ({ children }: { children: ReactNode }) => (
-  <WagmiProvider config={wagmiAdapter.wagmiConfig}>
-    <QueryClientProvider client={queryClient}>
-      {IS_E2E_ENABLED ? (
-        <LocalWalletProvider>{children}</LocalWalletProvider>
-      ) : (
-        <AppKitWalletProvider>{children}</AppKitWalletProvider>
-      )}
-    </QueryClientProvider>
-  </WagmiProvider>
-);
+const WalletProvider = ({ children }: { children: ReactNode }) => {
+  const [queryClient] = useState(() => new QueryClient());
+
+  // WalletProvider only ever mounts behind AppConfigGate (app/providers.tsx),
+  // so getAllWagmiChains()/getDefaultWagmiChain()/getExternalLinks() are safe
+  // to call unconditionally in render.
+  const wagmiAdapter = useMemo(
+    () =>
+      new WagmiAdapter({
+        ssr: true,
+        projectId,
+        customRpcUrls,
+        networks: [...getAllWagmiChains()]
+      }),
+    []
+  );
+
+  // Render-phase init, not an effect -- see the comment on ensureAppKit above
+  // for why. wagmiAdapter is stable across re-renders (empty deps above), so
+  // this only ever runs once per mount; the module-scope appKitInitialized
+  // flag guards StrictMode's double-invocation.
+  useMemo(() => {
+    if (IS_E2E_ENABLED) return;
+    ensureAppKit({
+      chains: getAllWagmiChains(),
+      defaultChain: getDefaultWagmiChain(),
+      externalLinks: getExternalLinks(),
+      adapter: wagmiAdapter
+    });
+  }, [wagmiAdapter]);
+
+  return (
+    <WagmiProvider config={wagmiAdapter.wagmiConfig}>
+      <QueryClientProvider client={queryClient}>
+        {IS_E2E_ENABLED ? (
+          <LocalWalletProvider>{children}</LocalWalletProvider>
+        ) : (
+          <AppKitWalletProvider>{children}</AppKitWalletProvider>
+        )}
+      </QueryClientProvider>
+    </WagmiProvider>
+  );
+};
 
 export { WalletProvider };

@@ -1,5 +1,5 @@
-import { APP_MODE_CONFIG, DEFAULT_APP_MODE } from '@/app/config';
 import { E2E_FROM_CHAIN_ID, E2E_PRIVATE_KEY, E2E_WALLET_ADDRESS } from '@/app/constants/e2e';
+import { loadAppConfigForNode } from '@/tests/e2e/appConfig';
 import { getE2EFromChain, getE2EFromChainRpcUrl } from '@/tests/e2e/chainRpc';
 import { expect, test } from '@playwright/test';
 import { createPublicClient, http } from 'viem';
@@ -13,10 +13,11 @@ import { privateKeyToAccount } from 'viem/accounts';
 // gives both the same aggkit-proxy URL, but each is
 // iterated separately below so a single dead per-network backend behind the
 // proxy is caught per-network rather than assumed identical.
-const aggkitBridgeApiEntries = Object.entries(APP_MODE_CONFIG[DEFAULT_APP_MODE].aggkitBridgeApis);
+const { appModeConfig, defaultAppMode } = loadAppConfigForNode();
+const aggkitBridgeApiEntries = Object.entries(appModeConfig[defaultAppMode].aggkitBridgeApis);
 if (aggkitBridgeApiEntries.length === 0) {
   throw new Error(
-    `E2E preflight: no aggkitBridgeApis configured for app mode "${DEFAULT_APP_MODE}". ` +
+    `E2E preflight: no aggkitBridgeApis configured for app mode "${defaultAppMode}". ` +
       'Run scripts/kurtosisDevnetEnv.mjs (devnet mode) or set NEXT_PUBLIC_AGGKIT_BRIDGE_APIS.'
   );
 }
