@@ -40,9 +40,9 @@ export interface TransactionsResponse {
     nextStartAfterCursor?: string;
   };
   error?: string;
-  // Per-network fan-out failures from AggkitBridgeAggregator.getActivity
-  // (design.md §2.4). A network failing does not fail the whole page — its
-  // rows are simply absent. Consumed by the partial-failure UI (S8).
+  // Per-network fan-out failures from AggkitBridgeAggregator.getActivity.
+  // A network failing does not fail the whole page — its rows are simply
+  // absent. Consumed by the partial-failure notice in transactionsView.tsx.
   failedNetworks?: AggkitFailedNetwork[];
 }
 

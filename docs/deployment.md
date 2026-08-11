@@ -19,7 +19,7 @@ Versions this guide is validated against: aggkit `v0.11.0-rc5` (image `ghcr.io/a
 ## 1. Prerequisites
 
 - Running aggkit stack (one aggkit node with `BRIDGE` component per L2, agglayer with gRPC exposed). Start here if you don't have one: [aggkit getting started](https://github.com/agglayer/aggkit/blob/v0.11.0-rc5/docs/getting_started.md), [bridge service component](https://github.com/agglayer/aggkit/blob/v0.11.0-rc5/docs/bridge_service.md).
-- L1 + L2 RPC endpoints, the agglayer gRPC URL, and the **L1 GlobalExitRoot contract address** for your deployment (see gotcha in §2).
+- L1 + L2 RPC endpoints, the agglayer gRPC URL, and the **L1 GlobalExitRoot contract address** for your deployment (see the gotcha in step 2 below).
 - Node 24 + pnpm for building the UI.
 
 ## 2. Deploy aggkit-proxy (PROXY + TRACKER)

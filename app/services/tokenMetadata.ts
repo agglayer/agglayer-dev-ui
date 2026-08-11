@@ -1,6 +1,6 @@
 import type { AggkitBridgeAggregator } from '@agglayer/sdk';
 
-// Thin wrapper over AggkitBridgeAggregator.getTokenMetadata (design.md §5).
+// Thin wrapper over AggkitBridgeAggregator.getTokenMetadata.
 // aggkit has no token-metadata endpoint; the aggregator composes it from
 // /token-mappings (address resolution) + on-chain ERC20 reads, or the native
 // currency for the zero address. Output shape matches this pre-existing

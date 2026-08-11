@@ -2,10 +2,10 @@ import type { TransactionFilters, TransactionsResponse } from '@/app/types/trans
 
 import type { AggkitBridgeAggregator } from '@agglayer/sdk';
 
-// Thin wrapper over AggkitBridgeAggregator.getActivity (design.md §1 row 1, §2).
+// Thin wrapper over AggkitBridgeAggregator.getActivity.
 // The old bridge-hub `/transactions` endpoint supported server-side
 // sourceNetworkIds/destinationNetworkIds/updatedSince/status filtering; aggkit
-// has no equivalents (design.md §9 risks #1, #2). sourceNetworkIds/
+// has no equivalents. sourceNetworkIds/
 // destinationNetworkIds/updatedSince are dropped (the aggregator always fans
 // out across every configured network, and block_timestamp DESC sort already
 // surfaces newest first); `status` is applied client-side below since it's

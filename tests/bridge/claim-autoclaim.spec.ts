@@ -9,7 +9,7 @@ import { expect, test } from '@playwright/test';
 
 import { BridgePage } from './models/bridge-page';
 
-// BUILT-IN AUTOCLAIM (manual-validation.md §3 / §S12-RV.3): this devnet's
+// BUILT-IN AUTOCLAIM: this devnet's
 // aggkit image (the `feat-autoclaim-l2-lx` tag) auto-claims L1->L2 deposits
 // externally -- independent of the dev-ui and independent of
 // bridge-spammer-001 -- typically within ~10-90s of the deposit reaching
@@ -18,8 +18,8 @@ import { BridgePage } from './models/bridge-page';
 // L1->L2 autoclaim regression only; the manual claim path is asserted in
 // manual-claim.spec.ts on the L2->L1 route, which is non-autoclaiming by
 // configuration (config.json autoclaim.l2_to_l1.expectedAutoclaim: false --
-// no [[AutoClaim.Claimers]] targets NetworkID=0 on either instance, design.md
-// §3.7/§6.3) rather than by race. This spec asserts the one reachable,
+// no [[AutoClaim.Claimers]] targets NetworkID=0 on either aggkit instance)
+// rather than by race. This spec asserts the one reachable,
 // deterministic outcome on the L1->L2 route: the deposit progresses
 // BRIDGED -> ... -> CLAIMED ("Completed") entirely on its own, without this
 // test ever clicking a claim button.
@@ -42,7 +42,8 @@ test('L1→L2 deposit reaches Completed via built-in aggkit autoclaim (no manual
   await bridgePage.navigate();
   await bridgePage.connectWallet();
   // Explicit chain-pair selection rather than relying on config.json's
-  // defaultFromChainKey/defaultToChainKey (design.md §6.1/§6.3).
+  // defaultFromChainKey/defaultToChainKey (E2E_* env vars are Node-only and
+  // never change the app's own default pair).
   await bridgePage.selectChainPair(E2E_FROM_CHAIN_ID, E2E_TO_CHAIN_ID);
   await bridgePage.fillAmount(E2E_NATIVE_BRIDGE_AMOUNT);
   await bridgePage.submitBridge();

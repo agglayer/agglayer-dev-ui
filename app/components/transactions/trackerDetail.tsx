@@ -142,8 +142,8 @@ const StepResultDetail = ({ step }: { step: AggkitBridgeStepPath }) => {
   }
 };
 
-// Full tracker picture for the transaction details modal (design.md
-// §Tracker / S8 context pack): overall tracking status + bridge typology,
+// Full tracker picture for the transaction details modal: overall
+// tracking status + bridge typology,
 // then a vertical timeline of every `all_steps` entry with its label,
 // status, dates, and per-step result detail. Mounts useBridgeTracking
 // itself -- react-query dedupes the query key with the row's own poll

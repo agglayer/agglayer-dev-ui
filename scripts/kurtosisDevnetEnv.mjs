@@ -10,7 +10,7 @@
 //   1. Verifies the enclave exists (fails loudly otherwise), capturing the
 //      `kurtosis enclave inspect` output once.
 //   2. Discovers the enclave's topology from that single inspect output
-//      (design.md §5.1) instead of hardcoding service names -- the number of
+//      instead of hardcoding service names -- the number of
 //      L2s and the haproxy instance name both vary per bring-up:
 //        - L2 deployment suffixes: unique `aggkit-<suffix>-bridge` matches.
 //        - haproxy (browser entrypoint) service: the `agglayer-dev-ui-proxy-*`
@@ -24,8 +24,7 @@
 //      `DEVNET_L2.id: 2151908`), checks the bridge contract has code
 //      deployed, and verifies `sync-status?network_id=<N>` reports both
 //      `is_synced` -- turning the "deployment_suffix -> networkId" naming
-//      convention (design.md §5.2) into a verified fact per run rather than
-//      an assumption.
+//      convention into a verified fact per run rather than an assumption.
 //   4. Writes config.json's devnet chains (DEVNET_L1 / DEVNET_L2_<suffix> for
 //      each discovered L2) + appModes.configs.devnet with the live values,
 //      deleting any stale DEVNET_L2_* (or the legacy single-L2 DEVNET_L2) key
@@ -39,7 +38,7 @@
 // This script only supports Kurtosis-based devnets (matches this repo's
 // `cdk` enclave shape). It does not touch mainnet/testnet mode config, and it
 // never writes `autoclaim` (a top-level, mode-independent config.json key --
-// see design.md §5.4).
+// a devnet script writing it would silently retune mainnet/testnet).
 
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -58,7 +57,7 @@ const ENV_LOCAL_PATH = path.join(REPO_ROOT, '.env.local');
 // kurtosis-cdk's fixed network_id convention: L1 is always network_id 0; each
 // L2's network_id is `Number(deployment_suffix)` (`-001` -> 1, `-002` -> 2).
 // This is a deployment parameter, not something re-derivable by querying a
-// running service -- but §5.2 requires it be *verified*, not just assumed,
+// running service -- so it must be *verified*, not just assumed,
 // which is what assertNetworkSynced does per discovered suffix below.
 const L1_NETWORK_ID = 0;
 
@@ -69,12 +68,12 @@ const L1_NETWORK_ID = 0;
 const BRIDGE_ADDRESS = '0xC8cbEBf950B9Df44d987c8619f092beA980fF038';
 
 // Funded devnet key for E2E use, on EVERY chain -- not one key per chain.
-// `l2_admin` is funded 100100 ETH on both L2-1 and L2-2 (enclave-notes.md
-// "Funded keys"), and per-chain nonce spaces mean the same key on two
+// `l2_admin` is funded 100100 ETH on both L2-1 and L2-2 by the enclave
+// bring-up, and per-chain nonce spaces mean the same key on two
 // different chain ids cannot collide. Distinct per-chain protocol-role keys
 // are deliberately NOT used here: overriding `l2_admin`/`l2_sequencer` per
-// chain breaks rollup-2 creation (enclave-notes.md, RollupManager admin role
-// + CREATE2 bridge address) -- design.md §5.6.
+// chain breaks rollup-2 creation (RollupManager admin role
+// + CREATE2 bridge address).
 const E2E_PRIVATE_KEY = '0x12d7de8621a77640c9241b2595ba78ce443d05e94090365ab3bb5e19df82c625';
 
 const PROXY_PORT_ID = 'http';
@@ -115,7 +114,7 @@ const runKurtosis = (args) => execFileSync('kurtosis', args, { encoding: 'utf8' 
 
 /**
  * Verifies the enclave exists and returns the raw `kurtosis enclave inspect`
- * stdout, so discovery (§5.1) can regex the SAME output instead of making
+ * stdout, so discovery can regex the SAME output instead of making
  * separate calls per candidate service.
  */
 const assertEnclaveExists = (enclave) => {
@@ -125,13 +124,13 @@ const assertEnclaveExists = (enclave) => {
     const detail = error.stderr || error.stdout || error.message;
     throw new Error(
       `Kurtosis enclave "${enclave}" was not found (or the Kurtosis engine is unreachable).\n` +
-        `Start it first (see enclave-notes.md), or pass the correct name with --enclave.\n\n` +
+        `Start it first (see the kurtosis-cdk guide docs/docs/advanced/aggkit-2l2-with-bridge-ui.md, 0xPolygon/kurtosis-cdk#929), or pass the correct name with --enclave.\n\n` +
         `Underlying error:\n${detail}`
     );
   }
 };
 
-/** design.md §5.1: unique, sorted `aggkit-<suffix>-bridge` deployment suffixes. */
+/** Unique, sorted `aggkit-<suffix>-bridge` deployment suffixes. */
 const discoverL2Suffixes = (inspectOutput) => {
   const suffixes = [
     ...new Set([...inspectOutput.matchAll(/\baggkit-(\d{3})-bridge\b/g)].map((match) => match[1]))
@@ -139,13 +138,13 @@ const discoverL2Suffixes = (inspectOutput) => {
   if (suffixes.length === 0) {
     throw new Error(
       `No "aggkit-<suffix>-bridge" services found in \`kurtosis enclave inspect\` output.\n` +
-        `Is this the aggkit-proxy-l2l2 "cdk" enclave? Pass --l2-suffixes to override discovery.`
+        `Is this a kurtosis-cdk aggkit bridge-UI enclave (params-aggkit-l2l2 args files)? Pass --l2-suffixes to override discovery.`
     );
   }
   return suffixes;
 };
 
-/** design.md §5.1/B1: the haproxy browser entrypoint, discovered rather than hardcoded. */
+/** The haproxy browser entrypoint, discovered rather than hardcoded -- its numeric suffix depends on which bring-up run deployed bridge_ui. */
 const discoverProxyService = (inspectOutput) => {
   const matches = [
     ...new Set(
@@ -160,8 +159,7 @@ const discoverProxyService = (inspectOutput) => {
   }
   if (matches.length > 1) {
     throw new Error(
-      `Multiple haproxy services found (${matches.join(', ')}); pass --proxy-service <name> to disambiguate ` +
-        `(design.md §9 risk 13).`
+      `Multiple haproxy services found (${matches.join(', ')}); pass --proxy-service <name> to disambiguate.`
     );
   }
   return matches[0];
@@ -208,7 +206,7 @@ const fetchChainId = async (rpcUrl) => {
   return Number.parseInt(hex, 16);
 };
 
-/** design.md §5.2: bridge-contract-deployed check, run on every chain (not just L1). */
+/** Bridge-contract-deployed check, run on every chain (not just L1) -- the CREATE2 address is deterministic and identical on every chain. */
 const assertBridgeContractDeployed = async (rpcUrl, chainLabel) => {
   const code = await rpcCall(rpcUrl, 'eth_getCode', [BRIDGE_ADDRESS, 'latest']);
   if (!code || code === '0x') {
@@ -220,10 +218,10 @@ const assertBridgeContractDeployed = async (rpcUrl, chainLabel) => {
 };
 
 /**
- * design.md §5.2: turns "networkId = Number(deployment_suffix)" from an
+ * Turns "networkId = Number(deployment_suffix)" from an
  * assumed convention into a verified fact per run, via the same
- * `sync-status?network_id=N` probe the SDK's aggregator/preflight use
- * (design.md §2.3 G2). Fails loudly, naming the offending networkId, rather
+ * `sync-status?network_id=N` probe the SDK's aggregator/preflight use.
+ * Fails loudly, naming the offending networkId, rather
  * than silently writing a config that would 404/502 for one network.
  */
 const assertNetworkSynced = async (proxyBaseUrl, networkId, chainLabel) => {
@@ -247,7 +245,7 @@ const upsertConfigJsonDevnet = async ({ l1RpcUrl, l1ChainId, l2Chains, aggkitBri
   const raw = fs.readFileSync(CONFIG_JSON_PATH, 'utf8');
   const configJson = JSON.parse(raw);
 
-  // design.md §5.4: delete any chains.DEVNET_* key not written this run --
+  // Delete any chains.DEVNET_* key not written this run --
   // specifically the legacy single-L2 `DEVNET_L2` key and any
   // `DEVNET_L2_<suffix>` from a previous run whose suffix set has since
   // changed (e.g. a 3rd L2 removed) -- so a stale entry can never linger and
@@ -263,7 +261,7 @@ const upsertConfigJsonDevnet = async ({ l1RpcUrl, l1ChainId, l2Chains, aggkitBri
     name: 'Devnet L1',
     rpcUrl: l1RpcUrl,
     // No block explorer is deployed for this enclave (bridge_ui + bridge_spammer
-    // only, per enclave-notes.md); kurtosis-cdk itself uses this same
+    // only); kurtosis-cdk itself uses this same
     // placeholder for "no real explorer configured" (input_parser.star).
     explorerUrl: 'https://explorer.private/',
     currency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
@@ -292,7 +290,7 @@ const upsertConfigJsonDevnet = async ({ l1RpcUrl, l1ChainId, l2Chains, aggkitBri
   configJson.appModes.configs.devnet = {
     label: 'Devnet',
     bridgeAddress: BRIDGE_ADDRESS,
-    // All discovered networkIds -> the SAME proxy URL (design.md §1.1): one
+    // All discovered networkIds -> the SAME proxy URL: one
     // multiplexing aggkit-proxy instance fronts every network, distinguished
     // by the `?network_id=` query param on each request, not by host.
     // Also kept in sync here as a fallback; NEXT_PUBLIC_AGGKIT_BRIDGE_APIS
@@ -304,8 +302,7 @@ const upsertConfigJsonDevnet = async ({ l1RpcUrl, l1ChainId, l2Chains, aggkitBri
     ),
     chainKeys: ['DEVNET_L1', ...l2Chains.map((l2) => l2.chainKey)],
     defaultFromChainKey: 'DEVNET_L1',
-    // Always the lowest discovered suffix (l2Chains is sorted ascending) --
-    // matches design.md §5.4's fixed 'DEVNET_L2_001' default.
+    // Always the lowest discovered suffix (l2Chains is sorted ascending).
     defaultToChainKey: l2Chains[0].chainKey
   };
 
@@ -319,7 +316,7 @@ const upsertConfigJsonDevnet = async ({ l1RpcUrl, l1ChainId, l2Chains, aggkitBri
 
   // Fail loudly before writing anything if this would produce an invalid
   // config.json (same schema + semantic validation the app runs at startup,
-  // now including design.md §1.2's chains<->aggkitBridgeApis cross-check).
+  // now including configValidator.mjs's chains<->aggkitBridgeApis cross-check).
   parseConfigOrThrow(configJson, { sourceName: 'config.json (kurtosisDevnetEnv.mjs preview)' });
 
   // Format through the repo's own prettier config (not a bare
@@ -355,7 +352,7 @@ const upsertEnvLocal = ({ l1ChainId, l2Chains, aggkitBridgeApiUrl }) => {
     Object.fromEntries(l2Chains.map((l2) => [String(l2.networkId), aggkitBridgeApiUrl]))
   );
 
-  // design.md §5.4/§6.1: these three make app/constants/e2e.ts's hardcoded
+  // These three make app/constants/e2e.ts's hardcoded
   // devnet fallbacks never actually decide anything against a live enclave.
   // E2E_TO_CHAIN_ID / the first entry of E2E_L2_CHAIN_IDS is always the
   // lowest discovered suffix (l2Chains is sorted ascending).
@@ -365,7 +362,7 @@ const upsertEnvLocal = ({ l1ChainId, l2Chains, aggkitBridgeApiUrl }) => {
 
   const lines = [
     '# Generated by scripts/kurtosisDevnetEnv.mjs -- re-run after every enclave recreate',
-    '# (ports are ephemeral; see enclave-notes.md). Do not hand-edit the values below,',
+    '# (ports are ephemeral -- they change on every enclave recreate). Do not hand-edit the values below,',
     '# they will be overwritten on the next run.',
     '',
     projectId === 'YOUR_PROJECT_ID_HERE'
@@ -374,7 +371,7 @@ const upsertEnvLocal = ({ l1ChainId, l2Chains, aggkitBridgeApiUrl }) => {
     `NEXT_PUBLIC_PROJECT_ID=${projectId}`,
     '',
     '# Overrides config.json devnet.aggkitBridgeApis with the live enclave proxy URL',
-    '# (design.md §1.1/§5.4). Keyed by L2 networkId; client appends /bridge/v1.',
+    '# Keyed by L2 networkId; the SDK client appends /bridge/v1.',
     `NEXT_PUBLIC_AGGKIT_BRIDGE_APIS=${aggkitBridgeApis}`,
     '',
     '# Funded devnet key (kurtosis-cdk l2_admin key, funded on every L2) for E2E use.',
@@ -408,7 +405,7 @@ const main = async () => {
   // have none), and reading through the SAME URL that ends up in config.json
   // makes this check authoritative for what the app will actually use,
   // rather than a separate direct-service probe that could pass while
-  // haproxy itself is misconfigured (design.md §5.2 "authoritative").
+  // haproxy itself is misconfigured.
   const l1RpcUrl = `${proxyBaseUrl}/l1rpc`;
 
   const l1ChainId = await fetchChainId(l1RpcUrl);
