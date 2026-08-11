@@ -51,9 +51,31 @@ The UI expects the proxy under a single path on the same origin (default `/aggki
 
 Repo: [agglayer/agglayer-dev-ui](https://github.com/agglayer/agglayer-dev-ui/tree/feat/aggkit-backend). It consumes the proxy via [`@agglayer/sdk`](https://github.com/agglayer/sdk/tree/feat/aggkit-bridge-client) (`getBridgeTracking` et al.) — no direct chain indexing of its own beyond RPCs.
 
+Two deployment paths exist. Pick one:
+
+- **Container image** (recommended for self-hosting): `docker run` the published image
+  with your `config.json` bind-mounted. See [`docs/docker.md`](./docker.md) for the full
+  image contract, tags, and a copy-pasteable `docker run` example. **As of this writing,
+  no image has been published yet** — see that document's Status section.
+- **Cloudflare Workers**: the steps below.
+
+### Cloudflare Workers path
+
 1. Build/run: see [README §Quickstart](https://github.com/agglayer/agglayer-dev-ui/blob/feat/aggkit-backend/README.md#quickstart) (standard Next.js: `pnpm install && pnpm build && pnpm start`, Node 24).
 2. Configure `config.json` — full schema: [docs/config.md](https://github.com/agglayer/agglayer-dev-ui/blob/feat/aggkit-backend/docs/config.md). The essentials per environment: chain list (RPC URLs, bridge contract addresses) and the aggkit API base URL = your reverse proxy's `/aggkitapi` origin.
 3. What the tracker UI does and how it polls (5s per pending row, stops on terminal states — relevant for capacity planning): [README §Bridge Tracking](https://github.com/agglayer/agglayer-dev-ui/blob/feat/aggkit-backend/README.md#bridge-tracking).
+
+### Container path
+
+1. Mount your `config.json` and run the image — see
+   [`docs/docker.md`](./docker.md#copy-pasteable-example) for the exact command. Config
+   schema is the same [docs/config.md](./config.md) either way; only the delivery
+   mechanism (bind-mount vs. Next.js env/build) differs.
+2. The image serves the aggkit proxy configuration exactly as configured in the mounted
+   `config.json`'s `aggkitBridgeApis` — point it at your reverse proxy's `/aggkitapi`
+   origin the same way you would for the Cloudflare Workers path, either as an absolute
+   URL or (if the container is itself behind a single-origin reverse proxy) an
+   origin-relative path like `/aggkitapi` (see [docs/config.md](./config.md#relative-aggkitbridgeapis-urls)).
 
 ## 5. Smoke test
 
@@ -82,7 +104,14 @@ Nothing here has a one-command in-place downgrade; each layer rolls back indepen
 
 - **aggkit-proxy / enclave (kurtosis-cdk)**: repin `aggkit_image` to the previous tag in both params files and recreate the enclave (`kurtosis enclave rm -f cdk` + the 2-run bring-up recipe) — enclave state is disposable by design, so there is no in-place downgrade. rc5→rc4 note: config is backward-compatible (rc5 changed only defaults/validation, not schema), so the committed `config.toml` template works unchanged on either version.
 - **sdk**: not yet published for this feature (release is a manual `workflow_dispatch`, never automatic on merge). Rollback pre-merge is simply reverting the branch commits; rollback post-publish is `npm dist-tag`-ing the previous beta back to the consumer-facing tag, or pinning the previous version number in consumers directly.
-- **dev-ui**: deployed to Cloudflare Workers via `wrangler deploy` on push-to-`main`. Rollback is `wrangler rollback` (reverts to the previously deployed Worker version) or redeploying the previous commit's build — the app is a static export with no server-side data migrations, so there is no data-compatibility concern either direction.
+- **dev-ui (Cloudflare Workers path)**: deployed via `wrangler deploy` on push-to-`main`. Rollback is `wrangler rollback` (reverts to the previously deployed Worker version) or redeploying the previous commit's build — the app is a static export with no server-side data migrations, so there is no data-compatibility concern either direction.
+- **dev-ui (container image path)**: rollback is pinning a prior tag. Image tags are
+  immutable per publish (a given `X.Y.Z` is written once, at that release), so
+  redeploying with the previous version's tag — e.g. changing
+  `ghcr.io/agglayer/agglayer-dev-ui:X.Y.Z` to `:X.Y.Z-1` in whatever orchestrator/compose
+  file references it — is the entire rollback. No data migration concern either
+  direction: the container is stateless and the mounted `config.json` is reused
+  unchanged. See [`docs/docker.md`](./docker.md#rollback).
 
 ---
 

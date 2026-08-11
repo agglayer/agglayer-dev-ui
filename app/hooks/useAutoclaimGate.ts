@@ -3,18 +3,18 @@
 import type { Transaction } from '@/app/types/transaction';
 import type { AutoclaimGate } from '@/app/utils/autoclaim';
 
-import { AUTOCLAIM_CONFIG } from '@/app/config';
+import { getAutoclaimConfig } from '@/app/config';
 import { computeAutoclaimGate, getRouteType, recordReadyAt } from '@/app/utils/autoclaim';
 import { useEffect, useState } from 'react';
 
 // Decides how the claim affordance should render for a READY_TO_CLAIM deposit,
 // applying the per-route autoclaim grace period (config.json `autoclaim` ->
-// AUTOCLAIM_CONFIG). The grace window is measured from when the deposit was
-// first observed READY_TO_CLAIM (persisted in localStorage so it survives
+// getAutoclaimConfig()). The grace window is measured from when the deposit
+// was first observed READY_TO_CLAIM (persisted in localStorage so it survives
 // refreshes) and flips 'waiting' -> 'overdue' via a one-shot timer.
 export const useAutoclaimGate = (transaction: Transaction): AutoclaimGate => {
   const routeType = getRouteType(transaction.sourceNetwork, transaction.destinationNetwork);
-  const config = AUTOCLAIM_CONFIG[routeType];
+  const config = getAutoclaimConfig()[routeType];
   const isReadyToClaim = transaction.status === 'READY_TO_CLAIM';
   const active = isReadyToClaim && config.expectedAutoclaim;
 

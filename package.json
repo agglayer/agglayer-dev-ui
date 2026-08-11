@@ -9,9 +9,9 @@
   },
   "scripts": {
     "prepare": "husky",
-    "dev": "next dev",
-    "build": "next build",
-    "build:production": "cp .env.production .env.local && rm -f .env.staging && next build",
+    "dev": "node ./scripts/syncPublicConfig.mjs && next dev",
+    "build": "node ./scripts/syncPublicConfig.mjs && next build",
+    "build:production": "cp .env.production .env.local && rm -f .env.staging && node ./scripts/syncPublicConfig.mjs && next build",
     "start": "next start",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

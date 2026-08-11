@@ -13,6 +13,7 @@
 # testing
 /coverage
 /playwright-report/
+/playwright-report-container/
 /test-results/
 /.last-run.json
 /blob-report/
@@ -23,10 +24,20 @@
 # (see playwright.config.ts / next.config.ts NEXT_DIST_DIR).
 /.next-partial-failure/
 /out/
+# Generated from the committed root config.json by scripts/syncPublicConfig.mjs
+# on every dev/build entry point -- never author this file directly, never
+# commit it (see plans/dev-ui-docker-ghcr/a1-runtime-config-design.md §1).
+/public/config.json
 
 # production
 /build
 /dist
+
+# Docker build context staging for @agglayer/sdk (TEMPORARY -- remove per
+# plans/dev-ui-docker-ghcr/d2-adr-dependency-strategy.md §5). Populated by
+# scripts/stage-sdk-src.sh locally, or a second actions/checkout in CI; must
+# never be committed.
+/.sdk-src/
 
 # misc
 .DS_Store

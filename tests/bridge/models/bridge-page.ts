@@ -1,9 +1,9 @@
 import type { Token } from '@/app/types/token';
 import type { Locator, Page } from '@playwright/test';
 
-import { ALL_WAGMI_CHAINS } from '@/app/config';
 import { E2E_BRIDGE_SUCCESS_TIMEOUT_MS } from '@/app/constants/e2e';
 import { STORAGE_KEYS } from '@/app/utils/storage';
+import { loadAppConfigForNode } from '@/tests/e2e/appConfig';
 import { expect } from '@playwright/test';
 
 // Chain names shown by the from/to selectors come from config.json (via
@@ -11,7 +11,8 @@ import { expect } from '@playwright/test';
 // looks the display name up by chainId rather than hardcoding it here --
 // see assertChainPair below.
 const getChainNameById = (chainId: number): string => {
-  const chain = ALL_WAGMI_CHAINS.find((candidate) => candidate.id === chainId);
+  const { allWagmiChains } = loadAppConfigForNode();
+  const chain = allWagmiChains.find((candidate) => candidate.id === chainId);
   if (!chain) {
     throw new Error(`E2E: chain ${chainId} is not configured in config.json's chains.`);
   }

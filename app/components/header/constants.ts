@@ -1,4 +1,4 @@
-import { EXTERNAL_LINKS } from '@/app/config';
+import { getExternalLinks } from '@/app/config';
 import { ROUTES } from '@/app/constants/routes';
 
 interface NavItem {
@@ -13,11 +13,14 @@ interface MenuLink {
 
 export const NAV_ITEMS: NavItem[] = [
   { label: 'Bridge', path: ROUTES.ROOT },
-  { label: 'Transactions', path: ROUTES.TRANSACTIONS },
+  { label: 'Transactions', path: ROUTES.TRANSACTIONS }
 ];
 
-export const MENU_LINKS: MenuLink[] = [
-  { label: 'Contact Support', href: EXTERNAL_LINKS.CONTACT_SUPPORT },
-  { label: 'Privacy Policy', href: EXTERNAL_LINKS.PRIVACY_POLICY },
-  { label: 'Terms of Use', href: EXTERNAL_LINKS.TERMS_OF_USE },
-];
+export const getMenuLinks = (): MenuLink[] => {
+  const externalLinks = getExternalLinks();
+  return [
+    { label: 'Contact Support', href: externalLinks.CONTACT_SUPPORT },
+    { label: 'Privacy Policy', href: externalLinks.PRIVACY_POLICY },
+    { label: 'Terms of Use', href: externalLinks.TERMS_OF_USE }
+  ];
+};

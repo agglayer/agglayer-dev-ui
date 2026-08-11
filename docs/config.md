@@ -1,10 +1,48 @@
 # Configuration Guide
 
-This app is configured through `config.json` at the project root. The JSON file is imported at build time and bundled with the app. The dev server hot-reloads changes to `config.json`.
+This app is configured through `config.json` at the project root. The app fetches
+`/config.json` **at runtime**, once per page load — it is not imported as a module or
+bundled into the JS at build time. This is what lets a single built app (in particular, a
+single Docker image — see [`docs/docker.md`](./docker.md)) be repointed at different
+configuration without a rebuild.
+
+The dev server does **not** hot-reload changes to `config.json` — it never watches the
+file, because nothing imports it anymore. The actual workflow is cheaper than the old
+Next-rebuild-on-import behavior: after editing the root `config.json`, run
+
+```bash
+node ./scripts/syncPublicConfig.mjs
+```
+
+in a second terminal (this validates the file and byte-copies it to the gitignored
+`public/config.json`, which the dev server serves as a static file), then reload the
+browser tab. No Next build/recompile is involved. `pnpm run dev` and `pnpm run build`
+both already run this sync automatically before starting/building — you only need to run
+it manually mid-session, after an edit, without restarting the dev server.
+
+**Devnet corollary:** `scripts/kurtosisDevnetEnv.mjs` writes the **root** `config.json`
+only. `public/config.json` — and therefore what the dev server actually serves — stays
+stale until the next `pnpm run dev` (which re-syncs on start) or a manual
+`node ./scripts/syncPublicConfig.mjs`. If you already have `pnpm run dev` running when
+you re-run `kurtosisDevnetEnv.mjs`, re-sync (or restart `pnpm run dev`) before reloading
+the browser.
+
+**Config is read once per page load — there is no live reconfiguration.** The app fetches
+`/config.json` a single time when it mounts (plus once per explicit user "Retry" after a
+failed fetch), and never polls or re-fetches it afterward. To pick up a new
+`config.json`, reload the page after the new file is being served (dev: after a sync;
+container: after a restart with a different mount — see
+[`docs/docker.md`](./docker.md)). This is a deliberate design constraint, not a gap:
+`@agglayer/sdk`'s chain registry is an append-only singleton with no reset/clear method,
+so silently re-initializing the app in place against different config (without a reload)
+could leave stale chain data resident from the previous config.
 
 Supporting files:
 - `config/configSchema.mjs` — shared Zod schema (single source of truth)
 - `config/configValidator.mjs` — schema + validator used by CLI and app startup
+- `config/configLoader.mjs` — shared browser-safe validate-and-normalize path (also resolves relative `aggkitBridgeApis` URLs — see below)
+- `config/configLoaderNode.mjs` — Node-side loader (CLI scripts, `scripts/syncPublicConfig.mjs`)
+- `app/configLoader.ts` — browser `fetch` adapter, used by the app's startup gate
 - `app/config.ts` — transforms JSON into typed objects
 - `app/types/config.ts` — type definitions
 - `app/utils/config.ts` — config utilities
@@ -43,6 +81,36 @@ For mainnet/testnet modes with distinct per-network bridge services, use distinc
 ```
 
 If set, the `NEXT_PUBLIC_AGGKIT_BRIDGE_APIS` environment variable (a JSON string) overrides the active mode's `aggkitBridgeApis` for that build environment.
+
+**Precedence, stated explicitly:** the served `config.json` is always the base. If
+`NEXT_PUBLIC_AGGKIT_BRIDGE_APIS` is set, it is shallow-merged over the active mode's
+`aggkitBridgeApis` (per network-id key), applied identically to every app mode. This
+merge happens at page-load time, inside the app's config bootstrap — not at build time —
+but the *value* of `NEXT_PUBLIC_AGGKIT_BRIDGE_APIS` itself is still fixed at build time,
+because Next.js inlines `NEXT_PUBLIC_*` variables into the JS bundle when it builds.
+
+**This override is build-time only and has no effect in a prebuilt container image.** A
+published Docker image (see [`docs/docker.md`](./docker.md)) is built with
+`NEXT_PUBLIC_AGGKIT_BRIDGE_APIS` unset, so the merge is a structural no-op there — the
+mounted `config.json` is the *only* configuration mechanism in a container. This variable
+remains useful for local dev and Cloudflare Workers builds (see the Kurtosis setup below,
+and `.env.example`), where it is genuinely evaluated at each build.
+
+### Relative `aggkitBridgeApis` URLs
+
+Each `aggkitBridgeApis` value may be an absolute URL, or a single origin-relative path
+(exactly one leading slash, e.g. `/aggkitapi`). A relative value is resolved against the
+page's own origin (`window.location.origin` in the browser) the moment the config is
+loaded, so every consumer downstream — the SDK, the tracker preflight check — only ever
+sees an absolute URL. Protocol-relative values (`//host`) are deliberately rejected: they
+would change origin, reintroducing the cross-origin surface that relative URLs exist to
+remove. This is the single-origin reverse-proxy path described in
+[`docs/deployment.md`](./deployment.md) (`/aggkitapi/* → aggkit-proxy`).
+
+Relative URLs are **only** accepted for `aggkitBridgeApis`. `rpcUrl`, `explorerUrl`, and
+`iconUrl` on a chain, and every `externalLinks` value, remain absolute-URL-only —
+wallets require an absolute RPC URL, and explorer/icon/external links are inherently
+cross-origin.
 
 ### Kurtosis / Local Devnet Setup
 
@@ -199,7 +267,7 @@ Optional:
 | Variable | Description |
 |----------|-------------|
 | `NEXT_PUBLIC_PROJECT_ID` | WalletConnect project ID; optional, placeholder → graceful degradation (see README) |
-| `NEXT_PUBLIC_AGGKIT_BRIDGE_APIS` | JSON string (`{"networkId":"url"}`); overrides the active mode's `aggkitBridgeApis` from `config.json`. Used for ephemeral devnet proxies. |
+| `NEXT_PUBLIC_AGGKIT_BRIDGE_APIS` | JSON string (`{"networkId":"url"}`); overrides the active mode's `aggkitBridgeApis` from `config.json`. Used for ephemeral devnet proxies. **Build-time only — has no effect in a prebuilt container image** (see [`docs/docker.md`](./docker.md)); the mounted `config.json` is the only configuration mechanism there. |
 
 Set them in `.env.local`:
 ```bash
@@ -251,7 +319,20 @@ Run config validation locally before opening a PR:
 pnpm run validate:config
 ```
 
+To vet a config file that is not the repo-root `config.json` — for example a candidate
+file you are about to mount into the Docker image (see [`docs/docker.md`](./docker.md)) —
+pass its path:
+
+```bash
+pnpm run validate:config -- /path/to/your/config.json
+```
+
 CI also runs this command before deployment. The app also validates config at startup through `config/configValidator.mjs`.
+
+All absolute URLs in `config.json` must use the `http` or `https` scheme. Other schemes
+(`javascript:`, `data:`, `file:`, …) are rejected: `externalLinks.*` and `explorerUrl`
+are rendered into links and passed to `window.open`, so a non-http(s) scheme there would
+be script execution in the app's origin.
 
 Beyond the schema, the validator enforces three cross-field rules per app mode so a
 mis-generated devnet config cannot silently drop a chain's data:

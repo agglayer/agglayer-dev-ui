@@ -2,7 +2,7 @@
 
 import { Button } from '@/app/components/ui/button';
 import { Modal } from '@/app/components/ui/modal';
-import { EXTERNAL_LINKS } from '@/app/config';
+import { getExternalLinks } from '@/app/config';
 import { CircleCheck, CircleX, ExternalLink, Info } from 'lucide-react';
 import Link from 'next/link';
 
@@ -51,7 +51,7 @@ export const ClaimResultModal = ({
   const txExplorerUrl = explorerUrl && claimTxHash ? `${explorerUrl}/tx/${claimTxHash}` : undefined;
   const userRejected = isUserRejection(errorMessage);
   const alreadyClaimed = isAlreadyClaimed(errorMessage);
-  const supportUrl = EXTERNAL_LINKS.CONTACT_SUPPORT;
+  const supportUrl = getExternalLinks().CONTACT_SUPPORT;
   const hasSupportUrl = !!supportUrl?.trim();
 
   const getErrorMessage = () => {

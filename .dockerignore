@@ -1,0 +1,38 @@
+# Docker build context excludes.
+#
+# NOTE: .sdk-src/ is deliberately NOT excluded here -- the sdk-builder stage
+# in the Dockerfile needs it in the build context (see
+# plans/dev-ui-docker-ghcr/d2-adr-dependency-strategy.md §4.4).
+# TEMPORARY (this note) -- remove per that ADR's §5 once .sdk-src/ itself goes away.
+
+node_modules
+.next
+.next-partial-failure
+out
+# `**/.git` (not just `.git`): a .dockerignore pattern is matched against the
+# whole path relative to the context root, so a bare `.git` excludes ONLY the
+# top-level one. In CI the sdk is staged by `actions/checkout` (see
+# .github/workflows/docker-*.yaml), which writes a real `.sdk-src/.git` --
+# without this pattern the entire agglayer/sdk history would be uploaded into
+# the build context and baked into the sdk-builder layer (and, with
+# docker-pr.yaml's `cache-to: type=gha,mode=max`, into the Actions cache).
+# It also restores the parity that scripts/stage-sdk-src.sh documents: locally
+# `git archive` yields tracked source with no `.git`, so CI must match.
+**/.git
+test-results
+playwright-report
+blob-report
+coverage
+
+# Secrets / build-time env files. A-1 §6.3(b) binding constraint: never let a
+# developer's local .env.local (or .env, .env.staging) leak into the image --
+# .env.local in particular can carry a real Reown project ID or devnet
+# overrides. .env.production is the one exception: it is git-tracked, contains
+# only a NEXT_PUBLIC_PROJECT_ID placeholder (verified), and `pnpm run
+# build:production` copies it to .env.local *inside* the build, so it must be
+# present in the build context for that RUN step to find it.
+.env*
+!.env.production
+
+*.tsbuildinfo
+.DS_Store

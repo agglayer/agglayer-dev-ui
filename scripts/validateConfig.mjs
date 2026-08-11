@@ -1,23 +1,24 @@
-import fs from 'node:fs';
-import path from 'node:path';
-
-import { parseConfigOrThrow } from '../config/configValidator.mjs';
+import { loadConfigFromDiskOrThrow } from '../config/configLoaderNode.mjs';
 
 const run = () => {
-  const configPath = path.resolve(process.cwd(), 'config.json');
-  const fileContent = fs.readFileSync(configPath, 'utf8');
+  // Optional path argument, so the same command can vet a *candidate* config
+  // before it is mounted into the container -- which is what docs/docker.md
+  // and entrypoint.sh tell operators to do, and which the container's own
+  // entrypoint cannot do for them (the nginx:alpine runtime has no Node, so
+  // it can only run the structural `jq` check). With no argument this keeps
+  // its previous behaviour: validate the repo-root config.json.
+  //   pnpm run validate:config                     # repo-root config.json
+  //   pnpm run validate:config -- ./my-config.json # a candidate file
+  // pnpm forwards the `--` separator itself, so drop it rather than treating
+  // it as a filename.
+  const configPath = process.argv.slice(2).find((arg) => arg !== '--');
 
-  let configJson;
-  try {
-    configJson = JSON.parse(fileContent);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown JSON parse error';
-    throw new Error(`config.json parse failed: ${message}`);
-  }
+  // allowRelative: true -- this is a standalone shape check with no serving
+  // origin available, so a relative aggkitBridgeApis value must be accepted
+  // as-is rather than requiring (or attempting) resolution.
+  loadConfigFromDiskOrThrow({ allowRelative: true, ...(configPath ? { configPath } : {}) });
 
-  parseConfigOrThrow(configJson, { sourceName: 'config.json' });
-
-  process.stdout.write('config.json validation passed\n');
+  process.stdout.write(`${configPath ?? 'config.json'} validation passed\n`);
 };
 
 try {
