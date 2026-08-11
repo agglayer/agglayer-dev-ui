@@ -78,7 +78,7 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
         // isClaimed's leafIndex is the local deposit index (deposit_count),
         // NOT the L1-info-tree index used for the claim proof below — these
         // are different quantities that only coincide by chance in a
-        // single-L2 devnet (design.md §7.1). resolveLeafIndex now always
+        // single-L2 devnet. resolveLeafIndex now always
         // returns deposit_count; the proof's leaf index comes fresh from
         // getClaimInputs, never from this row.
         const leafIndex = resolveLeafIndex(transaction);
@@ -192,7 +192,9 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
         let raceLostToAnotherClaimer = false;
         for (const delayMs of [0, 400, 1000]) {
           if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
-          raceLostToAnotherClaimer = await bridgeClient.isClaimed(isClaimedParams).catch(() => false);
+          raceLostToAnotherClaimer = await bridgeClient
+            .isClaimed(isClaimedParams)
+            .catch(() => false);
           if (raceLostToAnotherClaimer) break;
         }
 

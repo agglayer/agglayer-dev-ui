@@ -39,10 +39,10 @@ const walletIds = {
   RABBY: '18388be9ac2d02726dbac9777c96efaac06d744b2f6d580fccdd4127a6d01fd1'
 };
 
-// console-triage.md rows 3-6: with no real WalletConnect Cloud project id
+// With no real WalletConnect Cloud project id
 // configured (the checked-in .env.example/.env.local literal, or an empty
 // value), AppKit's own remote-config round trip to api.web3modal.org 403s
-// (invalid projectId) on every load. The plan's standing decision is to
+// (invalid projectId) on every load. The standing decision is to
 // degrade gracefully rather than require a real id for local/dev use.
 // `basic: true` is the narrowest documented AppKitOptions lever that does
 // anything about this (see @reown/appkit's AppKitOptions.basic jsdoc): it
@@ -63,8 +63,7 @@ const walletIds = {
 // unaffected. Calls this can't reach (fetchUsage's unconditional
 // `/appkit/v1/project-limits`, the featured/recommended `/getWallets`
 // prefetch, WalletConnect's identity lookup, and AppKit's own
-// mandatory-event analytics beacon) stay environmental/upstream -- see
-// console-triage.md rows 3-6 for the per-call disposition and rationale.
+// mandatory-event analytics beacon) stay environmental/upstream.
 //
 // A real-shaped project id (anything other than the placeholder/empty) skips
 // all of this and behaves exactly as before.

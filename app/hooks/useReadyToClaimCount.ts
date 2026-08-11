@@ -4,7 +4,7 @@ import { useAggkitAggregator } from '@/app/context/aggLayerSdk';
 import { useAppMode } from '@/app/context/appMode';
 import { useQuery } from '@tanstack/react-query';
 
-// design.md §3.7: a cheap, bounded count — one bridges+claims page per
+// A cheap, bounded count — one bridges+claims page per
 // configured network (Tier 1) to build the unclaimed set, then
 // `/l1-info-tree-index` probes bounded to that unclaimed set only (Tier 2).
 // Never a full activity scan, and never rejects on a partial per-network
@@ -29,8 +29,8 @@ export const useReadyToClaimCount = (params: {
     },
     staleTime: 30 * 1000,
     // Poll steadily so the badge reflects deposits becoming claimable (aggkit
-    // has no push and status is derived per fetch). The count is bounded per
-    // design §3.7; 15s keeps it fresh without hammering the fan-out.
+    // has no push and status is derived per fetch). The count stays bounded
+    // (probes only the unclaimed set); 15s keeps it fresh without hammering the fan-out.
     refetchInterval: 15 * 1000
   });
 };

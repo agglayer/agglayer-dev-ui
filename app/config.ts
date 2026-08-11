@@ -47,7 +47,7 @@ export const AUTOCLAIM_CONFIG: AutoclaimConfig = (() => {
 // Devnet's aggkit REST port is ephemeral per enclave recreate (kurtosis assigns
 // it at runtime); this env var lets a bring-up script inject the live proxy
 // URL without editing config.json. Keyed by L2 networkId, same shape as
-// config.json's per-mode `aggkitBridgeApis` (design.md §6.2).
+// config.json's per-mode `aggkitBridgeApis`.
 const resolveAggkitBridgeApisOverride = (): JsonAggkitBridgeApis | undefined => {
   const envOverride = process.env.NEXT_PUBLIC_AGGKIT_BRIDGE_APIS?.trim();
   if (!envOverride) return undefined;

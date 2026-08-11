@@ -9,8 +9,8 @@ import { privateKeyToAccount } from 'viem/accounts';
 // NEXT_PUBLIC_AGGKIT_BRIDGE_APIS env override merged in (app/config.ts) --
 // reusing it here (rather than re-parsing the raw env var ourselves) keeps
 // this preflight check pointed at exactly what the app itself will call.
-// With the 2-L2 topology this has one entry per L2 networkId (design.md
-// §0.1/§1.1); devnet gives both the same aggkit-proxy URL, but each is
+// With the 2-L2 topology this has one entry per L2 networkId; devnet
+// gives both the same aggkit-proxy URL, but each is
 // iterated separately below so a single dead per-network backend behind the
 // proxy is caught per-network rather than assumed identical.
 const aggkitBridgeApiEntries = Object.entries(APP_MODE_CONFIG[DEFAULT_APP_MODE].aggkitBridgeApis);
@@ -27,8 +27,8 @@ type SyncStatusBody = {
 };
 
 const assertSyncStatusOk = (body: SyncStatusBody): void => {
-  // design.md's AggkitSyncStatus shape (types.go:364); see also
-  // enclave-notes.md's live acceptance snapshot for this exact endpoint.
+  // The SDK's AggkitSyncStatus shape (aggkit types.go), verified live
+  // against the devnet.
   expect(body.l1_info).toBeDefined();
   expect(body.l2_info).toBeDefined();
   expect(body.l1_info?.is_synced).toBe(true);
@@ -59,15 +59,15 @@ test.describe('preflight: funded wallet and RPC are reachable', () => {
 
 // Replaces the old direct-RPC-only preflight: the backend is now aggkit's
 // bridge REST API (fronted by the Kurtosis enclave's CORS-safe proxy in
-// devnet mode -- design.md S10 / enclave-notes.md), not a Bridge Hub. A
+// devnet mode), not a Bridge Hub. A
 // healthy RPC alone no longer implies the app can load activity; these
 // checks confirm every configured aggkit network is reachable and synced.
 //
 // No standalone "health endpoint" check: `GET {baseUrl}/` 404s through
 // aggkit-proxy (haproxy strips the `/aggkitapi` prefix and aggkit-proxy only
-// registers `ANY /bridge/v1/*any` -- design.md §2.4 gap G3, verified live
-// against the devnet proxy). `sync-status?network_id=N` is the canonical
-// per-network liveness probe instead (design.md §2.3/§6.3).
+// registers `ANY /bridge/v1/*any` -- verified live against the devnet
+// proxy). `sync-status?network_id=N` is the canonical per-network liveness
+// probe instead.
 test.describe('preflight: aggkit backend is reachable and synced', () => {
   for (const [networkIdString, baseUrl] of aggkitBridgeApiEntries) {
     test(`aggkit sync-status reports network ${networkIdString} synced and active`, async ({
@@ -82,9 +82,9 @@ test.describe('preflight: aggkit backend is reachable and synced', () => {
   }
 
   // L1 (network_id 0) isn't itself a key of aggkitBridgeApis (that map is
-  // keyed by L2 networkId, design.md §1.1) but is reachable through any of
+  // keyed by L2 networkId) but is reachable through any of
   // the same URLs -- GetSyncStatusHandler never reads network_id, it always
-  // reports its own instance's L1+L2 status (design.md §2.3). One check
+  // reports its own instance's L1+L2 status. One check
   // suffices.
   test('aggkit sync-status reports network 0 (L1) synced and active', async ({ request }) => {
     const [, baseUrl] = aggkitBridgeApiEntries[0];

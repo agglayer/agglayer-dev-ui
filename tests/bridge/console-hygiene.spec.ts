@@ -22,7 +22,7 @@ import { BridgePage } from './models/bridge-page';
 // where every entry cites the triage row that classified it
 // environmental/upstream.
 //
-// IMPORTANT caveat (see console-triage.md's "S8 fix disposition" section):
+// IMPORTANT caveat:
 // playwright.config.ts forces NEXT_PUBLIC_E2E_ENABLED=true for every
 // webServer it launches, and app/context/wallet.tsx skips
 // `createAppKit(...)` entirely under that flag (IS_E2E_ENABLED), using a
@@ -75,7 +75,7 @@ const ALLOWLIST: AllowlistEntry[] = [
   },
   {
     row: 'triage row 3',
-    note: "Reown/AppKit remote-config+asset fetches to api.web3modal.org (config, project-limits, getWallets, getAssetImage) with a placeholder projectId. S8 degrades 2 of 4 via `basic: true`; the other 2 are documented-unsuppressible (see console-triage.md). Currently inert under this spec's E2E bypass -- see the file-level comment.",
+    note: "Reown/AppKit remote-config+asset fetches to api.web3modal.org (config, project-limits, getWallets, getAssetImage) with a placeholder projectId. `basic: true` degrades 2 of 4; the other 2 have no public AppKit option that gates them without disabling wallet options entirely. Currently inert under this spec's E2E bypass -- see the file-level comment.",
     matches: (issue) => urlIncludes(issue, 'api.web3modal.org')
   },
   {
@@ -128,7 +128,7 @@ const ALLOWLIST: AllowlistEntry[] = [
     matches: (issue) => urlIncludes(issue, 'cca-lite.coinbase.com')
   },
   {
-    // NOT a console-triage.md row -- discovered while authoring this spec,
+    // Not part of the original console-noise triage -- discovered while authoring this spec,
     // documented here instead since it's an artifact of the shared E2E
     // devnet wallet's history, not something the S6 triage journey (a
     // different, native-only wallet) ever exercised. Root-caused via a CDP

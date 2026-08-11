@@ -10,10 +10,10 @@ import { expect, test } from '@playwright/test';
 
 import { BridgePage } from './models/bridge-page';
 
-// L2->L1 manual claim (design.md §3.6/§6.3): config.json's
+// L2->L1 manual claim: config.json's
 // autoclaim.l2_to_l1.expectedAutoclaim is false -- no
-// `[[AutoClaim.Claimers]]` targets NetworkID=0 on either aggkit instance
-// (design.md §3.7/§5.5), so a deposit on this route sits READY_TO_CLAIM
+// `[[AutoClaim.Claimers]]` targets NetworkID=0 on either aggkit instance,
+// so a deposit on this route sits READY_TO_CLAIM
 // indefinitely until claimed by hand. That non-autoclaiming-by-configuration
 // property (rather than a race that a browser-driven click could lose, as
 // on the L1->L2 route -- see claim-autoclaim.spec.ts) is exactly what makes
@@ -31,10 +31,10 @@ test.skip(
 test('L2-1→L1 native withdrawal requires a manual claim click to reach Completed', async ({
   page
 }) => {
-  // Ready budget: E2E_PROOF_READY_TIMEOUT_MS (600s ← conservative ~8m34s,
-  // design.md §3c criterion 3 / §6.1/§6.4; S6's busier-enclave sample was
-  // <=4m21s). Claim-confirm budget: E2E_CLAIM_TIMEOUT_MS (150s, existing
-  // devnet claim-confirmation budget, design.md §6.3). +60s the rest of the
+  // Ready budget: E2E_PROOF_READY_TIMEOUT_MS (600s ← conservative idle-enclave
+  // measurement ~8m34s; a busier enclave sampled <=4m21s). Claim-confirm
+  // budget: E2E_CLAIM_TIMEOUT_MS (150s, existing devnet claim-confirmation
+  // budget). +60s the rest of the
   // journey (60s "stays ready" observation window included in that slack).
   // Plus one extra E2E_CLAIM_TIMEOUT_MS + 60s budget for the L1->L2 top-up
   // deposit below (same budget claim-autoclaim.spec.ts uses for that same
@@ -71,7 +71,7 @@ test('L2-1→L1 native withdrawal requires a manual claim click to reach Complet
   await bridgePage.connectWallet();
 
   // L2-1 -> L1: the reverse of the L1->L2 default pair, so both selectors
-  // must be clicked explicitly (design.md §6.1).
+  // must be clicked explicitly.
   await bridgePage.selectChainPair(E2E_TO_CHAIN_ID, E2E_FROM_CHAIN_ID);
   await bridgePage.fillAmount(E2E_NATIVE_BRIDGE_AMOUNT);
   await bridgePage.submitBridge();

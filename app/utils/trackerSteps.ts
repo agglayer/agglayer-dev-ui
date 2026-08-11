@@ -1,9 +1,9 @@
 import type { AggkitBridgeStep, AggkitStepStatus } from '@agglayer/sdk';
 
-// Humanized copy for each step of the aggkit tracker's route (design.md
-// §Tracker / useBridgeTracking). Keyed on `step_name`, the bare string
-// aggkit ships on the wire -- see useBridgeTracking.ts and the SDK's
-// AggkitBridgeStep union for the full deviation writeup.
+// Humanized copy for each step of the aggkit tracker's route (see
+// useBridgeTracking). Keyed on `step_name`, the bare string aggkit ships
+// on the wire (agglayer/aggkit#1781) -- see the SDK's AggkitBridgeStep
+// union for the full deviation writeup.
 //
 // `sourceName`/`destinationName` are interpolated where the copy needs to
 // name a specific chain; both are optional since the tracker bar can render

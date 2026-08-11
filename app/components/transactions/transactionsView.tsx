@@ -99,7 +99,7 @@ export const TransactionsView = () => {
 
   const totalCount = data?.pages[0]?.pagination.total ?? 0;
 
-  // Partial fan-out failures (design.md §2.4): the aggregator still returns
+  // Partial fan-out failures: the aggregator still returns
   // results from healthy networks, so this is surfaced as a non-blocking
   // notice rather than the full error state (which is reserved for the case
   // where every configured network failed and `error` is set below).

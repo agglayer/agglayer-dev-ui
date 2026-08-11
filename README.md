@@ -66,7 +66,7 @@ If your wallet shows a stuck/pending transaction or wrong balances after an encl
 Playwright E2E defaults to the local Kurtosis `cdk` devnet (aggkit backend)
 using a funded devnet key -- see "Kurtosis devnet bring-up" above. Set
 `E2E_BACKEND_MODE=testnet` in `.env.local` to instead run against real
-Sepolia/Bokuto testnet infrastructure (the pre-aggkit-migration behavior).
+Sepolia/Bokuto testnet infrastructure (the previous default before the aggkit devnet backend).
 All backend-specific values (chain ids, ERC20 address, bridge amounts,
 timeouts) are resolved by `app/constants/e2e.ts` per mode -- see that file
 for the exact defaults and overrides, and `.env.example` for the full list

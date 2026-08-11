@@ -11,7 +11,7 @@ import { useEffect, useMemo, useRef } from 'react';
 
 import type { AggkitFailedNetwork } from '@agglayer/sdk';
 
-// Per-page `failedNetworks` (design.md §2.4) are NOT aggregated across pages
+// Per-page `failedNetworks` are NOT aggregated across pages
 // by the aggregator — each page only reports failures from its own fan-out.
 // Dedupe by networkId across every loaded page so the UI can name each
 // currently-unhealthy network once, regardless of how many pages mention it.
@@ -40,9 +40,8 @@ export const TOTAL_REFETCH_TIME = REFETCH_INTERVALS.reduce((acc, curr) => acc + 
 const PENDING_POLL_INTERVAL = 5000;
 const IDLE_POLL_INTERVAL = 10000;
 
-const hasNonTerminalTransaction = (
-  pages: TransactionsResponse[] | undefined
-): boolean => (pages ?? []).some((page) => page.data.some((tx) => tx.status !== 'CLAIMED'));
+const hasNonTerminalTransaction = (pages: TransactionsResponse[] | undefined): boolean =>
+  (pages ?? []).some((page) => page.data.some((tx) => tx.status !== 'CLAIMED'));
 
 export const useTransactions = (params: {
   chainId?: number;

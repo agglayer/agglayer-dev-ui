@@ -39,7 +39,7 @@ test('token selector shows token symbol and native balance when wallet is connec
   await bridgePage.navigate();
   await bridgePage.connectWallet();
   // Explicit chain-pair selection rather than relying on config.json's
-  // defaultFromChainKey/defaultToChainKey (design.md §6.1).
+  // defaultFromChainKey/defaultToChainKey.
   await bridgePage.selectChainPair(E2E_FROM_CHAIN_ID, E2E_TO_CHAIN_ID);
   await bridgePage.openTokenSelector();
 

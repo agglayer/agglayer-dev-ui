@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// useBridgeTracking's whole job (design.md §Tracker) is deciding WHEN to
+// useBridgeTracking's whole job is deciding WHEN to
 // stop polling -- this suite drives its `refetchInterval` end to end through
 // real react-query, faking time to assert no further `getBridgeTracking`
 // calls happen once terminal, and that calls keep coming for every

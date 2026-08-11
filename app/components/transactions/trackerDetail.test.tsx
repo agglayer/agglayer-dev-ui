@@ -4,8 +4,8 @@ import '@testing-library/jest-dom/vitest';
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Full tracker timeline for the transaction details modal (design.md
-// §Tracker / S8): renders nothing without tracking data, an info alert for
+// Full tracker timeline for the transaction details modal: renders
+// nothing without tracking data, an info alert for
 // the giving-up terminal, a warning alert for a step-level error (while
 // still rendering the rest of the timeline -- the tracker retries these, it
 // does not stop), and per-step result detail (certificate id, claim tx,

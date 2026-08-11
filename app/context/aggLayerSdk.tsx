@@ -13,7 +13,7 @@ type AggNative = ReturnType<AggLayerSDK['getNative']>;
 const AggLayerNativeContext = createContext<AggNative | null>(null);
 
 // NATIVE's `ChainConfig.proofApiUrl` served the old bridge-hub `BridgeUtil`
-// claim-proof path (design.md §8). The dev-ui never calls that path (it uses
+// claim-proof path. The dev-ui never calls that path (it uses
 // `buildClaimAsset(params)` with an externally-fetched proof, now sourced
 // from `AggkitBridgeAggregator.getClaimInputs`), so `proofApiUrl` is simply
 // omitted here rather than pointed at a real URL.
@@ -44,10 +44,9 @@ export const AggLayerSDKProvider: React.FC<PropsWithChildren> = ({ children }) =
         // into the SDK's shared chainRegistry singleton — this is also what
         // makes `AggkitBridgeAggregator.getTokenMetadata()`'s native branch
         // (`chainRegistry.getChainByNetworkId`) resolve devnet's L2 (networkId
-        // 1) correctly. See handoff-sdk.md §3.2 for the one known caveat: L1
+        // 1) correctly. One known caveat: L1
         // (networkId 0) collides with the registry's pre-registered Ethereum
-        // mainnet/Sepolia entries, first-match wins there — not addressed by
-        // this step, tracked as a pre-existing ChainRegistry characteristic.
+        // mainnet/Sepolia entries — a pre-existing ChainRegistry characteristic.
         chains: config.chains.map((chain: AppChain) =>
           toSdkChainConfig(chain, config.bridgeAddress)
         )
@@ -70,7 +69,7 @@ export const useAggNative = (): AggNative => {
 
 const AggkitAggregatorContext = createContext<AggkitBridgeAggregator | null>(null);
 
-// Sibling to AggLayerSDKProvider (design.md §6.3): fans out to one
+// Sibling to AggLayerSDKProvider: fans out to one
 // AggkitBridgeClient per configured L2 network (app/services/* consume this
 // instead of calling the old bridge-hub REST endpoints directly).
 export const AggkitAggregatorProvider: React.FC<PropsWithChildren> = ({ children }) => {

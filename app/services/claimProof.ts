@@ -5,7 +5,7 @@ import { isHex } from 'viem';
 import type { AggkitClaimProof } from '@agglayer/sdk';
 
 // Same shape `buildClaimAssetParams` (utils/transaction.ts) already expects —
-// preserved so that function stays unchanged (design.md §7.2). The aggkit SDK
+// preserved so that function stays unchanged. The aggkit SDK
 // returns these fields as plain `string`, not viem's `Hex` brand, so we
 // narrow with `isHex` (a type guard, not a cast) at this one boundary rather
 // than threading `as Hex` through call sites — see team standards on

@@ -15,7 +15,7 @@ test('bridges native token', async ({ page }) => {
   await bridgePage.navigate();
   await bridgePage.connectWallet();
   // Explicit chain-pair selection rather than relying on config.json's
-  // defaultFromChainKey/defaultToChainKey (design.md §6.1) -- keeps this spec
+  // defaultFromChainKey/defaultToChainKey -- keeps this spec
   // independent of whatever the devnet bring-up script wrote as the default.
   await bridgePage.selectChainPair(E2E_FROM_CHAIN_ID, E2E_TO_CHAIN_ID);
   await bridgePage.fillAmount(E2E_NATIVE_BRIDGE_AMOUNT);

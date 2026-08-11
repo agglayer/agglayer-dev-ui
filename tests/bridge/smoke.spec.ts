@@ -21,7 +21,7 @@ test('connects wallet and displays the correct address', async ({ page }) => {
   await expect(bridgePage.walletConnectedBadge).toContainText(shortenAddress(E2E_WALLET_ADDRESS!));
 
   // Explicit chain-pair selection rather than relying on config.json's
-  // defaultFromChainKey/defaultToChainKey (design.md §6.1) -- also smoke-tests
+  // defaultFromChainKey/defaultToChainKey -- also smoke-tests
   // the chain selectors themselves.
   await bridgePage.selectChainPair(E2E_FROM_CHAIN_ID, E2E_TO_CHAIN_ID);
 });

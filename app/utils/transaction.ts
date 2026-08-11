@@ -39,7 +39,7 @@ export const mapTransactionRequest = (params: TransactionParams) => {
 
 // For `Bridge.isClaimed` ONLY — the contract's leafIndex arg is the local
 // deposit index (`deposit_count`), NOT the L1-info-tree index aggkit's
-// claim-proof needs (design.md §7.1). `tx.leafIndex` already carries
+// claim-proof needs. `tx.leafIndex` already carries
 // `deposit_count` (see AggkitBridgeAggregator.toTransaction); the L1-info-tree
 // index is a *separate*, freshly-probed value from
 // `AggkitBridgeAggregator.getClaimInputs`, never read off the row here.

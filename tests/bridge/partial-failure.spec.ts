@@ -11,8 +11,8 @@ import { BridgePage } from './models/bridge-page';
 // time, so injecting a different value for just this one spec would require
 // restarting the server every other bridge/*.spec.ts test depends on.
 //
-// Manually verified equivalent flow, same assertions: S12
-// manual-validation.md §6 ("Partial failure (bogus second network)").
+// The equivalent flow (bogus second network) was verified manually with
+// the same assertions during the migration's validation pass.
 test('activity page surfaces a partial-failure notice for the unreachable network while the healthy network still renders', async ({
   page
 }) => {
@@ -24,7 +24,7 @@ test('activity page surfaces a partial-failure notice for the unreachable networ
   await bridgePage.connectWallet();
 
   // Network 999's client exhausts its retries before the aggregator gives
-  // up on it (design.md §2.4 partial fan-out failure contract) -- allow
+  // up on it (the partial fan-out failure contract) -- allow
   // enough time for that backoff plus the warning banner to render.
   await expect(page.getByText(/some networks are temporarily unavailable/i)).toBeVisible({
     timeout: 45_000

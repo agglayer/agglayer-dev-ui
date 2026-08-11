@@ -23,8 +23,8 @@ export const E2E_WALLET_ADDRESS: Address | undefined = E2E_PRIVATE_KEY
 // config.json/.env.local, and manual full-journey validation against it
 // documents the timings these constants are tuned against (see the E2E
 // timeout comments further down). Set E2E_BACKEND_MODE=testnet to instead
-// run against real Sepolia/Bokuto testnet infrastructure (the
-// pre-aggkit-migration behavior) -- e.g. for a periodic canary run outside
+// run against real Sepolia/Bokuto testnet infrastructure (the previous
+// default before the aggkit devnet backend) -- e.g. for a periodic canary run outside
 // the devnet.
 export type E2EBackendMode = 'devnet' | 'testnet';
 
@@ -63,11 +63,11 @@ export const E2E_TO_CHAIN_ID = (() => {
   return E2E_BACKEND_MODE === 'testnet' ? TESTNET_TO_CHAIN_ID : DEVNET_TO_CHAIN_ID;
 })();
 
-// design.md §6.4: the full set of devnet L2 chain ids (L2-1, L2-2, ...),
+// The full set of devnet L2 chain ids (L2-1, L2-2, ...),
 // comma-separated by scripts/kurtosisDevnetEnv.mjs into E2E_L2_CHAIN_IDS.
 // Used by tests/bridge/l2-to-l2.spec.ts to reach the second L2
 // (params-aggkit-l2l2-run2.yml l2_chain_id: 20202) without hardcoding a
-// suffix that the discovery script (design.md §5.1) could reassign.
+// suffix that the discovery script (scripts/kurtosisDevnetEnv.mjs) could reassign.
 // Devnet-only: testnet mode has a single L2 (Bokuto), so the fallback below
 // has only one entry in testnet mode, which the L2->L2 spec's
 // `E2E_BACKEND_MODE !== 'devnet'` skip guard relies on never being reached.
@@ -118,10 +118,9 @@ export const E2E_PROOF_READY_TIMEOUT_MS = parsePositiveInt(
 // mode.
 const TESTNET_ERC20_ADDRESS: Address = '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238';
 
-// A devnet ERC20 deployed during S12 manual validation ("S12 Test Token" /
+// A devnet ERC20 deployed once during manual validation ("S12 Test Token" /
 // S12T, 18 decimals, minted to the funded E2E wallet
-// 0xE34aaF64b29273B7D567FCFc40544c014EEe9970) -- see manual-validation.md
-// §5. Playwright's globalSetup (tests/e2e/globalSetup.ts) checks this
+// 0xE34aaF64b29273B7D567FCFc40544c014EEe9970). Playwright's globalSetup (tests/e2e/globalSetup.ts) checks this
 // address first (bytecode + balance still present) before deploying a fresh
 // token, so repeat local runs against the same long-lived enclave don't
 // redeploy every time. If the enclave was recreated since, the liveness
@@ -147,7 +146,7 @@ export const E2E_ERC20_BRIDGE_AMOUNT =
 
 // Timeouts tuned per backend. Devnet's ~1s block time and built-in aggkit
 // autoclaim are both far faster than real Sepolia/Bokuto testnet
-// infrastructure (manual-validation.md: deposit -> ready ~6-35s, ready ->
+// infrastructure (measured on the devnet: deposit -> ready ~6-35s, ready ->
 // claimed ~10-90s -- worst case budgeted below with margin).
 const DEFAULT_BRIDGE_SUCCESS_TIMEOUT_MS = E2E_BACKEND_MODE === 'testnet' ? 120_000 : 60_000;
 const DEFAULT_CLAIM_TIMEOUT_MS = E2E_BACKEND_MODE === 'testnet' ? 300_000 : 150_000;
