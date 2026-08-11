@@ -44,9 +44,10 @@ export const AggLayerSDKProvider: React.FC<PropsWithChildren> = ({ children }) =
         // into the SDK's shared chainRegistry singleton — this is also what
         // makes `AggkitBridgeAggregator.getTokenMetadata()`'s native branch
         // (`chainRegistry.getChainByNetworkId`) resolve devnet's L2 (networkId
-        // 1) correctly. One known caveat: L1
-        // (networkId 0) collides with the registry's pre-registered Ethereum
-        // mainnet/Sepolia entries — a pre-existing ChainRegistry characteristic.
+        // 1) correctly, and devnet's L1 (networkId 0) too: on a networkId
+        // collision, ChainRegistry.getChainByNetworkId prefers a
+        // consumer-registered chain (this one) over its own pre-registered
+        // Ethereum mainnet/Sepolia defaults, regardless of registration order.
         chains: config.chains.map((chain: AppChain) =>
           toSdkChainConfig(chain, config.bridgeAddress)
         )
