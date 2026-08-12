@@ -133,7 +133,15 @@ jobs:
           bun install --frozen-lockfile
           bun run build
 
+      # Checkout lives at dev-ui/ (see the restructuring above), so the
+      # default package_json_file: package.json (resolved against
+      # $GITHUB_WORKSPACE) doesn't exist -- point it at the checkout's own
+      # package.json (packageManager: pnpm@10.30.3) so version detection
+      # works. Same subdir pattern as actions/setup-node's
+      # node-version-file: dev-ui/.nvmrc below.
       - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: dev-ui/package.json
 
       - uses: actions/setup-node@v4
         with:
