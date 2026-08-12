@@ -72,6 +72,53 @@ timeouts) are resolved by `app/constants/e2e.ts` per mode -- see that file
 for the exact defaults and overrides, and `.env.example` for the full list
 of E2E-only env vars.
 
+### CI-devnet quick start (vendored compose, no Kurtosis toolchain)
+
+`.github/workflows/e2e.yaml` doesn't bring up a live Kurtosis enclave at all -- it
+vendors a frozen, self-contained snapshot bundle (`tests/devnet/`, see
+[`tests/devnet/README.md`](tests/devnet/README.md)) produced by
+`0xPolygon/kurtosis-cdk`'s [anvil-flavor
+snapshot](https://github.com/0xPolygon/kurtosis-cdk/blob/feat/aggkit-bridge-ui-backend/docs/docs/advanced/anvil-devui-snapshot.md)
+and brings it up with plain `docker compose`. This is the fastest way to get a real
+bridging backend locally too -- it complements the live Kurtosis bring-up above rather
+than replacing it (the live enclave is still the right tool when iterating on
+kurtosis-cdk itself, e.g. testing a params-file change); the vendored bundle is for
+"just run the suite" with nothing to build or configure:
+
+```bash
+# Bring up all 11 services (anvil x3, agglayer, aggkit x2 + bridge x2,
+# aggkit-proxy, haproxy, dev-ui), self-contained -- no bind mounts, no
+# volumes, no Kurtosis CLI. Pulls 11 public images from GHCR on first run.
+docker compose -f tests/devnet/docker-compose.yml up -d --wait
+
+# Replicates kurtosisDevnetEnv.mjs's readiness probes against the fixed
+# compose ports (chainId per route, bridge bytecode per chain, sync-status
+# both-sides-synced on all 3 networks). Boot-to-ready is ~24s; the default
+# 120s timeout leaves ample margin.
+node scripts/devnetReady.mjs
+
+# Point config.json at the vendored bundle's fixed 127.0.0.1:8555 URLs
+# (committed config.json ships in testnet mode -- see above).
+cp config/config.ci.devnet.json config.json
+pnpm run validate:config
+
+# Run the suite (same invocations e2e.yaml uses; see its env: block for the
+# literal E2E_* values -- all public devnet fixtures, never secrets).
+pnpm exec playwright test tests/e2e/preflight.spec.ts
+pnpm exec playwright test tests/bridge
+
+# Revert config.json (never commit the devnet fixture over the committed
+# testnet-mode config), then tear down.
+git checkout -- config.json
+docker compose -f tests/devnet/docker-compose.yml down -v
+```
+
+The vendored bundle is pinned by immutable tag and drifts from kurtosis-cdk's working
+branch over time by design -- see [`tests/devnet/README.md`](tests/devnet/README.md)
+for the regenerate-and-bump procedure (dispatch the kurtosis-cdk workflow, download the
+new artifact, repoint the compose defaults at the published GHCR tag, bump
+`E2E_ERC20_ADDRESS`).
+
 Security and ops notes:
 
 - The E2E private key is injected into the browser runtime for automated signing. Never reuse a real wallet key.
