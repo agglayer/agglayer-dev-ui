@@ -10,27 +10,36 @@ compose port table, and the restore hazards (`anvil --load-state` tip-state
 semantics, the `settlement_free`/`historical_states` publish gates, the
 timestamp seam) that this bundle was produced under.
 
-This directory contains exactly two files pulled verbatim from that
-workflow's `devui-snapshot-snapshot-<sha>` artifact:
+This directory contains two files taken from that workflow's
+`devui-snapshot-snapshot-<sha>` artifact (plus this README). `summary.json`
+is verbatim; `docker-compose.yml` carries the one edit described below.
 
 - `docker-compose.yml` — self-contained (no bind mounts, no volumes); every
   service's chain state, config and keystores are baked into its image.
   `.github/workflows/e2e.yaml` brings it up with
   `docker compose -f tests/devnet/docker-compose.yml up -d --wait`.
 - `summary.json` — a machine-readable description of the bundle (chain ids,
-  contract addresses, the funded E2E wallet, the seeded ERC20, image
-  digests/sizes). `E2E_ERC20_ADDRESS` in `.github/workflows/e2e.yaml` is
-  copied from this file's `.erc20_address` — it is **nonce-dependent** and
-  will differ on every regenerated snapshot.
+  contract addresses, the funded E2E wallet, the seeded ERC20, image names
+  and human-readable sizes — note it carries **no digests**). Several
+  `E2E_*` values in `.github/workflows/e2e.yaml` are copied from it; the
+  workflow's "Assert workflow literals match tests/devnet/summary.json"
+  step fails the job if they drift. `.erc20_address` in particular is
+  **nonce-dependent** and differs on every regenerated snapshot.
+  `summary.json` does **not** carry `historical_states`, so only half of the
+  producer-side publish gate is verifiable from the vendored bundle; the
+  other half is enforced in kurtosis-cdk's workflow before publishing.
 
 The one edit made to the vendored `docker-compose.yml` (vs. the raw
 artifact) is the default image reference: the artifact's compose file
 defaults to the *locally built* tag from the kurtosis-cdk CI run
 (`cdk-<timestamp>-<sha>`); here the defaults are repointed at the
-**published, pinned GHCR tag** (`snapshot-<sha>`, never
-`snapshot-latest-devui` — pin by immutable sha per kurtosis-cdk's decision
-D5) so this repo never depends on an image that only ever existed inside
-someone else's CI run.
+**published GHCR tag** (`snapshot-<sha>`, never `snapshot-latest-devui`)
+so this repo never depends on an image that only ever existed inside someone
+else's CI run. Note this is a *tag containing a commit sha*, not a digest:
+re-running kurtosis-cdk's publish workflow with the same input tag would
+move it. Pinning by `@sha256:` digest instead would be stronger, but would
+also break the `${SNAPSHOT_IMAGE_TAG:-...}` override the bundle is designed
+around.
 
 ## Why vendor instead of pulling live
 
@@ -109,7 +118,9 @@ under you and breaks the "pin exact versions in CI" contract).
    block to the new `summary.json`'s `.erc20_address`:
 
    ```bash
-   jq -r .erc20_address tests/devnet/summary.json
+   # -e so a missing/null erc20_address fails loudly instead of printing
+   # the literal string "null" for you to paste into the workflow.
+   jq -er .erc20_address tests/devnet/summary.json
    ```
 
    This value is nonce-dependent (the ERC20 is deployed fresh by the
@@ -127,7 +138,7 @@ under you and breaks the "pin exact versions in CI" contract).
    docker compose -f tests/devnet/docker-compose.yml pull
    docker compose -f tests/devnet/docker-compose.yml up -d --wait
    node scripts/devnetReady.mjs --timeout-ms 300000
-   docker compose -f tests/devnet/docker-compose.yml down
+   docker compose -f tests/devnet/docker-compose.yml down -v
    ```
 
 8. **Run the actual specs locally** against the new bundle before committing
@@ -137,10 +148,12 @@ under you and breaks the "pin exact versions in CI" contract).
 
 9. **Commit `tests/devnet/docker-compose.yml`, `tests/devnet/summary.json`,
    and the `E2E_ERC20_ADDRESS` bump in `.github/workflows/e2e.yaml` together,
-   in the same commit.** These three must never drift independently — a
-   compose bump without the matching ERC20 bump (or vice versa) produces a
-   bundle whose `globalSetup.ts` check fails, or (worse) silently reuses a
-   stale, no-longer-funded address.
+   in the same commit.** These three must never drift independently. The
+   workflow's "Assert workflow literals match tests/devnet/summary.json"
+   step is the automated backstop: it compares the `E2E_*` literals and the
+   compose file's pinned tag against `summary.json` and fails the job on any
+   mismatch, so a half-done bump is caught in CI rather than surfacing as an
+   obscure `globalSetup.ts` failure.
 
 ## Notes
 
