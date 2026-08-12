@@ -254,6 +254,23 @@ A mode is **enabled** only if `chainKeys` has at least two entries (bridging req
 
 **IMPORTANT:** The current `config.json` has `appModes.default` set to `"devnet"` for **testing convenience only**. This must be reverted to a production-appropriate default (e.g., `"mainnet"` or `"testnet"`) before any production release. See the release checklist (step S15) for details.
 
+### `config/config.ci.devnet.json` — the CI fixture
+
+`config/config.ci.devnet.json` is a **fixed-port** sibling of the committed `config.json`, used only by `.github/workflows/e2e.yaml`'s "Configure devnet fixture" step:
+
+```bash
+cp config/config.ci.devnet.json config.json
+pnpm run validate:config
+```
+
+It differs from the committed `config.json` in exactly the ways CI needs:
+
+- `appModes.default` is `"devnet"` (the committed file defaults to `"testnet"` — see above).
+- `chains` adds three fixed-URL entries — `DEVNET_L1` (chain id `271828`), `DEVNET_L2_001` (`20201`), `DEVNET_L2_002` (`20202`) — with `rpcUrl` pointed at `http://127.0.0.1:8555/l1rpc`, `/l2rpc-001`, `/l2rpc-002` respectively. `8555` is the vendored compose bundle's fixed haproxy port (`DEVNET_PROXY_PORT`, see [`tests/devnet/README.md`](../tests/devnet/README.md) and kurtosis-cdk's [Anvil-Flavor DevUI Snapshot](https://github.com/0xPolygon/kurtosis-cdk/blob/feat/aggkit-bridge-ui-backend/docs/docs/advanced/anvil-devui-snapshot.md#the-bundle-contract) doc), never an ephemeral `kurtosis port print` value — this file is only valid against the fixed-port compose bundle, not a live Kurtosis enclave (use `scripts/kurtosisDevnetEnv.mjs` for that instead, which writes the committed `config.json` directly).
+- `appModes.configs.devnet.chainKeys` is `["DEVNET_L1", "DEVNET_L2_001", "DEVNET_L2_002"]`, `bridgeAddress` is the deterministic devnet bridge address `0xC8cbEBf950B9Df44d987c8619f092beA980fF038`, and `aggkitBridgeApis` maps both L2 network ids (`1`, `2`) to `http://127.0.0.1:8555/aggkitapi` (the single aggkit-proxy origin, selected per-network via `?network_id=`).
+
+This file is committed and never overwrites `config.json` in git — the workflow copies it over the working tree's `config.json` inside the CI job only, and no step ever commits the result. Run `pnpm run validate:config -- config/config.ci.devnet.json` to validate it directly without copying it over `config.json` first.
+
 ## Tokens
 
 On first load, the UI shows **only the native gas token** for each configured chain. Users can import additional tokens via the UI. Imported tokens are stored in local storage and can be removed.

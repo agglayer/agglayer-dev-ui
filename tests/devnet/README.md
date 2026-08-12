@@ -3,8 +3,15 @@
 This directory is a **vendored copy** of the anvil-aggkit devnet snapshot
 bundle produced by `0xPolygon/kurtosis-cdk`'s `snapshot-devui.yml` workflow
 (`.github/workflows/snapshot-devui.yml` in that repo, branch
-`feat/aggkit-bridge-ui-backend`). It contains exactly two files pulled
-verbatim from that workflow's `devui-snapshot-snapshot-<sha>` artifact:
+`feat/aggkit-bridge-ui-backend`). See that repo's [Anvil-Flavor DevUI
+Snapshot](https://github.com/0xPolygon/kurtosis-cdk/blob/feat/aggkit-bridge-ui-backend/docs/docs/advanced/anvil-devui-snapshot.md)
+doc for the bundle's topology, the `summary.json` field reference, the
+compose port table, and the restore hazards (`anvil --load-state` tip-state
+semantics, the `settlement_free`/`historical_states` publish gates, the
+timestamp seam) that this bundle was produced under.
+
+This directory contains exactly two files pulled verbatim from that
+workflow's `devui-snapshot-snapshot-<sha>` artifact:
 
 - `docker-compose.yml` — self-contained (no bind mounts, no volumes); every
   service's chain state, config and keystores are baked into its image.
