@@ -28,13 +28,31 @@ env:
 jobs:
   e2e:
     runs-on: ubuntu-latest
-    environment: production
-    timeout-minutes: 15
+    # Budget: devnet compose boot-to-ready measured ~24s (kurtosis-cdk S10/
+    # S11), install+browsers a few minutes, preflight seconds, then the full
+    # bridge suite -- L2->L1 certificate settlement is the slow, variable
+    # leg (~3.5min typical per kurtosis-cdk plan measurements, retry counts
+    # vary run-to-run). 75 minutes pads generously over the observed happy
+    # path for a loaded runner.
+    timeout-minutes: 75
     env:
       CI: true
-      E2E_PRIVATE_KEY: ${{ secrets.E2E_PRIVATE_KEY }}
-      NEXT_PUBLIC_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_PROJECT_ID }}
-      NEXT_PUBLIC_AGGKIT_BRIDGE_APIS: ${{ secrets.NEXT_PUBLIC_AGGKIT_BRIDGE_APIS }}
+      # Devnet is hermetic and vendored (tests/devnet/, see its README) --
+      # every value below is either a well-known public devnet fixture (the
+      # E2E signer key is a public Kurtosis/Foundry devnet key, funded only
+      # on the ephemeral compose bundle this job brings up itself) or a
+      # literal computed from that same bundle's tests/devnet/summary.json.
+      # None of these are repository secrets: nothing here grants access to
+      # anything outside this job's own throwaway containers.
+      E2E_PRIVATE_KEY: '0x12d7de8621a77640c9241b2595ba78ce443d05e94090365ab3bb5e19df82c625'
+      NEXT_PUBLIC_PROJECT_ID: ci-e2e
+      NEXT_PUBLIC_AGGKIT_BRIDGE_APIS: '{"1":"http://127.0.0.1:8555/aggkitapi","2":"http://127.0.0.1:8555/aggkitapi"}'
+      E2E_FROM_CHAIN_ID: '271828'
+      E2E_TO_CHAIN_ID: '20201'
+      E2E_L2_CHAIN_IDS: '20201,20202'
+      # From tests/devnet/summary.json's .erc20_address -- nonce-dependent,
+      # bump alongside tests/devnet/docker-compose.yml (see its README).
+      E2E_ERC20_ADDRESS: '0xe293A6b8F558422813499bb5C89B60adD8c54636'
     steps:
       # Checked out into a subdirectory (not repo root) so a sibling
       # agglayer/sdk checkout below can sit next to it at `../sdk` --
@@ -109,6 +127,34 @@ jobs:
         working-directory: dev-ui
         run: pnpm exec playwright install --with-deps chromium
 
+      # Vendored self-contained bundle -- tests/devnet/docker-compose.yml,
+      # see tests/devnet/README.md. No bind mounts/volumes, no kurtosis CLI,
+      # 11 public GHCR images pinned by immutable sha tag. `--wait` blocks
+      # until every service's own healthcheck passes (see the compose file),
+      # which is necessary but not sufficient -- aggkit can be "healthy" and
+      # still mid-sync, hence the dedicated readiness gate below.
+      - name: Start vendored devnet
+        working-directory: dev-ui
+        run: docker compose -f tests/devnet/docker-compose.yml up -d --wait
+
+      # Replicates kurtosisDevnetEnv.mjs's live-enclave probes against the
+      # fixed compose ports (no kurtosis CLI dependency) -- see
+      # scripts/devnetReady.mjs for the exact checks. Timeout padded well
+      # above the ~24s measured boot-to-ready (kurtosis-cdk S10/S11) for a
+      # loaded runner.
+      - name: Wait for devnet readiness
+        working-directory: dev-ui
+        run: node scripts/devnetReady.mjs --timeout-ms 300000 --interval-ms 3000
+
+      # config.json ships committed in testnet mode (see README.md#testing);
+      # this CI fixture flips appModes.default to devnet with the vendored
+      # bundle's fixed 127.0.0.1:8555 URLs already baked in.
+      - name: Configure devnet fixture
+        working-directory: dev-ui
+        run: |
+          cp config/config.ci.devnet.json config.json
+          pnpm run validate:config
+
       - name: Run Playwright preflight
         working-directory: dev-ui
         run: pnpm exec playwright test tests/e2e/preflight.spec.ts
@@ -116,6 +162,19 @@ jobs:
       - name: Run Playwright bridge tests
         working-directory: dev-ui
         run: pnpm exec playwright test tests/bridge
+
+      # if: always() (not !cancelled()/on-failure) -- a hung devnet that
+      # causes the job to be cancelled on timeout is exactly the case where
+      # these logs matter most.
+      - name: Dump devnet logs
+        if: always()
+        working-directory: dev-ui
+        run: docker compose -f tests/devnet/docker-compose.yml logs --no-color > devnet-compose.log || true
+
+      - name: Tear down devnet
+        if: always()
+        working-directory: dev-ui
+        run: docker compose -f tests/devnet/docker-compose.yml down -v || true
 
       - name: Upload Playwright artifacts
         uses: actions/upload-artifact@v4
@@ -125,5 +184,6 @@ jobs:
           path: |
             dev-ui/playwright-report
             dev-ui/test-results
+            dev-ui/devnet-compose.log
           retention-days: 30
           if-no-files-found: ignore

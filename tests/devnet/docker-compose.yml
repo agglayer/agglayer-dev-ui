@@ -1,0 +1,242 @@
+# Self-contained devnet snapshot -- flavor: anvil-aggkit
+#
+# Vendored from 0xPolygon/kurtosis-cdk (branch feat/aggkit-bridge-ui-backend)
+# CI run https://github.com/0xPolygon/kurtosis-cdk/actions/runs/31616965584,
+# artifact `devui-snapshot-snapshot-d5dea8709c8d`. See ./README.md for the
+# full regenerate-and-bump procedure -- do not hand-edit the image tag below
+# without following it (E2E_ERC20_ADDRESS in .github/workflows/e2e.yaml is
+# nonce-dependent per snapshot and MUST be bumped in lockstep).
+#
+# Enclave:            cdk
+# Published GHCR tag: snapshot-d5dea8709c8d  (immutable; do not use
+#                      snapshot-latest-devui here -- pin by sha per D5)
+#
+# This file is the ENTIRE bundle: every service's state, config and keystores
+# are baked into its image, so `docker compose up -d --wait` works in an
+# otherwise empty directory (all 11 images are public and pull anonymously).
+# There are deliberately no bind mounts and no volumes -- restarting from
+# scratch always replays the captured state.
+#
+# The only endpoint dev-ui CI needs is the haproxy CORS origin on
+# ${DEVNET_PROXY_PORT:-8555}, serving /l1rpc, /l2rpc-00X and /aggkitapi.
+# Everything else is published for debugging and can be overridden or removed.
+#
+# Image source override (defaults already point at the published GHCR tag
+# above; override only to test against a different build, e.g. a fresh
+# workflow_dispatch you haven't vendored yet):
+#   SNAPSHOT_IMAGE_PREFIX=ghcr.io/0xpolygon/kurtosis-cdk-snapshot-
+#   SNAPSHOT_IMAGE_TAG=snapshot-<sha>
+
+services:
+  anvil-001:
+    image: ${SNAPSHOT_IMAGE_PREFIX:-ghcr.io/0xpolygon/kurtosis-cdk-snapshot-}anvil-001:${SNAPSHOT_IMAGE_TAG:-snapshot-d5dea8709c8d}
+    hostname: anvil-001
+    ports:
+      - '${L1_RPC_PORT:-8545}:8545' # L1 JSON-RPC (debug)
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', '/bin/sh', '/snapshot/healthcheck.sh']
+      interval: 3s
+      timeout: 10s
+      retries: 40
+      start_period: 5s
+
+  l2-anvil-001:
+    image: ${SNAPSHOT_IMAGE_PREFIX:-ghcr.io/0xpolygon/kurtosis-cdk-snapshot-}l2-anvil-001:${SNAPSHOT_IMAGE_TAG:-snapshot-d5dea8709c8d}
+    hostname: l2-anvil-001
+    ports:
+      - '${L2_001_HTTP_PORT:-11545}:8545' # L2 chain 20201 JSON-RPC (debug)
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', '/bin/sh', '/snapshot/healthcheck.sh']
+      interval: 3s
+      timeout: 10s
+      retries: 40
+      start_period: 5s
+
+  l2-anvil-002:
+    image: ${SNAPSHOT_IMAGE_PREFIX:-ghcr.io/0xpolygon/kurtosis-cdk-snapshot-}l2-anvil-002:${SNAPSHOT_IMAGE_TAG:-snapshot-d5dea8709c8d}
+    hostname: l2-anvil-002
+    ports:
+      - '${L2_002_HTTP_PORT:-12545}:8545' # L2 chain 20202 JSON-RPC (debug)
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', '/bin/sh', '/snapshot/healthcheck.sh']
+      interval: 3s
+      timeout: 10s
+      retries: 40
+      start_period: 5s
+
+  agglayer:
+    image: ${SNAPSHOT_IMAGE_PREFIX:-ghcr.io/0xpolygon/kurtosis-cdk-snapshot-}agglayer:${SNAPSHOT_IMAGE_TAG:-snapshot-d5dea8709c8d}
+    hostname: agglayer
+    entrypoint: ['/usr/local/bin/agglayer']
+    command: ['run', '--cfg', '/etc/agglayer/config.toml']
+    environment:
+      - RUST_BACKTRACE=1
+    ports:
+      - '${AGGLAYER_GRPC_PORT:-4443}:4443' # gRPC
+      - '${AGGLAYER_READRPC_PORT:-4444}:4444' # read RPC
+      - '${AGGLAYER_ADMIN_PORT:-4446}:4446' # admin API
+      - '${AGGLAYER_METRICS_PORT:-9092}:9092' # prometheus
+    depends_on:
+      anvil-001:
+        condition: service_healthy
+      l2-anvil-001:
+        condition: service_healthy
+      l2-anvil-002:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', '/bin/sh', '/snapshot/healthcheck.sh']
+      interval: 3s
+      timeout: 10s
+      retries: 60
+      start_period: 10s
+
+  aggkit-001-bridge:
+    image: ${SNAPSHOT_IMAGE_PREFIX:-ghcr.io/0xpolygon/kurtosis-cdk-snapshot-}aggkit-001-bridge:${SNAPSHOT_IMAGE_TAG:-snapshot-d5dea8709c8d}
+    hostname: aggkit-001-bridge
+    entrypoint: ['/usr/local/bin/aggkit']
+    command: ['run', '--cfg=/etc/aggkit/config.toml', '--components=bridge']
+    ports:
+      - '${L2_001_AGGKIT_BRIDGE_RPC_PORT:-11586}:5576' # JSON-RPC (debug)
+      - '${L2_001_AGGKIT_REST_PORT:-11577}:5577' # bridge REST API
+    depends_on:
+      anvil-001:
+        condition: service_healthy
+      l2-anvil-001:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', '/snapshot/busybox', 'sh', '/snapshot/healthcheck.sh']
+      interval: 3s
+      timeout: 10s
+      retries: 60
+      start_period: 10s
+
+  aggkit-001:
+    image: ${SNAPSHOT_IMAGE_PREFIX:-ghcr.io/0xpolygon/kurtosis-cdk-snapshot-}aggkit-001:${SNAPSHOT_IMAGE_TAG:-snapshot-d5dea8709c8d}
+    hostname: aggkit-001
+    entrypoint: ['/usr/local/bin/aggkit']
+    command: ['run', '--cfg=/etc/aggkit/config.toml', '--components=aggsender,aggoracle,autoclaim']
+    ports:
+      - '${L2_001_AGGKIT_RPC_PORT:-11576}:5576' # JSON-RPC (debug)
+    depends_on:
+      anvil-001:
+        condition: service_healthy
+      l2-anvil-001:
+        condition: service_healthy
+      agglayer:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', '/snapshot/busybox', 'sh', '/snapshot/healthcheck.sh']
+      interval: 3s
+      timeout: 10s
+      retries: 60
+      start_period: 10s
+
+  aggkit-002-bridge:
+    image: ${SNAPSHOT_IMAGE_PREFIX:-ghcr.io/0xpolygon/kurtosis-cdk-snapshot-}aggkit-002-bridge:${SNAPSHOT_IMAGE_TAG:-snapshot-d5dea8709c8d}
+    hostname: aggkit-002-bridge
+    entrypoint: ['/usr/local/bin/aggkit']
+    command: ['run', '--cfg=/etc/aggkit/config.toml', '--components=bridge']
+    ports:
+      - '${L2_002_AGGKIT_BRIDGE_RPC_PORT:-12586}:5576' # JSON-RPC (debug)
+      - '${L2_002_AGGKIT_REST_PORT:-12577}:5577' # bridge REST API
+    depends_on:
+      anvil-001:
+        condition: service_healthy
+      l2-anvil-002:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', '/snapshot/busybox', 'sh', '/snapshot/healthcheck.sh']
+      interval: 3s
+      timeout: 10s
+      retries: 60
+      start_period: 10s
+
+  aggkit-002:
+    image: ${SNAPSHOT_IMAGE_PREFIX:-ghcr.io/0xpolygon/kurtosis-cdk-snapshot-}aggkit-002:${SNAPSHOT_IMAGE_TAG:-snapshot-d5dea8709c8d}
+    hostname: aggkit-002
+    entrypoint: ['/usr/local/bin/aggkit']
+    command: ['run', '--cfg=/etc/aggkit/config.toml', '--components=aggsender,aggoracle,autoclaim']
+    ports:
+      - '${L2_002_AGGKIT_RPC_PORT:-12576}:5576' # JSON-RPC (debug)
+    depends_on:
+      anvil-001:
+        condition: service_healthy
+      l2-anvil-002:
+        condition: service_healthy
+      agglayer:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', '/snapshot/busybox', 'sh', '/snapshot/healthcheck.sh']
+      interval: 3s
+      timeout: 10s
+      retries: 60
+      start_period: 10s
+
+  aggkit-proxy-001:
+    image: ${SNAPSHOT_IMAGE_PREFIX:-ghcr.io/0xpolygon/kurtosis-cdk-snapshot-}aggkit-proxy-001:${SNAPSHOT_IMAGE_TAG:-snapshot-d5dea8709c8d}
+    hostname: aggkit-proxy-001
+    entrypoint: ['/usr/local/bin/aggkit-proxy']
+    command: ['run', '--cfg=/etc/aggkit-proxy/config.toml', '--components=proxy,tracker']
+    ports:
+      - '${AGGKIT_PROXY_PORT:-8556}:8080' # bridge + tracker REST
+    depends_on:
+      agglayer:
+        condition: service_healthy
+      aggkit-001-bridge:
+        condition: service_healthy
+      aggkit-002-bridge:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', '/snapshot/busybox', 'sh', '/snapshot/healthcheck.sh']
+      interval: 3s
+      timeout: 10s
+      retries: 60
+      start_period: 10s
+
+  agglayer-dev-ui-002:
+    image: ${SNAPSHOT_IMAGE_PREFIX:-ghcr.io/0xpolygon/kurtosis-cdk-snapshot-}agglayer-dev-ui-002:${SNAPSHOT_IMAGE_TAG:-snapshot-d5dea8709c8d}
+    hostname: agglayer-dev-ui-002
+    ports:
+      - '${DEVUI_PORT:-8557}:80' # dev-ui (manual use)
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', '/bin/sh', '/snapshot/healthcheck.sh']
+      interval: 3s
+      timeout: 10s
+      retries: 40
+      start_period: 5s
+
+  agglayer-dev-ui-proxy-002:
+    image: ${SNAPSHOT_IMAGE_PREFIX:-ghcr.io/0xpolygon/kurtosis-cdk-snapshot-}agglayer-dev-ui-proxy-002:${SNAPSHOT_IMAGE_TAG:-snapshot-d5dea8709c8d}
+    hostname: agglayer-dev-ui-proxy-002
+    ports:
+      - '${DEVNET_PROXY_PORT:-8555}:80' # THE dev-ui CI origin
+    depends_on:
+      aggkit-proxy-001:
+        condition: service_healthy
+      agglayer-dev-ui-002:
+        condition: service_healthy
+      anvil-001:
+        condition: service_healthy
+      l2-anvil-001:
+        condition: service_healthy
+      l2-anvil-002:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', '/bin/sh', '/snapshot/healthcheck.sh']
+      interval: 3s
+      timeout: 10s
+      retries: 40
+      start_period: 5s
+
+# No volumes and no bind mounts: all state and config is baked into the images.
