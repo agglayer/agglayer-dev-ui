@@ -226,6 +226,31 @@ identically locally and in CI (`plans/dev-ui-docker-ghcr/d2-adr-dependency-strat
 
 ## Release process
 
+### Prerequisite for either path: the workflow must be on `main`
+
+**`.github/workflows/docker-publish.yaml` must be merged to this repo's default branch
+(`main`) before either a release or a `workflow_dispatch` publish can occur.** This is a
+hard GitHub Actions rule, not specific to this repo: both the `release` and
+`workflow_dispatch` triggers are only registered against a workflow file once that file
+is present on the default branch — GitHub does not honor either trigger for a workflow
+that exists only on a feature branch.
+
+As of this writing, `docker-publish.yaml` exists only on `feat/aggkit-backend` (not yet
+merged to `main`), and this is exactly what the first real dispatch attempt hit:
+
+```
+$ gh workflow run docker-publish.yaml --repo agglayer/agglayer-dev-ui --ref feat/aggkit-backend
+HTTP 404: workflow docker-publish.yaml not found on the default branch
+(https://api.github.com/repos/agglayer/agglayer-dev-ui/actions/workflows/docker-publish.yaml)
+```
+
+Contrast this with W-2's **PR-triggered** run, which executed successfully on this same
+branch (run `31535596365`, "Docker PR Build and Smoke Test", success in 2m21s) — a
+`pull_request` trigger runs from the PR's own branch and does not require the workflow
+file to be on `main`. `release` and `workflow_dispatch` are different: both require the
+workflow file on the default branch to be dispatchable/registered at all, regardless of
+which branch, tag, or SHA the triggered run itself then checks out or builds.
+
 ### Cutting a release (the normal path)
 
 Publishing `ghcr.io/agglayer/agglayer-dev-ui:<tag>` happens automatically when a GitHub
@@ -236,11 +261,23 @@ and pushes the image with the tag set described above. Mark the release as a Git
 "prerelease" (or use a semver `-suffix`, e.g. `1.2.3-rc.1`) if it should not move
 `latest` or the `X.Y` tag.
 
+**This only works once `docker-publish.yaml` is merged to `main`** — see "Prerequisite
+for either path" above. Publishing a GitHub Release while the workflow file exists only
+on a feature branch will not trigger a build.
+
 ### Building an arbitrary branch via dispatch
 
 You can also build and publish an image from any branch, tag, or full commit SHA that is
 **already reachable in the repository** by running the workflow via
 `workflow_dispatch`, passing the desired revision as the `ref` input.
+
+**Documented limitation: `workflow_dispatch` requires `docker-publish.yaml` to already be
+merged to `main`.** See "Prerequisite for either path" above — this is a separate
+constraint from the bare-SHA one below, and it is the one that actually blocked the
+first real dispatch attempt (`HTTP 404: workflow docker-publish.yaml not found on the
+default branch`). Merging the workflow file to `main` is required before any dispatch
+can be fired at all, regardless of which branch/tag/SHA you intend to pass as the `ref`
+input.
 
 **Documented limitation: `workflow_dispatch` cannot target a bare commit SHA.** The ref
 you pick when firing the dispatch event itself (the branch selector in the "Run workflow"
