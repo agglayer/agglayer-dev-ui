@@ -1,0 +1,274 @@
+# Builds and publishes ghcr.io/agglayer/agglayer-dev-ui.
+#
+# Triggers
+#   - `release: published`      -> semver tags (see "Tagging scheme" below).
+#   - `workflow_dispatch`       -> a single namespaced tag for an arbitrary
+#                                  branch/tag/sha, never touching semver or
+#                                  `latest`.
+#
+# Limitation (documented per plan acceptance criteria): the workflow_dispatch
+# *event itself* -- i.e. which ref you pick in the "Run workflow" button, or
+# pass to `gh workflow run --ref <ref>` / the REST API -- must be an existing
+# branch or tag. GitHub uses that ref to decide which version of this
+# workflow file to execute, and its API rejects a bare commit SHA there. This
+# is independent of the `ref` input below, which IS just a plain string
+# forwarded to `actions/checkout` and therefore does accept a full commit SHA
+# (as long as it is reachable with `fetch-depth: 0`, set below). Net effect:
+# to publish an arbitrary unreleased commit, push it to a branch or tag
+# first, dispatch the workflow against that ref, and pass whatever revision
+# you want built (branch, tag, or full SHA) as the `ref` input.
+#
+# Tagging scheme
+#   release, non-prerelease `vX.Y.Z` / `X.Y.Z`  -> X.Y.Z, X.Y, latest
+#   release, prerelease (GitHub flag or a
+#     semver `-suffix` such as `1.2.3-rc.1`)     -> X.Y.Z(-suffix) only
+#     (never X.Y, never latest -- neither tag should ever point at a
+#     pre-release build)
+#   workflow_dispatch                            -> dispatch-<ref>-<sha>-<run_id>
+#
+# Collision guard (this is the deliberate X-1 attack target -- see
+# plans/dev-ui-docker-ghcr-plan.md's X-1 item 7, "can a dispatch-built tag
+# overwrite a release semver tag, or move latest?"):
+#   Every dispatch tag carries the literal, hardcoded prefix "dispatch-".
+#   Every tag this workflow ever writes on the release path either matches
+#   ^[0-9]+\.[0-9]+(\.[0-9]+)?(-[0-9A-Za-z.-]+)?$ (a version tag) or is the
+#   literal string "latest" -- both start with a digit or the letter 'l',
+#   never with "dispatch-". No value of the sanitized ref, short SHA, or run
+#   ID -- however it is crafted -- can turn a "dispatch-..." string into one
+#   that starts with a digit or equals "latest", because string
+#   concatenation with a fixed non-empty, non-numeric prefix cannot produce
+#   a string lacking that prefix. That is a structural guarantee, not a
+#   runtime check that clever input could bypass. The "compute image tags"
+#   step below additionally asserts this at runtime and fails the job if it
+#   is ever violated -- defense-in-depth against a future edit that
+#   accidentally weakens or removes the prefix, not the primary guarantee.
+name: Build and Publish Docker Image
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: >-
+          Branch, tag, or full commit SHA to build and publish (forwarded
+          verbatim to actions/checkout). See the workflow file header for
+          why this is NOT the same as the ref the workflow_dispatch event
+          itself must be fired against (which cannot be a bare SHA).
+        required: true
+        default: main
+        type: string
+
+concurrency:
+  # Deliberately NOT `${{ github.ref }}`-scoped and NOT cancel-in-progress,
+  # unlike this repo's other workflows (deploy.yaml, e2e.yaml): a cancelled
+  # mid-push here could leave a partially written manifest or tag in GHCR.
+  # Overlapping runs (e.g. a release publish and a manual dispatch at the
+  # same time) queue and run strictly serially instead of racing or
+  # cancelling each other mid-push.
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY_IMAGE: ghcr.io/${{ github.repository }}
+  # TEMPORARY -- remove per plans/dev-ui-docker-ghcr/d2-adr-dependency-strategy.md §5
+  # Pinned to a full 40-character commit SHA, never a branch name --
+  # feat/aggkit-bridge-client is mutable and a branch ref would make
+  # published images irreproducible (D-2 ADR §3, "the reproducibility
+  # condition"). Verified identical across local HEAD, `git ls-remote`, and
+  # `gh api repos/agglayer/sdk/pulls/28 --jq .head.sha` as of the D-2 ADR
+  # (2026-08-11). Bump this one line when sdk#28 moves; delete it entirely
+  # once the D-2 ADR §5 migration trigger fires.
+  SDK_REF: 5680d837b168cd3b250110660332aa110eb88aae
+
+jobs:
+  build-and-publish:
+    name: Build, publish, and verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout agglayer-dev-ui
+        uses: actions/checkout@v4
+        with:
+          # Release events already check out the tag that triggered the
+          # release; only override ref for workflow_dispatch. fetch-depth: 0
+          # so an arbitrary SHA passed as the `ref` input is resolvable.
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || '' }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      # TEMPORARY -- remove per plans/dev-ui-docker-ghcr/d2-adr-dependency-strategy.md §5
+      # D-2 ADR §4.1: a second, SHA-pinned checkout of the public
+      # agglayer/sdk repo, staged at .sdk-src/ inside the dev-ui build
+      # context so the Dockerfile's sdk-builder stage can compile it in
+      # place of the `file:../sdk` sibling checkout this repo's
+      # pnpm-workspace.yaml override expects locally. agglayer/sdk is
+      # public (`gh repo view agglayer/sdk --json isPrivate` ->
+      # {"isPrivate":false}), so the default GITHUB_TOKEN suffices -- no
+      # PAT, no new secret. Must run AFTER the primary checkout above: it
+      # writes into .sdk-src/ under the dev-ui workspace root that checkout
+      # just populated.
+      - name: Checkout agglayer/sdk (pinned, TEMPORARY)
+        uses: actions/checkout@v4
+        with:
+          repository: agglayer/sdk
+          ref: ${{ env.SDK_REF }}
+          path: .sdk-src
+          persist-credentials: false
+
+      - name: Resolve build metadata
+        id: meta
+        run: |
+          set -euo pipefail
+          echo "built_sha=$(git rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Compute image tags
+        id: tags
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_PRERELEASE: ${{ github.event.release.prerelease }}
+          DISPATCH_REF: ${{ inputs.ref }}
+          BUILT_SHA: ${{ steps.meta.outputs.built_sha }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT_NAME" = "release" ]; then
+            # --- release path: X.Y.Z, X.Y, latest (see header comment) -------
+            VERSION="${RELEASE_TAG#v}"
+
+            if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+              echo "::error::release tag '$RELEASE_TAG' is not a semver tag (expected X.Y.Z or vX.Y.Z, optionally with a -prerelease suffix); refusing to publish a non-semver tag to GHCR" >&2
+              exit 1
+            fi
+
+            MAJOR_MINOR="$(echo "$VERSION" | cut -d. -f1,2)"
+
+            if [ "$RELEASE_PRERELEASE" = "true" ] || [[ "$VERSION" == *-* ]]; then
+              TAGS="$REGISTRY_IMAGE:$VERSION"
+            else
+              # printf + separate args, NOT a literal multi-line quoted
+              # string -- the latter would bake this script's own YAML
+              # indentation in as leading whitespace on the continuation
+              # lines, corrupting the newline-separated tag list.
+              TAGS="$(printf '%s\n%s\n%s' \
+                "$REGISTRY_IMAGE:$VERSION" \
+                "$REGISTRY_IMAGE:$MAJOR_MINOR" \
+                "$REGISTRY_IMAGE:latest")"
+            fi
+          else
+            # --- workflow_dispatch path: a namespaced, non-colliding tag ------
+            # See the workflow file header comment for the full explanation
+            # of why the hardcoded "dispatch-" prefix alone guarantees no
+            # collision with the release-path namespace.
+            SAFE_REF="$(printf '%s' "$DISPATCH_REF" | tr -c 'A-Za-z0-9_.-' '-' | cut -c1-40)"
+            DISPATCH_TAG="dispatch-${SAFE_REF}-${BUILT_SHA}-${RUN_ID}"
+
+            # Runtime assertion (defense-in-depth, not the primary
+            # guarantee -- see header comment).
+            if [[ "$DISPATCH_TAG" =~ ^[0-9]+(\.[0-9]+){1,2}$ ]] || [ "$DISPATCH_TAG" = "latest" ]; then
+              echo "::error::computed dispatch tag '$DISPATCH_TAG' unexpectedly collides with the semver/latest namespace -- refusing to publish" >&2
+              exit 1
+            fi
+
+            TAGS="$REGISTRY_IMAGE:$DISPATCH_TAG"
+          fi
+
+          {
+            echo "tags<<EOF_TAGS"
+            echo "$TAGS"
+            echo "EOF_TAGS"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Resolved tags:"
+          echo "$TAGS"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        # Enables an emulated linux/arm64 build on this amd64 ubuntu-latest
+        # runner. D-3 (plans/dev-ui-docker-ghcr/d3-ci-capabilities.md §1)
+        # could not confirm that the org's arm-runner-2204/amd-runner-2204
+        # self-hosted runner pool (which agglayer/aggkit's own workflow
+        # targets) is reachable from agglayer-dev-ui -- every availability
+        # check (org-level runners, dev-ui repo-level runners) 403'd with
+        # this token's WRITE-only privileges, and aggkit's own repo-level
+        # runner list is empty (the labels are org-scoped, not
+        # repo-registered). Per D-3's explicit fallback guidance, this
+        # workflow uses ubuntu-latest + QEMU instead of assuming those
+        # runner labels resolve for this repo. A native per-arch
+        # runner + digest-merge job (aggkit's pattern) remains a faster,
+        # available upgrade once a human with org-admin access confirms
+        # agglayer-dev-ui's runner-group membership.
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          # D-2 ADR §4.2: build context is the dev-ui repo root, exactly as
+          # `docker build .` from the repo root -- not a parent directory.
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          # TEMPORARY -- remove per plans/dev-ui-docker-ghcr/d2-adr-dependency-strategy.md §5
+          # Feeds the Dockerfile's ARG SDK_REF (both stages), which stamps
+          # the LABEL org.agglayer.sdk.revision onto the published image.
+          build-args: |
+            SDK_REF=${{ env.SDK_REF }}
+          tags: ${{ steps.tags.outputs.tags }}
+
+      - name: Verify published manifest
+        run: docker buildx imagetools inspect "${{ env.REGISTRY_IMAGE }}@${{ steps.build.outputs.digest }}"
+
+      - name: Smoke test pushed image
+        run: |
+          set -euo pipefail
+          IMAGE_REF="${{ env.REGISTRY_IMAGE }}@${{ steps.build.outputs.digest }}"
+
+          docker run -d --name devui-smoke -p 8080:80 "$IMAGE_REF"
+
+          ready=""
+          for _ in $(seq 1 30); do
+            if curl -fsS -o /dev/null http://localhost:8080/; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [ -z "$ready" ]; then
+            echo "::error::container never became ready on http://localhost:8080/" >&2
+            docker logs devui-smoke >&2 || true
+            exit 1
+          fi
+
+          root_status="$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/)"
+          if [ "$root_status" != "200" ]; then
+            echo "::error::expected HTTP 200 from /, got $root_status" >&2
+            docker logs devui-smoke >&2 || true
+            exit 1
+          fi
+
+          config_status="$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/config.json)"
+          if [ "$config_status" != "200" ]; then
+            echo "::error::expected HTTP 200 from /config.json, got $config_status" >&2
+            docker logs devui-smoke >&2 || true
+            exit 1
+          fi
+
+          echo "Smoke test passed: / -> $root_status, /config.json -> $config_status"
+          docker logs devui-smoke
+          docker rm -f devui-smoke
