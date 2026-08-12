@@ -107,6 +107,32 @@ jobs:
           fi
           echo "SDK_REF in sync with docker-publish.yaml: $SDK_REF"
 
+      # TEMPORARY -- remove per plans/dev-ui-docker-ghcr/d2-adr-dependency-strategy.md §5
+      # @agglayer/sdk ships no dist/ in git (bun.lock only -- dist/ is
+      # gitignored, built via `bun run build` / tsup), so a fresh checkout is
+      # unbuildable TypeScript source until this runs: the sibling sdk/
+      # `file:../sdk` override resolves the package.json entry (`main:
+      # ./dist/index.js`), not the source tree. Without this step Next's dev
+      # server fails every route with "Module not found: Can't resolve
+      # '@agglayer/sdk'" -- caught only by a genuine scratch-clone rehearsal
+      # (plans/dev-ui-ci-snapshot/s13-evidence/); a warm sibling sdk checkout
+      # on a dev box masks it because its dist/ is already built from earlier
+      # SDK development. Mirrors the Dockerfile's sdk-builder stage (`FROM
+      # oven/bun:1 ... RUN bun install --frozen-lockfile && bun run build`)
+      # bit-for-bit, just targeting this sibling checkout instead of a Docker
+      # build context.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1'
+
+      - name: Build @agglayer/sdk (pinned, TEMPORARY)
+        working-directory: sdk
+        env:
+          HUSKY: '0'
+        run: |
+          bun install --frozen-lockfile
+          bun run build
+
       - uses: pnpm/action-setup@v4
 
       - uses: actions/setup-node@v4
