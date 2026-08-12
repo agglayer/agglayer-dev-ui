@@ -250,9 +250,12 @@ A mode is **enabled** only if `chainKeys` has at least two entries (bridging req
 | `defaultFromChainKey` | No | Default source chain (defaults to first in `chainKeys`) |
 | `defaultToChainKey` | No | Default destination chain (defaults to second in `chainKeys`) |
 
-### Testing Default: appModes.default = "devnet"
+### Testing Default: appModes.default
 
-**IMPORTANT:** The current `config.json` has `appModes.default` set to `"devnet"` for **testing convenience only**. This must be reverted to a production-appropriate default (e.g., `"mainnet"` or `"testnet"`) before any production release. See the release checklist (step S15) for details.
+The committed `config.json` ships with `appModes.default` set to `"testnet"`. Devnet
+mode is opt-in: CI copies `config/config.ci.devnet.json` over it (see below), and
+`scripts/kurtosisDevnetEnv.mjs` rewrites it in place for a live Kurtosis enclave.
+Never commit a `config.json` left in `"devnet"` mode.
 
 ### `config/config.ci.devnet.json` — the CI fixture
 
@@ -263,11 +266,12 @@ cp config/config.ci.devnet.json config.json
 pnpm run validate:config
 ```
 
-It differs from the committed `config.json` in exactly the ways CI needs:
+It is **byte-identical to the committed `config.json` except for a single key**:
+`appModes.default` is `"devnet"` instead of `"testnet"`. Everything else it relies on
+is already in the committed file:
 
-- `appModes.default` is `"devnet"` (the committed file defaults to `"testnet"` — see above).
-- `chains` adds three fixed-URL entries — `DEVNET_L1` (chain id `271828`), `DEVNET_L2_001` (`20201`), `DEVNET_L2_002` (`20202`) — with `rpcUrl` pointed at `http://127.0.0.1:8555/l1rpc`, `/l2rpc-001`, `/l2rpc-002` respectively. `8555` is the vendored compose bundle's fixed haproxy port (`DEVNET_PROXY_PORT`, see [`tests/devnet/README.md`](../tests/devnet/README.md) and kurtosis-cdk's [Anvil-Flavor DevUI Snapshot](https://github.com/0xPolygon/kurtosis-cdk/blob/feat/aggkit-bridge-ui-backend/docs/docs/advanced/anvil-devui-snapshot.md#the-bundle-contract) doc), never an ephemeral `kurtosis port print` value — this file is only valid against the fixed-port compose bundle, not a live Kurtosis enclave (use `scripts/kurtosisDevnetEnv.mjs` for that instead, which writes the committed `config.json` directly).
-- `appModes.configs.devnet.chainKeys` is `["DEVNET_L1", "DEVNET_L2_001", "DEVNET_L2_002"]`, `bridgeAddress` is the deterministic devnet bridge address `0xC8cbEBf950B9Df44d987c8619f092beA980fF038`, and `aggkitBridgeApis` maps both L2 network ids (`1`, `2`) to `http://127.0.0.1:8555/aggkitapi` (the single aggkit-proxy origin, selected per-network via `?network_id=`).
+- `chains` already carries the three fixed-URL entries — `DEVNET_L1` (chain id `271828`), `DEVNET_L2_001` (`20201`), `DEVNET_L2_002` (`20202`) — with `rpcUrl` pointed at `http://127.0.0.1:8555/l1rpc`, `/l2rpc-001`, `/l2rpc-002` respectively. `8555` is the vendored compose bundle's fixed haproxy port (`DEVNET_PROXY_PORT`, see [`tests/devnet/README.md`](../tests/devnet/README.md) and kurtosis-cdk's [Anvil-Flavor DevUI Snapshot](https://github.com/0xPolygon/kurtosis-cdk/blob/feat/aggkit-bridge-ui-backend/docs/docs/advanced/anvil-devui-snapshot.md#the-bundle-contract) doc), never an ephemeral `kurtosis port print` value — this file is only valid against the fixed-port compose bundle, not a live Kurtosis enclave (use `scripts/kurtosisDevnetEnv.mjs` for that instead, which writes the committed `config.json` directly).
+- `appModes.configs.devnet.chainKeys` is already `["DEVNET_L1", "DEVNET_L2_001", "DEVNET_L2_002"]`, `bridgeAddress` is the deterministic devnet bridge address `0xC8cbEBf950B9Df44d987c8619f092beA980fF038`, and `aggkitBridgeApis` maps both L2 network ids (`1`, `2`) to `http://127.0.0.1:8555/aggkitapi` (the single aggkit-proxy origin, selected per-network via `?network_id=`).
 
 This file is committed and never overwrites `config.json` in git — the workflow copies it over the working tree's `config.json` inside the CI job only, and no step ever commits the result. Run `pnpm run validate:config -- config/config.ci.devnet.json` to validate it directly without copying it over `config.json` first.
 

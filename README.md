@@ -93,17 +93,35 @@ docker compose -f tests/devnet/docker-compose.yml up -d --wait
 
 # Replicates kurtosisDevnetEnv.mjs's readiness probes against the fixed
 # compose ports (chainId per route, bridge bytecode per chain, sync-status
-# both-sides-synced on all 3 networks). Boot-to-ready is ~24s; the default
-# 120s timeout leaves ample margin.
-node scripts/devnetReady.mjs
+# both-sides-synced across the 3 network ids). Boot-to-ready is ~24s once
+# the images are local; the FIRST run also pulls ~2.9GB, so pass a longer
+# timeout than the 120s default for a cold start.
+node scripts/devnetReady.mjs --timeout-ms 300000
 
 # Point config.json at the vendored bundle's fixed 127.0.0.1:8555 URLs
 # (committed config.json ships in testnet mode -- see above).
 cp config/config.ci.devnet.json config.json
 pnpm run validate:config
 
-# Run the suite (same invocations e2e.yaml uses; see its env: block for the
-# literal E2E_* values -- all public devnet fixtures, never secrets).
+# playwright.config.ts THROWS unless these are set, and globalSetup falls
+# back to deploying its own ERC20 via `sudo docker run` without
+# E2E_ERC20_ADDRESS. These are the exact literals .github/workflows/e2e.yaml
+# uses -- all public devnet fixtures, never secrets. Keep them in sync with
+# tests/devnet/summary.json (the workflow has a step that asserts this).
+export E2E_PRIVATE_KEY='0x12d7de8621a77640c9241b2595ba78ce443d05e94090365ab3bb5e19df82c625'
+export NEXT_PUBLIC_PROJECT_ID='ci-e2e'
+export NEXT_PUBLIC_AGGKIT_BRIDGE_APIS='{"1":"http://127.0.0.1:8555/aggkitapi","2":"http://127.0.0.1:8555/aggkitapi"}'
+export E2E_FROM_CHAIN_ID='271828'
+export E2E_TO_CHAIN_ID='20201'
+export E2E_L2_CHAIN_IDS='20201,20202'
+export E2E_ERC20_ADDRESS="$(jq -r .erc20_address tests/devnet/summary.json)"
+
+# NOTE: playwright.config.ts calls loadEnvConfig(), so a stale .env.local
+# left behind by a previous `scripts/kurtosisDevnetEnv.mjs` run OVERRIDES
+# the values above and will silently point the suite at a dead ephemeral
+# enclave port. Remove or rename it first if you have one.
+
+# Run the suite (same invocations e2e.yaml uses).
 pnpm exec playwright test tests/e2e/preflight.spec.ts
 pnpm exec playwright test tests/bridge
 
