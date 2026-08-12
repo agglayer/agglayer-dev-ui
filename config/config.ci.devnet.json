@@ -1,0 +1,179 @@
+{
+  "externalLinks": {
+    "privacyPolicy": "https://polygon.technology/privacy-policy",
+    "termsOfUse": "https://polygon.technology/terms-of-use",
+    "contactSupport": "https://support.polygon.technology/support/home"
+  },
+  "autoclaim": {
+    "l1_to_l2": {
+      "expectedAutoclaim": true,
+      "waitForAutoclaimMs": 120000
+    },
+    "l2_to_l1": {
+      "expectedAutoclaim": false
+    },
+    "l2_to_l2": {
+      "expectedAutoclaim": true,
+      "waitForAutoclaimMs": 300000
+    }
+  },
+  "chains": {
+    "MAINNET": {
+      "id": 1,
+      "name": "Ethereum",
+      "rpcUrl": "https://eth.merkle.io",
+      "explorerUrl": "https://etherscan.io",
+      "currency": {
+        "name": "Ether",
+        "symbol": "ETH",
+        "decimals": 18
+      },
+      "iconUrl": "https://raw.githubusercontent.com/lifinance/types/main/src/assets/icons/chains/ethereum.svg",
+      "networkId": 0,
+      "isTestnet": false,
+      "eta": 20
+    },
+    "KATANA": {
+      "id": 747474,
+      "name": "Katana",
+      "rpcUrl": "https://rpc.katana.network",
+      "explorerUrl": "https://katanascan.com",
+      "currency": {
+        "name": "Ether",
+        "symbol": "ETH",
+        "decimals": 18
+      },
+      "iconUrl": "https://raw.githubusercontent.com/lifinance/types/main/src/assets/icons/chains/katana.svg",
+      "networkId": 20,
+      "isTestnet": false,
+      "eta": 180
+    },
+    "FORKNET": {
+      "id": 8338,
+      "name": "Forknet",
+      "rpcUrl": "https://rpc-forknet.t.conduit.xyz",
+      "explorerUrl": "https://forkscan.org/",
+      "currency": {
+        "name": "Ether",
+        "symbol": "ETH",
+        "decimals": 18
+      },
+      "iconUrl": "https://explorer-forknet.t.conduit.xyz/assets/configs/network_icon_dark.svg",
+      "networkId": 22,
+      "isTestnet": false,
+      "eta": 180
+    },
+    "SEPOLIA": {
+      "id": 11155111,
+      "name": "Sepolia",
+      "rpcUrl": "https://ethereum-sepolia-rpc.publicnode.com",
+      "explorerUrl": "https://sepolia.etherscan.io",
+      "currency": {
+        "name": "Sepolia Ether",
+        "symbol": "ETH",
+        "decimals": 18
+      },
+      "iconUrl": "https://raw.githubusercontent.com/lifinance/types/main/src/assets/icons/chains/ethereum.svg",
+      "networkId": 0,
+      "isTestnet": true,
+      "eta": 20
+    },
+    "BOKUTO": {
+      "id": 737373,
+      "name": "Bokuto",
+      "rpcUrl": "https://rpc-katana-bokuto.t.conduit.xyz",
+      "explorerUrl": "https://bokuto.katanascan.com/",
+      "currency": {
+        "name": "Ether",
+        "symbol": "ETH",
+        "decimals": 18
+      },
+      "iconUrl": "https://raw.githubusercontent.com/lifinance/types/main/src/assets/icons/chains/katana.svg",
+      "networkId": 37,
+      "isTestnet": true,
+      "eta": 180
+    },
+    "DEVNET_L1": {
+      "id": 271828,
+      "name": "Devnet L1",
+      "rpcUrl": "http://127.0.0.1:8555/l1rpc",
+      "explorerUrl": "https://explorer.private/",
+      "currency": {
+        "name": "Ether",
+        "symbol": "ETH",
+        "decimals": 18
+      },
+      "iconUrl": "https://raw.githubusercontent.com/lifinance/types/main/src/assets/icons/chains/ethereum.svg",
+      "networkId": 0,
+      "isTestnet": true,
+      "eta": 1
+    },
+    "DEVNET_L2_001": {
+      "id": 20201,
+      "name": "Devnet L2-001",
+      "rpcUrl": "http://127.0.0.1:8555/l2rpc-001",
+      "explorerUrl": "https://explorer.private/",
+      "currency": {
+        "name": "Ether",
+        "symbol": "ETH",
+        "decimals": 18
+      },
+      "iconUrl": "https://raw.githubusercontent.com/lifinance/types/main/src/assets/icons/chains/katana.svg",
+      "networkId": 1,
+      "isTestnet": true,
+      "eta": 1
+    },
+    "DEVNET_L2_002": {
+      "id": 20202,
+      "name": "Devnet L2-002",
+      "rpcUrl": "http://127.0.0.1:8555/l2rpc-002",
+      "explorerUrl": "https://explorer.private/",
+      "currency": {
+        "name": "Ether",
+        "symbol": "ETH",
+        "decimals": 18
+      },
+      "iconUrl": "https://raw.githubusercontent.com/lifinance/types/main/src/assets/icons/chains/katana.svg",
+      "networkId": 2,
+      "isTestnet": true,
+      "eta": 1
+    }
+  },
+  "appModes": {
+    "default": "devnet",
+    "configs": {
+      "mainnet": {
+        "label": "Mainnet",
+        "bridgeAddress": "0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe",
+        "aggkitBridgeApis": {
+          "20": "https://PLACEHOLDER-katana-aggkit",
+          "22": "https://PLACEHOLDER-forknet-aggkit"
+        },
+        "chainKeys": ["MAINNET", "KATANA", "FORKNET"],
+        "defaultFromChainKey": "MAINNET",
+        "defaultToChainKey": "KATANA"
+      },
+      "testnet": {
+        "label": "Testnet",
+        "bridgeAddress": "0x528e26b25a34a4A5d0dbDa1d57D318153d2ED582",
+        "aggkitBridgeApis": {
+          "37": "https://PLACEHOLDER-bokuto-aggkit"
+        },
+        "chainKeys": ["SEPOLIA", "BOKUTO"],
+        "defaultFromChainKey": "SEPOLIA",
+        "defaultToChainKey": "BOKUTO"
+      },
+      "devnet": {
+        "label": "Devnet",
+        "bridgeAddress": "0xC8cbEBf950B9Df44d987c8619f092beA980fF038",
+        "aggkitBridgeApis": {
+          "1": "http://127.0.0.1:8555/aggkitapi",
+          "2": "http://127.0.0.1:8555/aggkitapi"
+        },
+        "chainKeys": ["DEVNET_L1", "DEVNET_L2_001", "DEVNET_L2_002"],
+        "defaultFromChainKey": "DEVNET_L1",
+        "defaultToChainKey": "DEVNET_L2_001"
+      }
+    }
+  }
+}
