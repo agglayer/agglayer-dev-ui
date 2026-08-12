@@ -1,9 +1,28 @@
-import { E2E_FROM_CHAIN_ID, E2E_PRIVATE_KEY, E2E_WALLET_ADDRESS } from '@/app/constants/e2e';
+import {
+  E2E_BACKEND_MODE,
+  E2E_FROM_CHAIN_ID,
+  E2E_PRIVATE_KEY,
+  E2E_WALLET_ADDRESS
+} from '@/app/constants/e2e';
 import { loadAppConfigForNode } from '@/tests/e2e/appConfig';
 import { getE2EFromChain, getE2EFromChainRpcUrl } from '@/tests/e2e/chainRpc';
 import { expect, test } from '@playwright/test';
 import { createPublicClient, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
+
+// Like the other devnet-specific specs in this suite (tracker.spec.ts,
+// console-hygiene.spec.ts, manual-claim.spec.ts, claim-autoclaim.spec.ts),
+// this depends on a live Kurtosis `cdk` devnet enclave (or, in CI, the
+// vendored devnet bundle): it hits aggkit's sync-status endpoint and checks
+// the E2E wallet's on-chain balance against config.json's default app mode.
+// Without this gate, a contributor who has switched to
+// `E2E_BACKEND_MODE=testnet` (no local devnet running -- see README
+// "Testing") would still have this spec try to reach devnet-only
+// infrastructure and fail instead of skip.
+test.skip(
+  E2E_BACKEND_MODE !== 'devnet',
+  'Preflight checks (aggkit sync-status, devnet wallet funding) are devnet-specific; see the comment above.'
+);
 
 // The active app mode's aggkitBridgeApis already has any
 // NEXT_PUBLIC_AGGKIT_BRIDGE_APIS env override merged in (app/config.ts) --
