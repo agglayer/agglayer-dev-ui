@@ -1,0 +1,32 @@
+=== PR #24 CI status after D0c's push (commit 8563dd4) ===
+{"headRefName":"feat/aggkit-backend","isDraft":true,"number":24,"state":"OPEN","url":"https://github.com/agglayer/agglayer-dev-ui/pull/24"}
+
+e2e	fail	2m14s	https://github.com/agglayer/agglayer-dev-ui/actions/runs/31732859731/job/94557280269	
+Analyze (actions)	pass	38s	https://github.com/agglayer/agglayer-dev-ui/actions/runs/31732856178/job/94557274088	
+Analyze (javascript-typescript)	pass	51s	https://github.com/agglayer/agglayer-dev-ui/actions/runs/31732856178/job/94557274139	
+Build (single-arch, no push) and smoke test	pass	1m58s	https://github.com/agglayer/agglayer-dev-ui/actions/runs/31732859657/job/94557280049	
+CI - lint / typecheck / test	pass	54s	https://github.com/agglayer/agglayer-dev-ui/actions/runs/31732859761/job/94557280164	
+CodeQL	pass	3s	https://github.com/agglayer/agglayer-dev-ui/runs/94557431135	
+claude-review / claude-review	pass	1m18s	https://github.com/agglayer/agglayer-dev-ui/actions/runs/31732860099/job/94557281112	
+
+=== e2e job failure detail (EXPECTED, not a regression against this step's acceptance criteria) ===
+e2e job: https://github.com/agglayer/agglayer-dev-ui/actions/runs/31732859731/job/94557280269
+Failure: 'Run Playwright preflight' step -- Error: Playwright E2E env invalid: set NEXT_PUBLIC_AGGKIT_PROXY
+
+.github/workflows/e2e.yaml (D1 territory, NOT touched by this step) still exports the retired literal:
+  NEXT_PUBLIC_AGGKIT_BRIDGE_APIS: {"1":"http://127.0.0.1:8555/aggkitapi","2":"http://127.0.0.1:8555/aggkitapi"}
+
+playwright.config.ts (this step) now requires NEXT_PUBLIC_AGGKIT_PROXY instead (its
+NEXT_PUBLIC_AGGKIT_BRIDGE_APIS-based validation had no target left once app/config.ts
+dropped that env override). e2e.yaml never sets NEXT_PUBLIC_AGGKIT_PROXY, so the
+Playwright preflight step throws immediately at module load.
+
+This is a deliberate, documented, expected cross-step skew -- NOT a regression against
+this step's acceptance criteria: 'CI - lint / typecheck / test' (the job actually named
+in D0c's acceptance criteria) is green. The e2e job was ALREADY not required to pass
+(D0b's own evidence: 'e2e pending -- expected, it still runs against the old v1
+vendored bundle until D1 re-vendors'). D0b's own plan note already anticipated D1
+needing to update e2e.yaml's aggkit-API literal for the aggkitProxy field; it now
+additionally needs the env var NAME updated from NEXT_PUBLIC_AGGKIT_BRIDGE_APIS to
+NEXT_PUBLIC_AGGKIT_PROXY. Not fixed here because .github/workflows/e2e.yaml is
+explicitly D1's territory.
