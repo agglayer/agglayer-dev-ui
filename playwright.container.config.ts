@@ -9,7 +9,7 @@ import { defineConfig, devices } from '@playwright/test';
 //
 // Deliberately NOT folded into playwright.config.ts:
 //   - playwright.config.ts throws at module-load time unless
-//     E2E_PRIVATE_KEY / NEXT_PUBLIC_PROJECT_ID / NEXT_PUBLIC_AGGKIT_BRIDGE_APIS
+//     E2E_PRIVATE_KEY / NEXT_PUBLIC_PROJECT_ID / NEXT_PUBLIC_AGGKIT_PROXY
 //     are set (see its top-level checks) -- requirements that make sense for
 //     a wallet-driving devnet suite, but have nothing to do with "does the
 //     container start and render its mounted config". This config has none

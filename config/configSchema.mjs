@@ -31,22 +31,31 @@ const urlString = z
   .refine(isHttpUrl, { message: 'must use the http or https scheme' });
 const optionalUrlString = z.union([urlString, z.literal('')]);
 const addressString = z.string().regex(/^0x[a-fA-F0-9]{40}$/);
-// JSON object keys are always strings; network ids are validated as digit strings
-// so they can be parsed to number when the aggregator config is built (app/config.ts).
-const networkIdKey = z.string().regex(/^\d+$/);
 // An origin-relative path: exactly one leading slash. `//host` (protocol-relative)
 // is deliberately rejected — it changes origin and would reintroduce the
 // cross-origin/SSRF surface that relative URLs exist to remove.
 const relativeUrlPath = z.string().regex(/^\/(?!\/)[^\s]*$/);
 const aggkitBaseUrlString = z.union([urlString, relativeUrlPath]);
-// Exported so app/config.ts can validate the NEXT_PUBLIC_AGGKIT_BRIDGE_APIS
-// env override against the same shape, rather than re-declaring it.
-export const aggkitBridgeApisSchema = z.record(networkIdKey, aggkitBaseUrlString);
 // A single URL fronting every network for a mode -- one multiplexing
 // aggkit-proxy instance (PROXY + TRACKER components, see docs/deployment.md)
 // distinguishing networks by the `?network_id=` query param rather than by
-// host. Same URL shape as one aggkitBridgeApis entry; exported so app/config.ts
-// can validate the NEXT_PUBLIC_AGGKIT_PROXY env override against it.
+// host. Exported so app/config.ts can validate the NEXT_PUBLIC_AGGKIT_PROXY
+// env override against the same shape, rather than re-declaring it.
+//
+// This used to be one of two mutually-exclusive fields on a mode config, the
+// other being a per-network `aggkitBridgeApis` map (networkId -> aggkit REST
+// base URL) for a mode whose networks were served by distinct per-network
+// aggkit backends instead of one shared proxy. That map form has been
+// removed from this schema: every mode this app ships now goes through one
+// aggkit-proxy, so the per-network map no longer models anything this repo's
+// own config.json needs. kurtosis-cdk's dev-ui config template
+// (static_files/additional_services/bridge-ui/aggkit-dev-ui-config.json.tmpl)
+// still generates the old map-form field as of this writing -- that template
+// needs a follow-up migration (tracked separately, kurtosis-cdk-side) to emit
+// `aggkitProxy` instead; until it lands, a config produced by that template
+// would fail this schema's `.strict()` check (an unrecognized `aggkitBridgeApis`
+// key). This is a deliberate, temporary, tracked cross-repo skew, not an
+// oversight.
 export const aggkitProxySchema = aggkitBaseUrlString;
 
 export const JsonNativeCurrencyConfigSchema = z
@@ -76,46 +85,16 @@ export const jsonAppModeConfigSchema = z
     label: nonEmptyString,
     bridgeAddress: addressString,
     // A single aggkit-proxy fronting every network in this mode, tracker
-    // included. Set this for a mode whose backend is one multiplexing proxy
-    // (e.g. devnet) -- mutually exclusive with aggkitBridgeApis below (see the
-    // superRefine at the bottom of this schema): the two are genuinely
-    // different backend shapes ("one proxy for everything" vs. "one REST
-    // service per network"), and declaring both would leave it ambiguous
-    // which one the app should actually call.
+    // included. May be omitted for a mode with no aggkit backend configured
+    // yet -- the documented "not yet configured" escape hatch (a disabled
+    // mode with fewer than two chainKeys, or one whose real proxy URL doesn't
+    // exist yet).
     aggkitProxy: aggkitProxySchema.optional(),
-    // Per-network aggkit bridge API map, for modes whose networks are served
-    // by distinct aggkit REST backends (e.g. mainnet/testnet, where each L2
-    // has its own aggkit instance). May be omitted or {} for a mode that
-    // doesn't yet have an aggkit backend configured at all (e.g.
-    // mainnet/testnet before their aggkit instances are stood up) -- that is
-    // the documented "not yet configured" escape hatch, and (like aggkitProxy
-    // being absent) does not trip the mutual-exclusion check below.
-    aggkitBridgeApis: aggkitBridgeApisSchema.optional(),
     chainKeys: z.array(nonEmptyString),
     defaultFromChainKey: nonEmptyString.optional(),
     defaultToChainKey: nonEmptyString.optional()
   })
-  .strict()
-  .superRefine((modeConfig, ctx) => {
-    // "Neither" is the escape hatch above and always allowed. "Both" is
-    // rejected: a mode fronted by one proxy and a mode addressing distinct
-    // per-network backends are different deployment shapes, and silently
-    // preferring one field over the other would hide a config author's
-    // mistake (e.g. a stale aggkitBridgeApis map left behind after adding
-    // aggkitProxy) rather than surface it.
-    const declaresProxy = modeConfig.aggkitProxy !== undefined;
-    const declaresBridgeApis = Object.keys(modeConfig.aggkitBridgeApis ?? {}).length > 0;
-    if (declaresProxy && declaresBridgeApis) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: [],
-        message:
-          'aggkitProxy and aggkitBridgeApis are mutually exclusive: declare a single ' +
-          'aggkitProxy for a mode fronted by one multiplexing proxy, or a per-network ' +
-          'aggkitBridgeApis map for a mode with distinct per-network backends -- not both.'
-      });
-    }
-  });
+  .strict();
 
 const routeAutoclaimSchema = z
   .object({

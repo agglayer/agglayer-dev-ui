@@ -24,7 +24,7 @@ const DESTINATION_PATH = path.join(REPO_ROOT, 'public', 'config.json');
  */
 export const syncPublicConfig = () => {
   // allowRelative + no origin: this is a shape check, not a resolution pass.
-  // A relative aggkitBridgeApis value must survive the copy verbatim so the
+  // A relative aggkitProxy value must survive the copy verbatim so the
   // browser can resolve it against its own origin at runtime (design.md §1.4,
   // §5.4). This also means the copy must be a byte-for-byte fs.copyFileSync,
   // never a re-serialize -- reformatting would still be semantically

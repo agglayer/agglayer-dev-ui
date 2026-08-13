@@ -5,21 +5,22 @@ import { parseConfigOrThrow } from './configValidator.mjs';
  */
 
 /**
- * Resolves one origin-relative aggkit base URL. Absolute values pass through
- * unchanged. See design.md §5.4 for the precedence rules encoded here.
+ * Resolves one origin-relative aggkit base URL (a mode's `aggkitProxy`).
+ * Absolute values pass through unchanged. See design.md §5.4 for the
+ * precedence rules encoded here.
  *
  * @param {string} value
  * @param {string | undefined} origin
  * @param {boolean} allowRelative
  * @returns {string}
  */
-export const resolveAggkitBridgeApiUrl = (value, origin, allowRelative) => {
+export const resolveAggkitProxyUrl = (value, origin, allowRelative) => {
   if (!value.startsWith('/')) return value;
 
   // Protocol-relative ("//host/path") is rejected here as well as in
   // config/configSchema.mjs's relativeUrlPath regex. The schema is the primary
   // guard, but this function is exported and is also called directly from
-  // app/config.ts's NEXT_PUBLIC_AGGKIT_BRIDGE_APIS path, so the same-origin
+  // app/config.ts's NEXT_PUBLIC_AGGKIT_PROXY path, so the same-origin
   // property should not depend on every caller having validated first. It
   // matters specifically on the `allowRelative && origin === undefined` branch
   // below, which returns the value verbatim: `new URL('//evil.example',
@@ -29,30 +30,22 @@ export const resolveAggkitBridgeApiUrl = (value, origin, allowRelative) => {
   // already safe — `https://app.example` + `//evil.example` parses as a path.)
   if (value.startsWith('//')) {
     throw new Error(
-      `APP_CONFIG_INVALID: protocol-relative aggkitBridgeApis URL "${value}" is not allowed`
+      `APP_CONFIG_INVALID: protocol-relative aggkitProxy URL "${value}" is not allowed`
     );
   }
 
   if (origin === undefined) {
     if (allowRelative) return value;
-    throw new Error(
-      `APP_CONFIG_INVALID: relative aggkitBridgeApis URL "${value}" requires an origin`
-    );
+    throw new Error(`APP_CONFIG_INVALID: relative aggkitProxy URL "${value}" requires an origin`);
   }
 
   return origin.replace(/\/+$/, '') + value;
 };
 
 /**
- * Resolves both aggkit URL fields a mode config may carry: the per-network
- * `aggkitBridgeApis` map (unchanged behavior) and the single `aggkitProxy`
- * string (new). At most one is actually present per configSchema.mjs's
- * mutual-exclusion check, but both are handled uniformly here rather than
- * branching on which form this mode uses -- `aggkitBridgeApis` defaults to
- * `{}` when absent (the "not configured" escape hatch, or a mode using
- * `aggkitProxy` instead) so every mode config coming out of this function has
- * a concrete (possibly empty) map, matching JsonAppModeConfig's shape before
- * this normalization pass ran.
+ * Resolves a mode config's `aggkitProxy` URL, if present, against the given
+ * origin. A mode with no `aggkitProxy` (not yet configured) passes through
+ * unchanged.
  *
  * @param {JsonConfig['appModes']['configs'][string]} modeConfig
  * @param {string | undefined} origin
@@ -60,19 +53,11 @@ export const resolveAggkitBridgeApiUrl = (value, origin, allowRelative) => {
  * @returns {JsonConfig['appModes']['configs'][string]}
  */
 const resolveModeConfigAggkitUrls = (modeConfig, origin, allowRelative) => {
-  const resolvedAggkitBridgeApis = Object.fromEntries(
-    Object.entries(modeConfig.aggkitBridgeApis ?? {}).map(([networkIdKey, value]) => [
-      networkIdKey,
-      resolveAggkitBridgeApiUrl(value, origin, allowRelative)
-    ])
-  );
+  if (modeConfig.aggkitProxy === undefined) return modeConfig;
 
   return {
     ...modeConfig,
-    aggkitBridgeApis: resolvedAggkitBridgeApis,
-    ...(modeConfig.aggkitProxy === undefined
-      ? {}
-      : { aggkitProxy: resolveAggkitBridgeApiUrl(modeConfig.aggkitProxy, origin, allowRelative) })
+    aggkitProxy: resolveAggkitProxyUrl(modeConfig.aggkitProxy, origin, allowRelative)
   };
 };
 
@@ -82,7 +67,7 @@ const resolveModeConfigAggkitUrls = (modeConfig, origin, allowRelative) => {
  * @param {boolean} allowRelative
  * @returns {JsonConfig}
  */
-const resolveAggkitBridgeApisInConfig = (config, origin, allowRelative) => {
+const resolveAggkitProxiesInConfig = (config, origin, allowRelative) => {
   const resolvedConfigs = Object.fromEntries(
     Object.entries(config.appModes.configs).map(([modeKey, modeConfig]) => [
       modeKey,
@@ -112,5 +97,5 @@ const resolveAggkitBridgeApisInConfig = (config, origin, allowRelative) => {
 export const normalizeConfigOrThrow = (rawConfig, options = {}) => {
   const { sourceName, origin, allowRelative = false } = options;
   const parsedConfig = parseConfigOrThrow(rawConfig, { sourceName });
-  return resolveAggkitBridgeApisInConfig(parsedConfig, origin, allowRelative);
+  return resolveAggkitProxiesInConfig(parsedConfig, origin, allowRelative);
 };

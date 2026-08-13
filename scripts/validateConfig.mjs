@@ -14,7 +14,7 @@ const run = () => {
   const configPath = process.argv.slice(2).find((arg) => arg !== '--');
 
   // allowRelative: true -- this is a standalone shape check with no serving
-  // origin available, so a relative aggkitBridgeApis value must be accepted
+  // origin available, so a relative aggkitProxy value must be accepted
   // as-is rather than requiring (or attempting) resolution.
   loadConfigFromDiskOrThrow({ allowRelative: true, ...(configPath ? { configPath } : {}) });
 

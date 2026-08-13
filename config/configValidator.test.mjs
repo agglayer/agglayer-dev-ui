@@ -18,6 +18,9 @@ const chain = (overrides = {}) => ({
 // Minimal config satisfying jsonConfigSchema + the pre-existing semantic
 // checks (>=1 chain, an enabled mode with >=2 chainKeys, a config for the
 // default mode). Callers mutate `chains`/`appModes.configs.devnet` per test.
+// devnet uses the single-proxy `aggkitProxy` form -- the only form the schema
+// accepts as of this config surface cleanup (the per-network `aggkitBridgeApis`
+// map has been removed; see configSchema.mjs's comment on aggkitProxySchema).
 const buildConfig = () => ({
   externalLinks: { privacyPolicy: '', termsOfUse: '', contactSupport: '' },
   chains: {
@@ -31,10 +34,7 @@ const buildConfig = () => ({
       devnet: {
         label: 'Devnet',
         bridgeAddress: '0xC8cbEBf950B9Df44d987c8619f092beA980fF038',
-        aggkitBridgeApis: {
-          1: 'https://aggkit.example/aggkitapi',
-          2: 'https://aggkit.example/aggkitapi'
-        },
+        aggkitProxy: 'https://aggkit-proxy.example/aggkitapi',
         chainKeys: ['DEVNET_L1', 'DEVNET_L2_001', 'DEVNET_L2_002'],
         defaultFromChainKey: 'DEVNET_L1',
         defaultToChainKey: 'DEVNET_L2_001'
@@ -43,126 +43,87 @@ const buildConfig = () => ({
   }
 });
 
-describe('parseConfigOrThrow — chains <-> aggkitBridgeApis cross-field validation (design.md §1.2)', () => {
-  it('passes when every non-L1 chain has a matching aggkitBridgeApis entry and vice versa', () => {
+describe('parseConfigOrThrow — aggkitProxy (the only supported aggkit backend field)', () => {
+  it('passes for a well-formed config using aggkitProxy', () => {
     expect(() => parseConfigOrThrow(buildConfig())).not.toThrow();
   });
 
-  it('E1: throws when a configured non-L1 chain has no aggkitBridgeApis entry', () => {
+  it('passes for a mode with aggkitProxy omitted entirely (the "not yet configured" escape hatch)', () => {
     const config = buildConfig();
-    delete config.appModes.configs.devnet.aggkitBridgeApis['2'];
-
-    expect(() => parseConfigOrThrow(config)).toThrow(
-      /aggkitBridgeApis: missing entry for chain "DEVNET_L2_002" \(networkId 2\)/
-    );
-  });
-
-  it('E2: throws when an aggkitBridgeApis key does not match any configured chain', () => {
-    const config = buildConfig();
-    config.appModes.configs.devnet.aggkitBridgeApis['999'] = 'https://aggkit.example/aggkitapi';
-
-    expect(() => parseConfigOrThrow(config)).toThrow(
-      /aggkitBridgeApis: key "999" does not match the networkId of any chain in chainKeys/
-    );
-  });
-
-  it('exempts an intentionally-empty aggkitBridgeApis ({}) from both checks', () => {
-    const config = buildConfig();
-    config.appModes.configs.devnet.aggkitBridgeApis = {};
+    delete config.appModes.configs.devnet.aggkitProxy;
 
     expect(() => parseConfigOrThrow(config)).not.toThrow();
   });
 
-  it('never requires an aggkitBridgeApis entry for an L1 chain (networkId 0)', () => {
+  it('rejects the removed per-network aggkitBridgeApis map as an unrecognized key (.strict())', () => {
     const config = buildConfig();
-    // Only the L1 chain configured, no aggkit backend for it -- must not
-    // trip E1 (L1 chains are exempt; they never route through aggkit).
-    config.chains = { DEVNET_L1: chain({ id: 271828, name: 'Devnet L1', networkId: 0 }) };
-    config.appModes.configs.devnet.chainKeys = ['DEVNET_L1'];
-    config.appModes.configs.devnet.defaultToChainKey = 'DEVNET_L1';
-    config.appModes.configs.devnet.aggkitBridgeApis = {};
-    // Need >=2 chainKeys for the pre-existing "at least one enabled mode"
-    // check, so add a second L1-shaped chain (still networkId 0).
-    config.chains.DEVNET_L1_ALT = chain({ id: 271829, name: 'Devnet L1 Alt', networkId: 0 });
-    config.appModes.configs.devnet.chainKeys.push('DEVNET_L1_ALT');
-
-    expect(() => parseConfigOrThrow(config)).not.toThrow();
-  });
-
-  // E1/E2 both pass in this shape -- every chain finds a matching key and every
-  // key matches some chain -- yet the two L2s collapse onto one aggkit backend
-  // client, silently merging one chain's rows into the other's.
-  it('E3: throws when two non-L1 chains in a mode share a networkId', () => {
-    const config = buildConfig();
-    config.chains.DEVNET_L2_002.networkId = 1;
+    // The map form used to be a genuinely supported, mutually-exclusive
+    // alternative to aggkitProxy. It has been removed from the schema
+    // entirely: this proves it, rather than assuming it, so a future
+    // accidental re-add would be caught here.
     config.appModes.configs.devnet.aggkitBridgeApis = {
-      1: 'https://aggkit.example/aggkitapi'
+      1: 'https://aggkit.example/1',
+      2: 'https://aggkit.example/2'
     };
 
-    expect(() => parseConfigOrThrow(config)).toThrow(
-      /chains "DEVNET_L2_001" and "DEVNET_L2_002" share networkId 1/
-    );
+    expect(() => parseConfigOrThrow(config)).toThrow(/Unrecognized key: "aggkitBridgeApis"/);
   });
 
-  it('E3: allows several L1 chains to share networkId 0', () => {
+  it('rejects a non-http(s) aggkitProxy URL scheme', () => {
     const config = buildConfig();
-    // networkId 0 never keys an aggkitBridgeApis entry, so duplicates there are
-    // harmless -- only non-L1 networks map to a backend client.
-    config.chains.DEVNET_L1_ALT = chain({ id: 271829, name: 'Devnet L1 Alt', networkId: 0 });
-    config.appModes.configs.devnet.chainKeys.push('DEVNET_L1_ALT');
+    config.appModes.configs.devnet.aggkitProxy = 'javascript:alert(1)';
 
-    expect(() => parseConfigOrThrow(config)).not.toThrow();
+    expect(() => parseConfigOrThrow(config)).toThrow(/schema validation failed/);
   });
 
-  it('a mode using aggkitProxy is exempt from all three map-form cross-field checks', () => {
+  it('accepts an origin-relative aggkitProxy path', () => {
     const config = buildConfig();
-    // Deliberately shaped so it WOULD fail E1 (missing entry) if the map-form
-    // checks ran against it -- proving they are skipped for aggkitProxy, not
-    // just coincidentally satisfied.
-    config.appModes.configs.devnet.aggkitBridgeApis = undefined;
-    config.appModes.configs.devnet.aggkitProxy = 'https://aggkit-proxy.example/aggkitapi';
+    config.appModes.configs.devnet.aggkitProxy = '/aggkitapi';
 
     expect(() => parseConfigOrThrow(config)).not.toThrow();
   });
 });
 
-describe('parseConfigOrThrow — aggkitProxy / aggkitBridgeApis mutual exclusion', () => {
-  it('passes for a mode declaring only aggkitProxy', () => {
+describe('parseConfigOrThrow — chainKeys / default-chain-key checks (unaffected by the aggkitProxy migration)', () => {
+  it('throws when chainKeys lists the same chain key twice', () => {
     const config = buildConfig();
-    delete config.appModes.configs.devnet.aggkitBridgeApis;
-    config.appModes.configs.devnet.aggkitProxy = 'https://aggkit-proxy.example/aggkitapi';
-
-    expect(() => parseConfigOrThrow(config)).not.toThrow();
-  });
-
-  it("passes for a mode declaring only aggkitBridgeApis (buildConfig's default shape)", () => {
-    expect(() => parseConfigOrThrow(buildConfig())).not.toThrow();
-  });
-
-  it('the escape hatch (neither field configured) passes, both as {} and as fully omitted', () => {
-    const withEmptyMap = buildConfig();
-    withEmptyMap.appModes.configs.devnet.aggkitBridgeApis = {};
-    expect(() => parseConfigOrThrow(withEmptyMap)).not.toThrow();
-
-    const withOmittedField = buildConfig();
-    delete withOmittedField.appModes.configs.devnet.aggkitBridgeApis;
-    expect(() => parseConfigOrThrow(withOmittedField)).not.toThrow();
-  });
-
-  it('fails when a mode declares both aggkitProxy and a non-empty aggkitBridgeApis', () => {
-    const config = buildConfig();
-    config.appModes.configs.devnet.aggkitProxy = 'https://aggkit-proxy.example/aggkitapi';
-    // config.appModes.configs.devnet.aggkitBridgeApis is already non-empty from buildConfig().
+    config.appModes.configs.devnet.chainKeys.push('DEVNET_L1');
 
     expect(() => parseConfigOrThrow(config)).toThrow(
-      /aggkitProxy and aggkitBridgeApis are mutually exclusive/
+      /appModes\.configs\.devnet\.chainKeys: duplicate chain keys are not allowed/
     );
   });
 
-  it('allows aggkitProxy alongside an explicitly-empty aggkitBridgeApis ({}) -- {} never counts as "declared"', () => {
+  it('throws when chainKeys references a chain key absent from chains', () => {
     const config = buildConfig();
-    config.appModes.configs.devnet.aggkitProxy = 'https://aggkit-proxy.example/aggkitapi';
-    config.appModes.configs.devnet.aggkitBridgeApis = {};
+    config.appModes.configs.devnet.chainKeys.push('NONEXISTENT');
+
+    expect(() => parseConfigOrThrow(config)).toThrow(
+      /appModes\.configs\.devnet\.chainKeys: chain key "NONEXISTENT" does not exist in chains/
+    );
+  });
+
+  it('throws when defaultFromChainKey is not one of chainKeys', () => {
+    const config = buildConfig();
+    config.appModes.configs.devnet.defaultFromChainKey = 'DEVNET_L2_002';
+    config.appModes.configs.devnet.chainKeys = ['DEVNET_L1', 'DEVNET_L2_001'];
+
+    expect(() => parseConfigOrThrow(config)).toThrow(
+      /appModes\.configs\.devnet\.defaultFromChainKey: "DEVNET_L2_002" must be listed in chainKeys/
+    );
+  });
+});
+
+describe('parseConfigOrThrow — chains<->map and duplicate-networkId checks no longer guard anything (by design)', () => {
+  it('two non-L1 chains sharing a networkId is NOT rejected once neither uses the map form -- there is no check left to catch it', () => {
+    // This is the documented consequence of removing aggkitBridgeApis
+    // entirely (see docs/config.md): the chains<->map cross-check and the
+    // duplicate-networkId check only ever applied to the map form. With that
+    // form gone, nothing in this validator inspects networkId agreement for
+    // aggkitProxy mode at all -- a single proxy fronts every network by
+    // construction, so there is no per-chain key agreement left to check.
+    const config = buildConfig();
+    config.chains.DEVNET_L2_002.networkId = 1; // same as DEVNET_L2_001
 
     expect(() => parseConfigOrThrow(config)).not.toThrow();
   });

@@ -1,6 +1,5 @@
 import type { AppChain } from '@/app/types/appMode';
 import type {
-  aggkitBridgeApisSchema,
   autoclaimConfigSchema,
   jsonAppModeConfigSchema,
   jsonChainConfigSchema,
@@ -29,7 +28,6 @@ export type JsonNativeCurrencyConfig = z.infer<typeof JsonNativeCurrencyConfigSc
 export type JsonChainConfig = z.infer<typeof jsonChainConfigSchema>;
 export type JsonAppModeConfig = z.infer<typeof jsonAppModeConfigSchema>;
 export type JsonConfig = z.infer<typeof jsonConfigSchema>;
-export type JsonAggkitBridgeApis = z.infer<typeof aggkitBridgeApisSchema>;
 
 // The three bridge route types, keyed by whether each side is L1 (networkId 0)
 // or an L2 (any other networkId). Drives per-route autoclaim UX.
