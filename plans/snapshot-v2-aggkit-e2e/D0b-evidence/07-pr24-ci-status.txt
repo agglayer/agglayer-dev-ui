@@ -9,3 +9,12 @@ CI - lint / typecheck / test	pass	53s	https://github.com/agglayer/agglayer-dev-u
 CodeQL	pass	3s	https://github.com/agglayer/agglayer-dev-ui/runs/94534985419	
 claude-review / claude-review	pass	1m32s	https://github.com/agglayer/agglayer-dev-ui/actions/runs/31726120949/job/94534806080	
 e2e	pass	10m10s	https://github.com/agglayer/agglayer-dev-ui/actions/runs/31726120031/job/94534803122	
+
+=== Final gh pr checks 24 (after evidence-only push b4fb5d9, all checks including e2e completed) ===
+Analyze (actions)	pass	39s	https://github.com/agglayer/agglayer-dev-ui/actions/runs/31727114426/job/94538148536	
+Analyze (javascript-typescript)	pass	54s	https://github.com/agglayer/agglayer-dev-ui/actions/runs/31727114426/job/94538148543	
+Build (single-arch, no push) and smoke test	pass	1m56s	https://github.com/agglayer/agglayer-dev-ui/actions/runs/31727118581/job/94538158404	
+CI - lint / typecheck / test	pass	47s	https://github.com/agglayer/agglayer-dev-ui/actions/runs/31727118560/job/94538158021	
+CodeQL	pass	3s	https://github.com/agglayer/agglayer-dev-ui/runs/94538307573	
+claude-review / claude-review	pass	2m8s	https://github.com/agglayer/agglayer-dev-ui/actions/runs/31727118960/job/94538159353	
+e2e	pass	9m8s	https://github.com/agglayer/agglayer-dev-ui/actions/runs/31727118507/job/94538158271	
