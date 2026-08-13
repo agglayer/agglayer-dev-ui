@@ -30,10 +30,9 @@
 //      deleting any stale DEVNET_L2_* (or the legacy single-L2 DEVNET_L2) key
 //      not written this run, then re-validates the whole file with the same
 //      schema/validator the app uses at startup.
-//   5. Writes .env.local with NEXT_PUBLIC_AGGKIT_BRIDGE_APIS (all networkIds
-//      -> the live proxy URL), E2E_PRIVATE_KEY, and E2E_{FROM,TO}_CHAIN_ID /
-//      E2E_L2_CHAIN_IDS, preserving any NEXT_PUBLIC_PROJECT_ID already
-//      present.
+//   5. Writes .env.local with NEXT_PUBLIC_AGGKIT_PROXY (the live proxy URL),
+//      E2E_PRIVATE_KEY, and E2E_{FROM,TO}_CHAIN_ID / E2E_L2_CHAIN_IDS,
+//      preserving any NEXT_PUBLIC_PROJECT_ID already present.
 //
 // This script only supports Kurtosis-based devnets (matches this repo's
 // `cdk` enclave shape). It does not touch mainnet/testnet mode config, and it
@@ -292,13 +291,10 @@ const upsertConfigJsonDevnet = async ({ l1RpcUrl, l1ChainId, l2Chains, aggkitBri
     bridgeAddress: BRIDGE_ADDRESS,
     // One multiplexing aggkit-proxy instance fronts every network,
     // distinguished by the `?network_id=` query param on each request, not by
-    // host -- so it is a single URL (`aggkitProxy`), not a per-networkId map
-    // hand-duplicated under every discovered L2's key (that duplication is
-    // exactly what this field replaced; see docs/config.md). Also kept in
-    // sync here as a fallback; NEXT_PUBLIC_AGGKIT_BRIDGE_APIS (written to
-    // .env.local below) is the value that actually takes effect at runtime
-    // per the S7 config design (env override merges over config.json in
-    // app/config.ts).
+    // host -- so it is a single URL (`aggkitProxy`). Also kept in sync here as
+    // a fallback; NEXT_PUBLIC_AGGKIT_PROXY (written to .env.local below) is
+    // the value that actually takes effect at runtime per the S7 config
+    // design (env override wins over config.json in app/config.ts).
     aggkitProxy: aggkitBridgeApiUrl,
     chainKeys: ['DEVNET_L1', ...l2Chains.map((l2) => l2.chainKey)],
     defaultFromChainKey: 'DEVNET_L1',
@@ -315,11 +311,7 @@ const upsertConfigJsonDevnet = async ({ l1RpcUrl, l1ChainId, l2Chains, aggkitBri
   configJson.appModes.default = 'devnet';
 
   // Fail loudly before writing anything if this would produce an invalid
-  // config.json (same schema + semantic validation the app runs at startup;
-  // devnet uses aggkitProxy, so configValidator.mjs's chains<->aggkitBridgeApis
-  // cross-check doesn't apply to it -- a single proxy fronts every network by
-  // construction -- but the schema's aggkitProxy/aggkitBridgeApis
-  // mutual-exclusion check still runs).
+  // config.json (same schema + semantic validation the app runs at startup).
   parseConfigOrThrow(configJson, { sourceName: 'config.json (kurtosisDevnetEnv.mjs preview)' });
 
   // Format through the repo's own prettier config (not a bare
@@ -351,10 +343,6 @@ const upsertEnvLocal = ({ l1ChainId, l2Chains, aggkitBridgeApiUrl }) => {
       ? existingProjectId
       : 'YOUR_PROJECT_ID_HERE';
 
-  const aggkitBridgeApis = JSON.stringify(
-    Object.fromEntries(l2Chains.map((l2) => [String(l2.networkId), aggkitBridgeApiUrl]))
-  );
-
   // These three make app/constants/e2e.ts's hardcoded
   // devnet fallbacks never actually decide anything against a live enclave.
   // E2E_TO_CHAIN_ID / the first entry of E2E_L2_CHAIN_IDS is always the
@@ -373,10 +361,9 @@ const upsertEnvLocal = ({ l1ChainId, l2Chains, aggkitBridgeApiUrl }) => {
       : '# NEXT_PUBLIC_PROJECT_ID preserved from existing .env.local',
     `NEXT_PUBLIC_PROJECT_ID=${projectId}`,
     '',
-    '# Overrides config.json devnet.aggkitProxy with the live enclave proxy URL, fanned out',
-    '# per L2 networkId (app/config.ts resolves either form to this same shape); the SDK',
-    '# client appends /bridge/v1.',
-    `NEXT_PUBLIC_AGGKIT_BRIDGE_APIS=${aggkitBridgeApis}`,
+    '# Overrides config.json devnet.aggkitProxy with the live enclave proxy URL -- one URL,',
+    '# fanned out to every L2 networkId by app/config.ts; the SDK client appends /bridge/v1.',
+    `NEXT_PUBLIC_AGGKIT_PROXY=${aggkitBridgeApiUrl}`,
     '',
     '# Funded devnet key (kurtosis-cdk l2_admin key, funded on every L2) for E2E use.',
     '# E2E only: Playwright reads this and injects the derived NEXT_PUBLIC_* values',
@@ -436,7 +423,7 @@ const main = async () => {
     [
       `Enclave: ${enclave}`,
       `Proxy service (browser entrypoint): ${proxyServiceName} -> ${proxyBaseUrl}`,
-      `  -> NEXT_PUBLIC_AGGKIT_BRIDGE_APIS: all of {${l2Chains.map((l2) => l2.networkId).join(', ')}} -> ${aggkitBridgeApiUrl}`,
+      `  -> NEXT_PUBLIC_AGGKIT_PROXY: ${aggkitBridgeApiUrl} (fanned out to networkIds {${l2Chains.map((l2) => l2.networkId).join(', ')}})`,
       `L1 (DEVNET_L1, networkId ${L1_NETWORK_ID}): ${l1RpcUrl} (chainId ${l1ChainId}; bridge deployed; sync-status OK)`,
       ...l2Chains.map(
         (l2) =>

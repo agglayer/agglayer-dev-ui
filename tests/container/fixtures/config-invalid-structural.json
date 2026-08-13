@@ -145,10 +145,7 @@
       "mainnet": {
         "label": "Mainnet",
         "bridgeAddress": "0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe",
-        "aggkitBridgeApis": {
-          "20": "https://PLACEHOLDER-katana-aggkit",
-          "22": "https://PLACEHOLDER-forknet-aggkit"
-        },
+        "aggkitProxy": "https://PLACEHOLDER-mainnet-aggkit-proxy",
         "chainKeys": ["MAINNET", "KATANA", "FORKNET"],
         "defaultFromChainKey": "MAINNET",
         "defaultToChainKey": "KATANA"
@@ -156,9 +153,7 @@
       "testnet": {
         "label": "Testnet",
         "bridgeAddress": "0x528e26b25a34a4A5d0dbDa1d57D318153d2ED582",
-        "aggkitBridgeApis": {
-          "37": "https://PLACEHOLDER-bokuto-aggkit"
-        },
+        "aggkitProxy": "https://PLACEHOLDER-testnet-aggkit-proxy",
         "chainKeys": ["SEPOLIA", "BOKUTO"],
         "defaultFromChainKey": "SEPOLIA",
         "defaultToChainKey": "BOKUTO"
@@ -166,10 +161,7 @@
       "devnet": {
         "label": "Devnet",
         "bridgeAddress": "0xC8cbEBf950B9Df44d987c8619f092beA980fF038",
-        "aggkitBridgeApis": {
-          "1": "http://127.0.0.1:33015/aggkitapi",
-          "2": "http://127.0.0.1:33015/aggkitapi"
-        },
+        "aggkitProxy": "http://127.0.0.1:33015/aggkitapi",
         "chainKeys": ["DEVNET_L1", "DEVNET_L2_001", "DEVNET_L2_002"],
         "defaultFromChainKey": "DEVNET_L1",
         "defaultToChainKey": "DEVNET_L2_001"

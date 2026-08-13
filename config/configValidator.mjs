@@ -87,86 +87,8 @@ const getModeConfigErrors = (modeKey, modeConfig, chainsByKey) => {
   return [
     ...duplicateModeChainKeyErrors,
     ...missingModeChainKeyErrors,
-    ...invalidDefaultChainKeyErrors,
-    ...getChainsAggkitBridgeApiErrors(modeKey, modeConfig, chainsByKey)
+    ...invalidDefaultChainKeyErrors
   ];
-};
-
-/**
- * design.md §1.2: a mode's `aggkitBridgeApis` and its `chainKeys` must agree on
- * which non-L1 (networkId !== 0) networks exist, so a bad devnet-script run or a
- * hand-edit can't silently produce "3 chains configured, 1 backend, the third
- * chain's rows never appear and nothing says why". `aggkitBridgeApis: {}` (or the
- * key omitted entirely) is the documented "mode not yet configured" escape hatch
- * (configSchema.mjs's own comment) and is exempt from every check below --
- * as is a mode using `aggkitProxy` instead (configSchema.mjs's superRefine
- * guarantees the two are never both present): a single proxy fronts every
- * network in the mode by construction, so per-chain key agreement is
- * meaningless for it -- which is exactly why devnet's per-network map used to
- * duplicate one URL under every networkId key instead of using this field.
- *
- * The duplicate-networkId check closes the same gap reached from the other side.
- * `networkId` — not the chain id — is what keys `aggkitBridgeApis` and what the
- * SDK aggregator keys its per-network clients by, so two chains sharing one
- * networkId collapse to a single backend client and one chain's rows silently
- * merge into the other's. The key-agreement checks alone do not catch it: with
- * DEVNET_L2_001 and DEVNET_L2_002 both on networkId 1 and a single `{"1": url}`
- * entry, every chain finds a matching key and every key matches some chain.
- * `scripts/kurtosisDevnetEnv.mjs` derives networkId from the kurtosis
- * deployment suffix, a convention rather than a protocol guarantee (design.md
- * §9 risk 7), so a mis-derivation is exactly how this shape would arise.
- *
- * @param {string} modeKey
- * @param {JsonConfig['appModes']['configs'][string]} modeConfig
- * @param {JsonConfig['chains']} chainsByKey
- * @returns {string[]}
- */
-const getChainsAggkitBridgeApiErrors = (modeKey, modeConfig, chainsByKey) => {
-  // Undefined (field omitted) and {} are both the "not configured" escape
-  // hatch; a mode using aggkitProxy instead always lands here too, since
-  // configSchema.mjs's superRefine guarantees aggkitBridgeApis is then absent
-  // or empty -- this whole check is map-form-only (see the comment above).
-  const aggkitBridgeApis = modeConfig.aggkitBridgeApis ?? {};
-  const isIntentionallyUnconfigured = Object.keys(aggkitBridgeApis).length === 0;
-  if (isIntentionallyUnconfigured) return [];
-
-  // Chains missing from chainsByKey are already reported by
-  // missingModeChainKeyErrors above; skip them here rather than double-report.
-  const nonL1ChainEntries = modeConfig.chainKeys
-    .filter((chainKey) => chainsByKey[chainKey] && chainsByKey[chainKey].networkId !== 0)
-    .map((chainKey) => ({ chainKey, networkId: chainsByKey[chainKey].networkId }));
-
-  const missingApiEntryErrors = nonL1ChainEntries
-    .filter(({ networkId }) => !(String(networkId) in aggkitBridgeApis))
-    .map(
-      ({ chainKey, networkId }) =>
-        `appModes.configs.${modeKey}.aggkitBridgeApis: missing entry for chain "${chainKey}" (networkId ${networkId})`
-    );
-
-  const configuredNetworkIdKeys = new Set(
-    nonL1ChainEntries.map(({ networkId }) => String(networkId))
-  );
-  const unmatchedApiKeyErrors = Object.keys(aggkitBridgeApis)
-    .filter((networkIdKey) => !configuredNetworkIdKeys.has(networkIdKey))
-    .map(
-      (networkIdKey) =>
-        `appModes.configs.${modeKey}.aggkitBridgeApis: key "${networkIdKey}" does not match the networkId of any chain in chainKeys`
-    );
-
-  const firstChainKeyByNetworkId = new Map();
-  const duplicateNetworkIdErrors = nonL1ChainEntries.flatMap(({ chainKey, networkId }) => {
-    const existingChainKey = firstChainKeyByNetworkId.get(networkId);
-    if (existingChainKey) {
-      return [
-        `appModes.configs.${modeKey}.chainKeys: chains "${existingChainKey}" and "${chainKey}" share networkId ${networkId}; each network needs a distinct networkId to get its own aggkitBridgeApis backend`
-      ];
-    }
-
-    firstChainKeyByNetworkId.set(networkId, chainKey);
-    return [];
-  });
-
-  return [...missingApiEntryErrors, ...unmatchedApiKeyErrors, ...duplicateNetworkIdErrors];
 };
 
 /**

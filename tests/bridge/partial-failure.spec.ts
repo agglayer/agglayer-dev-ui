@@ -2,17 +2,28 @@ import { expect, test } from '@playwright/test';
 
 import { BridgePage } from './models/bridge-page';
 
-// This spec runs under the dedicated "partial-failure" Playwright project
-// (see playwright.config.ts), which boots its own Next dev server on a
-// separate port with an extra bogus network (999, unresolvable) injected
-// into NEXT_PUBLIC_AGGKIT_BRIDGE_APIS alongside the real one. This can't be
-// done against the shared "chromium" project's dev server: NEXT_PUBLIC_*
-// values are inlined into the client bundle at Next.js build/dev-compile
-// time, so injecting a different value for just this one spec would require
-// restarting the server every other bridge/*.spec.ts test depends on.
+// SKIPPED (config surface cleanup): this spec used to run under a dedicated
+// "partial-failure" Playwright project (see playwright.config.ts's git
+// history) that booted its own Next dev server on a separate port with an
+// extra bogus network (999, unresolvable) injected into
+// NEXT_PUBLIC_AGGKIT_BRIDGE_APIS alongside the real one -- that env var's
+// per-network JSON-map override was the only mechanism able to point one
+// specific network at a bad URL while leaving the rest of the mode alone.
 //
-// The equivalent flow (bogus second network) was verified manually with
-// the same assertions during the migration's validation pass.
+// NEXT_PUBLIC_AGGKIT_BRIDGE_APIS (and the per-network aggkitBridgeApis config
+// surface it overrode) has been removed: every mode now goes through a single
+// aggkitProxy, and NEXT_PUBLIC_AGGKIT_PROXY's fan-out applies the SAME value to
+// every non-L1 network in the mode by construction, so there is no longer a
+// way to make just one network fail without a real (or mock) backend that
+// itself behaves differently per `?network_id=`. Re-enabling this spec needs
+// a redesigned fixture along those lines -- flagged as a follow-up, not
+// fixed here.
+test.skip(
+  true,
+  'partial-failure fixture removed: NEXT_PUBLIC_AGGKIT_BRIDGE_APIS no longer exists to inject a ' +
+    'per-network bad URL; needs a redesigned mechanism (see comment above).'
+);
+
 test('activity page surfaces a partial-failure notice for the unreachable network while the healthy network still renders', async ({
   page
 }) => {

@@ -12,10 +12,9 @@ pnpm install
 
 2) Configure the app:
 
-Edit `config.json` at the project root to set chains, app modes (each pointed at either a
-single `aggkitProxy` or a per-network `aggkitBridgeApis` map — see
-[`docs/config.md`](docs/config.md#aggkit-bridge-apis-aggkitproxy-vs-aggkitbridgeapis) for
-which one applies to your deployment), and external links. See
+Edit `config.json` at the project root to set chains, app modes (each pointed at a single
+`aggkitProxy` fronting every network in that mode — see
+[`docs/config.md`](docs/config.md#aggkit-bridge-apis-aggkitproxy)), and external links. See
 [`docs/config.md`](docs/config.md) for the full guide. For deploying the UI alongside
 `aggkit-proxy` (DevOps-facing, incl. rollback), see [`docs/deployment.md`](docs/deployment.md).
 To run the app as a self-hosted Docker container instead, see [`docs/docker.md`](docs/docker.md).
@@ -24,8 +23,8 @@ Optionally set `NEXT_PUBLIC_PROJECT_ID` (WalletConnect project ID) in `.env.loca
 required: leaving it at the placeholder (or empty) runs AppKit in a graceful degraded `basic`
 mode — injected-wallet connect fully works, only WalletConnect-cloud features (wallet directory
 images, remote config) are skipped. Get a real id at https://cloud.reown.com.
-Optionally set `NEXT_PUBLIC_AGGKIT_PROXY` (single-proxy modes) or `NEXT_PUBLIC_AGGKIT_BRIDGE_APIS`
-(per-network modes) to override `config.json` per environment:
+Optionally set `NEXT_PUBLIC_AGGKIT_PROXY` to override `config.json`'s `aggkitProxy` per
+environment:
 
 ```bash
 cp .env.example .env.local
@@ -62,7 +61,7 @@ node scripts/kurtosisDevnetEnv.mjs --enclave cdk
 It resolves the enclave's ephemeral ports live (`kurtosis port print`), then:
 
 - writes `config.json`'s `chains` with `DEVNET_L1`, `DEVNET_L2_001`, `DEVNET_L2_002` (for 2-L2 enclaves) and `appModes.configs.devnet` with the live L1/L2 RPC URLs, chain ids (read via `eth_chainId`), and bridge address (verified deployed via `eth_getCode`);
-- writes `.env.local` with `NEXT_PUBLIC_AGGKIT_BRIDGE_APIS` pointed at the enclave's CORS-safe haproxy proxy (same URL under both networkId keys, routed via `?network_id=`), `E2E_PRIVATE_KEY` set to a pre-funded devnet key, and for 2-L2 enclaves: `E2E_TO_CHAIN_ID` and `E2E_L2_CHAIN_IDS`.
+- writes `.env.local` with `NEXT_PUBLIC_AGGKIT_PROXY` pointed at the enclave's CORS-safe haproxy proxy (a single URL, fanned out over every network at runtime, routed via `?network_id=`), `E2E_PRIVATE_KEY` set to a pre-funded devnet key, and for 2-L2 enclaves: `E2E_TO_CHAIN_ID` and `E2E_L2_CHAIN_IDS`.
 
 Re-run it after every enclave recreate (ports are ephemeral). It fails with a clear error if the named enclave doesn't exist. Only supports Kurtosis-based devnets.
 
@@ -112,12 +111,17 @@ pnpm run validate:config
 
 # playwright.config.ts THROWS unless these are set, and globalSetup falls
 # back to deploying its own ERC20 via `sudo docker run` without
-# E2E_ERC20_ADDRESS. These are the exact literals .github/workflows/e2e.yaml
-# uses -- all public devnet fixtures, never secrets. Keep them in sync with
-# tests/devnet/summary.json (the workflow has a step that asserts this).
+# E2E_ERC20_ADDRESS. Chain ids/ERC20 address are the exact literals
+# .github/workflows/e2e.yaml uses -- all public devnet fixtures, never
+# secrets. Keep them in sync with tests/devnet/summary.json (the workflow has
+# a step that asserts this). NEXT_PUBLIC_AGGKIT_PROXY is this config surface
+# cleanup's field -- .github/workflows/e2e.yaml (owned by a later step in this
+# migration) still sets the retired NEXT_PUBLIC_AGGKIT_BRIDGE_APIS literal as
+# of this writing; use NEXT_PUBLIC_AGGKIT_PROXY here regardless, since
+# playwright.config.ts now requires it.
 export E2E_PRIVATE_KEY='0x12d7de8621a77640c9241b2595ba78ce443d05e94090365ab3bb5e19df82c625'
 export NEXT_PUBLIC_PROJECT_ID='ci-e2e'
-export NEXT_PUBLIC_AGGKIT_BRIDGE_APIS='{"1":"http://127.0.0.1:8555/aggkitapi","2":"http://127.0.0.1:8555/aggkitapi"}'
+export NEXT_PUBLIC_AGGKIT_PROXY='http://127.0.0.1:8555/aggkitapi'
 export E2E_FROM_CHAIN_ID='271828'
 export E2E_TO_CHAIN_ID='20201'
 export E2E_L2_CHAIN_IDS='20201,20202'
@@ -155,7 +159,7 @@ Security and ops notes:
 Required `.env.local` variables for E2E:
 
 - `E2E_PRIVATE_KEY`
-- `NEXT_PUBLIC_AGGKIT_BRIDGE_APIS` (devnet mode: written by `scripts/kurtosisDevnetEnv.mjs`)
+- `NEXT_PUBLIC_AGGKIT_PROXY` (devnet mode: written by `scripts/kurtosisDevnetEnv.mjs`)
 
 (`NEXT_PUBLIC_PROJECT_ID` is not used in E2E mode — `app/context/wallet.tsx` skips
 `createAppKit` entirely under `NEXT_PUBLIC_E2E_ENABLED`, using a mocked wallet provider instead.)
@@ -173,11 +177,13 @@ token if it's still live on the enclave, or deploying a fresh minimal ERC20
 `cast`/`forge` binaries) otherwise. Set `E2E_ERC20_ADDRESS` to skip this and
 use a specific address instead.
 
-The suite also runs a second, isolated Playwright project (`partial-failure`)
-with its own Next dev server on port 3100 and an extra bogus network id
-injected into `NEXT_PUBLIC_AGGKIT_BRIDGE_APIS`, exercising the S8
-partial-failure notice (`tests/bridge/partial-failure.spec.ts`) without
-disturbing the shared dev server the rest of the suite uses.
+`tests/bridge/partial-failure.spec.ts` (the S8 partial-failure notice) is currently
+**skipped**: it used to run under a second, isolated Playwright project with its own Next
+dev server and an extra bogus network id injected into the now-retired
+`NEXT_PUBLIC_AGGKIT_BRIDGE_APIS`. That per-network override was the only mechanism able to
+point one specific network at a bad URL while leaving the rest of the mode alone;
+`NEXT_PUBLIC_AGGKIT_PROXY`'s single-value fan-out cannot express that. See the spec file's
+top comment for the full explanation and follow-up.
 
 ### Devnet-Specific Tests
 

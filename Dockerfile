@@ -78,9 +78,9 @@ COPY . .
 ARG SDK_REF=unknown
 
 # A-1 §6.3(a) binding constraint: the builder must NOT set or forward
-# NEXT_PUBLIC_AGGKIT_PROXY or NEXT_PUBLIC_AGGKIT_BRIDGE_APIS. Both are
-# build-time-only affordances for local dev / Cloudflare Workers builds
-# (baked into the JS bundle by Next at build time); in a container the
+# NEXT_PUBLIC_AGGKIT_PROXY. It is a build-time-only affordance for local dev /
+# Cloudflare Workers builds (baked into the JS bundle by Next at build time);
+# in a container the
 # mounted config.json is the only configuration mechanism (see
 # entrypoint.sh). build:production also copies .env.production over
 # .env.local and deletes .env.staging -- .env.production contains only a

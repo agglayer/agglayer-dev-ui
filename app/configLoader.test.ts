@@ -5,7 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 // Same fixture shape as config/configLoader.test.mjs and
 // config/configValidator.test.mjs (design.md §4): a schema-valid,
-// semantically-valid devnet config with three chains and one enabled mode.
+// semantically-valid devnet config with three chains and one enabled mode,
+// using the single aggkitProxy field.
 const chain = (overrides: Partial<JsonConfig['chains'][string]> = {}) => ({
   id: 1,
   name: 'Chain',
@@ -19,7 +20,7 @@ const chain = (overrides: Partial<JsonConfig['chains'][string]> = {}) => ({
   ...overrides
 });
 
-const buildConfig = (aggkitBridgeApis: Record<string, string>): JsonConfig =>
+const buildConfig = (aggkitProxy?: string): JsonConfig =>
   ({
     externalLinks: { privacyPolicy: '', termsOfUse: '', contactSupport: '' },
     chains: {
@@ -33,7 +34,7 @@ const buildConfig = (aggkitBridgeApis: Record<string, string>): JsonConfig =>
         devnet: {
           label: 'Devnet',
           bridgeAddress: '0xC8cbEBf950B9Df44d987c8619f092beA980fF038',
-          aggkitBridgeApis,
+          ...(aggkitProxy === undefined ? {} : { aggkitProxy }),
           chainKeys: ['DEVNET_L1', 'DEVNET_L2_001', 'DEVNET_L2_002'],
           defaultFromChainKey: 'DEVNET_L1',
           defaultToChainKey: 'DEVNET_L2_001'
@@ -62,43 +63,33 @@ afterEach(() => {
 
 describe('fetchAppConfig — success (A-5 item 1)', () => {
   it('yields the expected, URL-normalized config from a valid served payload', async () => {
-    const served = buildConfig({ 1: 'https://aggkit.example/1', 2: 'https://aggkit.example/2' });
+    const served = buildConfig('https://aggkit.example/1');
     mockFetchOnce(() => okResponse(JSON.stringify(served)));
 
     const result = await fetchAppConfig({ origin: 'https://app.example' });
 
     expect(result.appModes.default).toBe('devnet');
     expect(Object.keys(result.chains)).toEqual(['DEVNET_L1', 'DEVNET_L2_001', 'DEVNET_L2_002']);
-    expect(result.appModes.configs.devnet.aggkitBridgeApis).toEqual({
-      1: 'https://aggkit.example/1',
-      2: 'https://aggkit.example/2'
-    });
+    expect(result.appModes.configs.devnet.aggkitProxy).toBe('https://aggkit.example/1');
     expect(fetch).toHaveBeenCalledWith(APP_CONFIG_URL, { cache: 'no-store' });
   });
 
-  it('resolves a relative aggkitBridgeApis entry against the given origin (design.md §5)', async () => {
-    const served = buildConfig({ 1: '/aggkitapi', 2: 'https://aggkit.example/2' });
+  it('resolves a relative aggkitProxy value against the given origin (design.md §5)', async () => {
+    const served = buildConfig('/aggkitapi');
     mockFetchOnce(() => okResponse(JSON.stringify(served)));
 
     const result = await fetchAppConfig({ origin: 'https://app.example' });
 
-    // Non-null: normalizeConfigOrThrow always resolves aggkitBridgeApis to a
-    // concrete (possibly empty) map, but the JsonAppModeConfig type keeps it
-    // optional since the field may be absent on the mode's raw JSON shape.
-    expect(result.appModes.configs.devnet.aggkitBridgeApis!['1']).toBe(
-      'https://app.example/aggkitapi'
-    );
+    expect(result.appModes.configs.devnet.aggkitProxy).toBe('https://app.example/aggkitapi');
   });
 
   it('defaults the origin to window.location.origin when none is passed', async () => {
-    const served = buildConfig({ 1: '/aggkitapi', 2: 'https://aggkit.example/2' });
+    const served = buildConfig('/aggkitapi');
     mockFetchOnce(() => okResponse(JSON.stringify(served)));
 
     const result = await fetchAppConfig();
 
-    expect(result.appModes.configs.devnet.aggkitBridgeApis!['1']).toBe(
-      `${window.location.origin}/aggkitapi`
-    );
+    expect(result.appModes.configs.devnet.aggkitProxy).toBe(`${window.location.origin}/aggkitapi`);
   });
 });
 
@@ -130,14 +121,15 @@ describe('fetchAppConfig — each failure mode surfaces a distinguishable error 
     await expect(fetchAppConfig()).rejects.toThrow(/config\.json schema validation failed:/);
   });
 
-  it('semantic violation: throws with the semantic validation message (reusing an E1 case)', async () => {
-    // Missing aggkitBridgeApis entry for DEVNET_L2_002 (networkId 2) --
-    // schema-valid, semantically invalid.
-    const served = buildConfig({ 1: 'https://aggkit.example/1' });
+  it('schema violation: throws for the removed aggkitBridgeApis map (unrecognized key)', async () => {
+    const served = buildConfig('https://aggkit.example/1');
+    (served.appModes.configs.devnet as { aggkitBridgeApis?: unknown }).aggkitBridgeApis = {
+      1: 'https://aggkit.example/1'
+    };
     mockFetchOnce(() => okResponse(JSON.stringify(served)));
 
     await expect(fetchAppConfig()).rejects.toThrow(
-      /config\.json semantic validation failed:\n- appModes\.configs\.devnet\.aggkitBridgeApis: missing entry for chain "DEVNET_L2_002" \(networkId 2\)/
+      /config\.json schema validation failed:\n- appModes\.configs\.devnet: Unrecognized key: "aggkitBridgeApis"/
     );
   });
 

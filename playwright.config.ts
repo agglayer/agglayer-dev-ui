@@ -8,7 +8,7 @@ loadEnvConfig(process.cwd(), true);
 
 const e2ePrivateKey = normalizeEnvValue(process.env.E2E_PRIVATE_KEY);
 const projectId = normalizeEnvValue(process.env.NEXT_PUBLIC_PROJECT_ID);
-const rawAggkitBridgeApis = normalizeEnvValue(process.env.NEXT_PUBLIC_AGGKIT_BRIDGE_APIS);
+const aggkitProxy = normalizeEnvValue(process.env.NEXT_PUBLIC_AGGKIT_PROXY);
 
 if (!isHexPrivateKey(e2ePrivateKey)) {
   throw new Error('Playwright E2E env invalid: set E2E_PRIVATE_KEY to a valid private key.');
@@ -18,18 +18,11 @@ if (!projectId) {
   throw new Error('Playwright E2E env invalid: set NEXT_PUBLIC_PROJECT_ID.');
 }
 
-if (!rawAggkitBridgeApis) {
+if (!aggkitProxy) {
   throw new Error(
-    'Playwright E2E env invalid: set NEXT_PUBLIC_AGGKIT_BRIDGE_APIS ' +
+    'Playwright E2E env invalid: set NEXT_PUBLIC_AGGKIT_PROXY ' +
       '(scripts/kurtosisDevnetEnv.mjs writes this for devnet mode; see README.md#testing).'
   );
-}
-
-let parsedAggkitBridgeApis: Record<string, string>;
-try {
-  parsedAggkitBridgeApis = JSON.parse(rawAggkitBridgeApis) as Record<string, string>;
-} catch {
-  throw new Error('Playwright E2E env invalid: NEXT_PUBLIC_AGGKIT_BRIDGE_APIS must be valid JSON.');
 }
 
 const e2eWalletAddress = privateKeyToAccount(e2ePrivateKey).address;
@@ -46,17 +39,6 @@ const commonE2EEnv = {
   NEXT_PUBLIC_E2E_PRIVATE_KEY: e2ePrivateKey,
   NEXT_PUBLIC_PROJECT_ID: projectId
 };
-
-const PARTIAL_FAILURE_PORT = 3100;
-// Extra bogus, unresolvable network injected only for the dedicated
-// "partial-failure" project's own dev server below -- see
-// tests/bridge/partial-failure.spec.ts and design.md §2.4 (partial fan-out
-// failure contract) / manual-validation.md §6 for the manually-verified
-// equivalent.
-const bogusAggkitBridgeApis = JSON.stringify({
-  ...parsedAggkitBridgeApis,
-  '999': 'http://127.0.0.1:1/aggkitapi'
-});
 
 export default defineConfig({
   // Look for test files in the "tests" directory, relative to this configuration file.
@@ -92,16 +74,7 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
-      // partial-failure.spec.ts needs its own dev server with a different
-      // NEXT_PUBLIC_AGGKIT_BRIDGE_APIS value (see the "partial-failure"
-      // project below) -- it can't run against this project's shared server.
-      testIgnore: [/partial-failure\.spec\.ts$/]
-    },
-    {
-      name: 'partial-failure',
-      use: { ...devices['Desktop Chrome'], baseURL: `http://localhost:${PARTIAL_FAILURE_PORT}` },
-      testMatch: [/partial-failure\.spec\.ts$/]
+      use: { ...devices['Desktop Chrome'] }
     }
   ],
   // Run your local dev server(s) before starting the tests.
@@ -111,22 +84,6 @@ export default defineConfig({
       env: commonE2EEnv,
       url: 'http://localhost:3000',
       // Always restart so the dev server picks up E2E-specific public env values.
-      reuseExistingServer: !process.env.CI
-    },
-    {
-      // Bypasses the `dev` script (which already chains the sync), so this
-      // command needs its own public/config.json sync -- see
-      // scripts/syncPublicConfig.mjs and design.md §1.4.
-      command: `node ./scripts/syncPublicConfig.mjs && pnpm exec next dev -p ${PARTIAL_FAILURE_PORT}`,
-      env: {
-        ...commonE2EEnv,
-        NEXT_PUBLIC_AGGKIT_BRIDGE_APIS: bogusAggkitBridgeApis,
-        // Next 16 refuses a second `next dev` sharing a distDir with a running
-        // one (per-distDir flock; see next.config.ts). Give this server its own
-        // distDir so it can run alongside the :3000 chromium-project server.
-        NEXT_DIST_DIR: '.next-partial-failure'
-      },
-      url: `http://localhost:${PARTIAL_FAILURE_PORT}`,
       reuseExistingServer: !process.env.CI
     }
   ]

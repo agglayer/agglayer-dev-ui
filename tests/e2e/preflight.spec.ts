@@ -24,20 +24,20 @@ test.skip(
   'Preflight checks (aggkit sync-status, devnet wallet funding) are devnet-specific; see the comment above.'
 );
 
-// The active app mode's aggkitBridgeApis already has any
-// NEXT_PUBLIC_AGGKIT_BRIDGE_APIS env override merged in (app/config.ts) --
-// reusing it here (rather than re-parsing the raw env var ourselves) keeps
-// this preflight check pointed at exactly what the app itself will call.
-// With the 2-L2 topology this has one entry per L2 networkId; devnet
-// gives both the same aggkit-proxy URL, but each is
+// The active app mode's aggkitBridgeApis is the runtime map fanned out from
+// config.json's aggkitProxy (any NEXT_PUBLIC_AGGKIT_PROXY env override
+// already merged in -- see app/config.ts) -- reusing it here (rather than
+// re-deriving it ourselves) keeps this preflight check pointed at exactly
+// what the app itself will call. With the 2-L2 topology this has one entry
+// per L2 networkId; devnet gives both the same aggkit-proxy URL, but each is
 // iterated separately below so a single dead per-network backend behind the
 // proxy is caught per-network rather than assumed identical.
 const { appModeConfig, defaultAppMode } = loadAppConfigForNode();
 const aggkitBridgeApiEntries = Object.entries(appModeConfig[defaultAppMode].aggkitBridgeApis);
 if (aggkitBridgeApiEntries.length === 0) {
   throw new Error(
-    `E2E preflight: no aggkitBridgeApis configured for app mode "${defaultAppMode}". ` +
-      'Run scripts/kurtosisDevnetEnv.mjs (devnet mode) or set NEXT_PUBLIC_AGGKIT_BRIDGE_APIS.'
+    `E2E preflight: no aggkit backend configured for app mode "${defaultAppMode}". ` +
+      'Run scripts/kurtosisDevnetEnv.mjs (devnet mode) or set NEXT_PUBLIC_AGGKIT_PROXY.'
   );
 }
 

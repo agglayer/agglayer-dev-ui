@@ -62,7 +62,7 @@ Two deployment paths exist. Pick one:
 ### Cloudflare Workers path
 
 1. Build/run: see [README §Quickstart](https://github.com/agglayer/agglayer-dev-ui/blob/feat/aggkit-backend/README.md#quickstart) (standard Next.js: `pnpm install && pnpm build && pnpm start`, Node 24).
-2. Configure `config.json` — full schema: [docs/config.md](https://github.com/agglayer/agglayer-dev-ui/blob/feat/aggkit-backend/docs/config.md). The essentials per environment: chain list (RPC URLs, bridge contract addresses) and the mode's `aggkitProxy` set to your reverse proxy's `/aggkitapi` origin (this guide's whole component picture is one `aggkit-proxy` per environment — that is the single-URL `aggkitProxy` field, not the per-network `aggkitBridgeApis` map that a topology with distinct per-network aggkit backends instead of a shared proxy would use).
+2. Configure `config.json` — full schema: [docs/config.md](https://github.com/agglayer/agglayer-dev-ui/blob/feat/aggkit-backend/docs/config.md). The essentials per environment: chain list (RPC URLs, bridge contract addresses) and the mode's `aggkitProxy` set to your reverse proxy's `/aggkitapi` origin (this guide's whole component picture is one `aggkit-proxy` per environment — that is exactly what the single-URL `aggkitProxy` field models).
 3. What the tracker UI does and how it polls (5s per pending row, stops on terminal states — relevant for capacity planning): [README §Bridge Tracking](https://github.com/agglayer/agglayer-dev-ui/blob/feat/aggkit-backend/README.md#bridge-tracking).
 
 ### Container path
@@ -75,7 +75,7 @@ Two deployment paths exist. Pick one:
    `config.json`'s `aggkitProxy` — point it at your reverse proxy's `/aggkitapi`
    origin the same way you would for the Cloudflare Workers path, either as an absolute
    URL or (if the container is itself behind a single-origin reverse proxy) an
-   origin-relative path like `/aggkitapi` (see [docs/config.md](./config.md#relative-aggkitproxy-and-aggkitbridgeapis-urls)).
+   origin-relative path like `/aggkitapi` (see [docs/config.md](./config.md#relative-aggkitproxy-urls)).
 
 ## 5. Smoke test
 

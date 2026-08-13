@@ -46,10 +46,7 @@ const validConfig: JsonConfig = {
       devnet: {
         label: 'Devnet',
         bridgeAddress: '0xC8cbEBf950B9Df44d987c8619f092beA980fF038',
-        aggkitBridgeApis: {
-          1: 'https://aggkit.example/1',
-          2: 'https://aggkit.example/2'
-        },
+        aggkitProxy: 'https://aggkit-proxy.example/aggkitapi',
         chainKeys: ['DEVNET_L1', 'DEVNET_L2_001', 'DEVNET_L2_002'],
         defaultFromChainKey: 'DEVNET_L1',
         defaultToChainKey: 'DEVNET_L2_001'

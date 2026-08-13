@@ -6,7 +6,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 // Playwright spec in this repo runs against (see playwright.config.ts). They
 // are driven by playwright.container.config.ts, a separate config file so
 // this suite never requires the devnet-only env vars
-// (E2E_PRIVATE_KEY/NEXT_PUBLIC_PROJECT_ID/NEXT_PUBLIC_AGGKIT_BRIDGE_APIS) that
+// (E2E_PRIVATE_KEY/NEXT_PUBLIC_PROJECT_ID/NEXT_PUBLIC_AGGKIT_PROXY) that
 // playwright.config.ts hard-requires at module scope, and never starts the
 // `next dev` webServers -- this suite's only dependency is Docker + the
 // prebuilt image.
