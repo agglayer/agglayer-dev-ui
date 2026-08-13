@@ -1,0 +1,20 @@
+=== Local C-1 image build (post aggkitBridgeApis removal, commit 8563dd4) ===
+IMAGE                     ID             DISK USAGE   CONTENT SIZE   EXTRA
+agglayer-dev-ui:c1-test   2e46e11cada9        106MB           29MB        
+
+=== Full container Playwright suite against tests/container/fixtures/{config-a,config-b,config-invalid-schema,config-invalid-structural}.json, migrated to aggkitProxy ===
+
+Running 6 tests using 1 worker
+
+
+  ✓  1 [container] › tests/container/container-app.spec.ts:199:7 › container: real built image, mounted config › same image digest is running as the C-1 artifact under test (no rebuild) (79ms)
+  ✓  2 [container] › tests/container/container-app.spec.ts:205:7 › container: real built image, mounted config › renders the app and reflects the mounted config.json chains, with no unexpected console noise (4.5s)
+
+  ✓  3 [container] › tests/container/container-config-swap.spec.ts:44:5 › restarting the same image with a different mounted config changes what the browser renders (2.2s)
+
+  ✓  4 [container] › tests/container/container-invalid-config.spec.ts:75:7 › browser-visible case: jq-valid, Zod-invalid config › container starts and serves the invalid file unmodified (proves the failure is browser-side, not container-side) (22ms)
+  ✓  5 [container] › tests/container/container-invalid-config.spec.ts:80:7 › browser-visible case: jq-valid, Zod-invalid config › the browser gate renders app-config-error, not a blank page, and never mounts the wallet UI (281ms)
+
+  ✓  6 [container] › tests/container/container-invalid-config.spec.ts:123:7 › container-fatal case: jq-structurally-invalid config (noted separately, not a browser test) › container refuses to start, exits 1, and never listens (627ms)
+
+  6 passed (13.0s)

@@ -1,0 +1,88 @@
+D0c evidence summary
+=====================
+
+D0c started as: "convert mainnet/testnet in config.json to aggkitProxy too,
+then publish a new image" (mirroring D0b's devnet conversion).
+
+Mid-step, the user/orchestrator changed scope: "no, you need to update
+kurtosis to work with the new config. Clean the old stuff for good." ->
+delete the aggkitBridgeApis map form from the schema entirely, not just stop
+using it in config.json. Two commits landed on feat/aggkit-backend as a
+result:
+
+  2da5992  feat(config): move mainnet and testnet onto aggkitProxy too
+           (original scope: config.json's 3 modes -> aggkitProxy; schema
+           still accepts the map form)
+  8563dd4  feat(config)!: remove the aggkitBridgeApis map form entirely
+           (scope-change: delete the map form, its schema field, its
+           validator cross-checks, and the NEXT_PUBLIC_AGGKIT_BRIDGE_APIS
+           env override; migrate every remaining consumer)
+
+Two GHCR images were published, one per commit (docker-publish.yaml
+dispatched twice). The FIRST is superseded -- use only the SECOND (final).
+
+Interim image  (commit 2da5992): dispatch-feat-aggkit-backend-2da599204c75-31729665112
+FINAL image    (commit 8563dd4): dispatch-feat-aggkit-backend-8563dd4ba876-31732860787
+  -- this is the tag to hand to K9 for kurtosis-cdk's
+     agglayer_dev_ui_aggkit_image bump.
+
+Files in this directory:
+  01-pnpm-run-check.txt                  -- validate:config + lint + typecheck + test, all green (103/103 tests)
+  02-config-json-three-modes.txt         -- final config.json's appModes: all 3 on aggkitProxy, 0 aggkitBridgeApis
+  03-validator-and-loader-tests.txt      -- config/configValidator.test.mjs + config/configLoader.test.mjs, rewritten
+                                             for the aggkitProxy-only schema, 31/31 pass (includes explicit tests
+                                             proving the schema now REJECTS aggkitBridgeApis as an unrecognized key)
+  04-schema-and-validator-failure-proofs.txt -- live demonstration against the real config.json: re-introducing
+                                             aggkitBridgeApis fails schema validation; a chainKeys check
+                                             (duplicate entry, unaffected by this migration) still fires
+  05-container-suite.txt                 -- local C-1 image rebuilt post-removal; full container Playwright
+                                             suite (6/6) against the migrated fixtures (config-a/b/invalid-*),
+                                             proving the schema + entrypoint contract still work end to end
+                                             with zero aggkitBridgeApis anywhere
+  06-ghcr-publish.txt                    -- both publish runs, the final tag, and a real anonymous docker pull
+                                             + running-container /config.json proof
+  07-pr24-ci-status.txt                  -- PR #24 checks after the push: "CI - lint / typecheck / test" green;
+                                             e2e fails, EXPECTED and analyzed (see file for why -- a cross-step
+                                             skew with .github/workflows/e2e.yaml, which is D1's territory and
+                                             was not touched)
+
+Acceptance criteria verdict (against the FINAL, scope-changed requirements):
+  1. pnpm run check passes -------------------------------------------- PASS (01)
+  2. All 3 modes use aggkitProxy; no aggkitBridgeApis in config.json --- PASS (02)
+  3. [SUPERSEDED by scope change] "schema still accepts the map form" -- the
+     user directed the map form be deleted entirely instead. It is provably
+     gone (04, and the dedicated "rejects ... as unrecognized key" tests in
+     03). kurtosis-cdk's template (a real, separate consumer) is documented
+     as a known, temporary, tracked skew until a kurtosis-side follow-up
+     (K9) migrates it -- not touched here per instruction.
+  4. Mutual-exclusion / chains<->map / duplicate-networkId checks -------- [SUPERSEDED]
+     these checks had nothing left to guard once the map form was deleted,
+     so they were deleted along with it (there is no "map form" state to be
+     mutually exclusive with, or to cross-check chains against). The
+     remaining chainKeys-based checks (duplicate/missing chain key, invalid
+     default chain key) are untouched and still failure-provable (04, 03).
+  5. Docs updated -------------------------------------------------------- PASS: docs/config.md, docs/docker.md,
+     docs/deployment.md, README.md all rewritten for aggkitProxy-only,
+     with an explicit "History" section on the retired map-form checks and
+     an explicit, prominent note on the kurtosis-cdk cross-repo skew.
+  6. New GHCR image, tag + run URL, proven anonymous pull ---------------- PASS (06); FINAL tag is
+     dispatch-feat-aggkit-backend-8563dd4ba876-31732860787
+  7. PR #24's "CI - lint / typecheck / test" still green ---------------- PASS (07)
+  8. Evidence under plans/snapshot-v2-aggkit-e2e/D0c-evidence/ ---------- this directory
+
+Also touched, not in the original ask but necessary consequences of "clean
+the old stuff for good" (judgement calls, flagged for the record):
+  - .github/workflows/deploy.yaml: NEXT_PUBLIC_AGGKIT_BRIDGE_APIS secret ref
+    -> NEXT_PUBLIC_AGGKIT_PROXY (only runs on push to main/dispatch, not PR
+    CI). If a real GH secret named NEXT_PUBLIC_AGGKIT_BRIDGE_APIS exists,
+    an org admin needs to add NEXT_PUBLIC_AGGKIT_PROXY as its replacement.
+  - playwright.config.ts: now requires NEXT_PUBLIC_AGGKIT_PROXY; the
+    "partial-failure" project (which depended on a per-network bogus
+    override only the retired map-form env var could express) was removed.
+    tests/bridge/partial-failure.spec.ts is skipped with a comment
+    explaining why and what a redesign would need -- flagged as a follow-up,
+    not invented here.
+  - .github/workflows/e2e.yaml: deliberately NOT touched (D1's territory).
+    It still sets the retired NEXT_PUBLIC_AGGKIT_BRIDGE_APIS literal, which
+    is why the e2e PR check fails (07). D1's own plan note already
+    anticipated updating this literal for a related reason.
