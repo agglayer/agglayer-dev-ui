@@ -55,8 +55,8 @@ exclusive fields — never both, and the validator rejects a mode declaring both
 
 | Field | Shape | Use when |
 |---|---|---|
-| `aggkitProxy` | A single URL (or origin-relative path) | One `aggkit-proxy` instance (PROXY + TRACKER components, see [`docs/deployment.md`](./deployment.md)) fronts **every** network in the mode, multiplexing by the `network_id` query parameter. This is devnet's shape. |
-| `aggkitBridgeApis` | An object mapping L2 network IDs (as strings) to aggkit REST base URLs | The mode's networks are served by **distinct** per-network aggkit backends — no single proxy in front of all of them. This is mainnet/testnet's shape (see the per-network example below). |
+| `aggkitProxy` | A single URL (or origin-relative path) | One `aggkit-proxy` instance (PROXY + TRACKER components, see [`docs/deployment.md`](./deployment.md)) fronts **every** network in the mode, multiplexing by the `network_id` query parameter. This is every shipped mode's shape — `mainnet`, `testnet`, and `devnet` all use `aggkitProxy` in the committed `config.json`. |
+| `aggkitBridgeApis` | An object mapping L2 network IDs (as strings) to aggkit REST base URLs | The mode's networks are served by **distinct** per-network aggkit backends — no single proxy in front of all of them. No shipped mode currently uses this shape, but the schema keeps accepting it: it is how an externally-generated `config.json` may still configure a mode (see the per-network example below), and kurtosis-cdk's generated dev-ui config template still emits it today. |
 
 Bridge API and proxy are not the same thing: a bridge API is one aggkit REST backend for
 one network, while a proxy is a superset that also fronts the tracker and multiplexes
@@ -93,7 +93,7 @@ one per network, and removes the class of bug where a newly-added L2's key is fo
 ### `aggkitBridgeApis` — distinct per-network backends
 
 Use this instead when a mode's networks are **not** behind one shared proxy — for
-example mainnet/testnet, where each L2 has its own standalone aggkit REST service:
+example a deployment where each L2 has its own standalone aggkit REST service:
 
 ```json
 {
@@ -106,9 +106,17 @@ example mainnet/testnet, where each L2 has its own standalone aggkit REST servic
 }
 ```
 
+No mode in this repo's committed `config.json` uses this shape today — `mainnet`,
+`testnet`, and `devnet` all use a single `aggkitProxy` (mainnet/testnet's are
+`PLACEHOLDER-*` values, since no real backend is deployed yet). The map form remains
+fully supported by the schema for **externally-generated** configs, most notably
+kurtosis-cdk's dev-ui config template (`static_files/additional_services/bridge-ui/aggkit-dev-ui-config.json.tmpl`),
+which still emits `aggkitBridgeApis` and is unaffected by this repo's shipped shape.
+
 `aggkitBridgeApis` may also be `{}`, or omitted entirely, to mark a mode "not yet
-configured" — see [Validation](#validation) below. That escape hatch is how the
-mainnet/testnet placeholder modes stay valid before real backend URLs exist.
+configured" — see [Validation](#validation) below. That escape hatch exists for a mode
+using the map form whose real backend URLs don't exist yet (this repo's own mainnet/testnet
+used it before switching to `aggkitProxy` placeholders — see the note above).
 
 ### Environment overrides
 
@@ -269,10 +277,7 @@ A mode is **enabled** only if `chainKeys` has at least two entries (bridging req
       "mainnet": {
         "label": "Mainnet",
         "bridgeAddress": "0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe",
-        "aggkitBridgeApis": {
-          "20": "https://katana-aggkit.example.com",
-          "22": "https://forknet-aggkit.example.com"
-        },
+        "aggkitProxy": "https://mainnet-aggkit-proxy.example.com",
         "chainKeys": ["MAINNET", "KATANA", "FORKNET"],
         "defaultFromChainKey": "MAINNET",
         "defaultToChainKey": "KATANA"
@@ -281,6 +286,11 @@ A mode is **enabled** only if `chainKeys` has at least two entries (bridging req
   }
 }
 ```
+
+(This mirrors the committed `config.json`'s shape, minus the real values — its `mainnet`
+and `testnet` `aggkitProxy` are `PLACEHOLDER-*` URLs, since no real aggkit-proxy is
+deployed for them yet. See [`aggkitProxy` vs. `aggkitBridgeApis`](#aggkit-bridge-apis-aggkitproxy-vs-aggkitbridgeapis)
+above for the `aggkitBridgeApis` map-form shape, still fully supported by the schema.)
 
 ### Mode config fields
 
@@ -420,9 +430,20 @@ rule matters for the map form because `networkId` — not the chain id — is wh
 networkId would collapse onto one backend and merge one chain's transactions into the
 other's, while still satisfying the first two map-form rules.
 
+**Since every shipped mode (`mainnet`, `testnet`, `devnet`) now uses `aggkitProxy`, none of
+these three map-form checks currently guard the committed `config.json` at all** — that is
+an inherent, by-design consequence of the single-proxy model, not a gap: with one backend
+fronting every network in a mode, there is no per-chain key agreement left to check. The
+checks remain fully active for any mode that *does* use the map form — in particular an
+externally-generated `config.json` (e.g. kurtosis-cdk's, which still emits
+`aggkitBridgeApis`) — where a genuine per-network wiring mistake is still possible and
+still caught.
+
 Setting a mode's `aggkitBridgeApis` to `{}`, or omitting it (and `aggkitProxy`) entirely,
-marks that mode "not yet configured" and exempts it from all three map-form rules. That is
-how the mainnet/testnet placeholder modes stay valid before real backend URLs exist.
+marks that mode "not yet configured" and exempts it from all three map-form rules. This
+repo's own `mainnet`/`testnet` used to rely on that escape hatch before switching to
+`aggkitProxy` placeholders (`PLACEHOLDER-mainnet-aggkit-proxy`, `PLACEHOLDER-testnet-aggkit-proxy`);
+the escape hatch itself remains available for any map-form mode without a real backend yet.
 
 If validation fails with errors like `Unrecognized key: "proofApiSuffix"` or `Unrecognized key: "bridgeHubApiBaseUrl"`, see the "Migration from Bridge Hub API" section above.
 

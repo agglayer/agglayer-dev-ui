@@ -77,9 +77,9 @@ Then open `http://localhost:8080`.
 The image ships with a **baked-in default config** — the repo's own committed root
 `config.json`, copied into the webroot at build time (`Dockerfile:106`
 `COPY --from=app-builder /app/out /usr/share/nginx/html`). That default's `mainnet` and
-`testnet` app modes point `aggkitBridgeApis` at placeholder hosts
-(`https://PLACEHOLDER-katana-aggkit`, `https://PLACEHOLDER-forknet-aggkit`,
-`https://PLACEHOLDER-bokuto-aggkit`) that do not resolve. The baked default **passes
+`testnet` app modes point `aggkitProxy` at placeholder hosts
+(`https://PLACEHOLDER-mainnet-aggkit-proxy`, `https://PLACEHOLDER-testnet-aggkit-proxy`)
+that do not resolve. The baked default **passes
 validation and starts the container, but does not work end-to-end** for any mode that
 talks to a real aggkit backend. If you run the image with no `-v` mount, the entrypoint
 prints a loud warning to this effect (`entrypoint.sh:89-97`) and serves the baked default
