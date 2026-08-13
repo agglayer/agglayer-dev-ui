@@ -40,35 +40,61 @@ could leave stale chain data resident from the previous config.
 Supporting files:
 - `config/configSchema.mjs` — shared Zod schema (single source of truth)
 - `config/configValidator.mjs` — schema + validator used by CLI and app startup
-- `config/configLoader.mjs` — shared browser-safe validate-and-normalize path (also resolves relative `aggkitBridgeApis` URLs — see below)
+- `config/configLoader.mjs` — shared browser-safe validate-and-normalize path (also resolves relative `aggkitProxy`/`aggkitBridgeApis` URLs — see below)
 - `config/configLoaderNode.mjs` — Node-side loader (CLI scripts, `scripts/syncPublicConfig.mjs`)
 - `app/configLoader.ts` — browser `fetch` adapter, used by the app's startup gate
 - `app/config.ts` — transforms JSON into typed objects
 - `app/types/config.ts` — type definitions
 - `app/utils/config.ts` — config utilities
 
-## Aggkit Bridge APIs
+## Aggkit Bridge APIs: `aggkitProxy` vs. `aggkitBridgeApis`
 
-The `aggkitBridgeApis` object in each app mode maps L2 network IDs (as strings) to aggkit REST base URLs. The app appends `/bridge/v1` to these URLs when making API requests.
+Each app mode's aggkit backend is configured with **exactly one** of two mutually
+exclusive fields — never both, and the validator rejects a mode declaring both (see
+[Validation](#validation) below):
+
+| Field | Shape | Use when |
+|---|---|---|
+| `aggkitProxy` | A single URL (or origin-relative path) | One `aggkit-proxy` instance (PROXY + TRACKER components, see [`docs/deployment.md`](./deployment.md)) fronts **every** network in the mode, multiplexing by the `network_id` query parameter. This is devnet's shape. |
+| `aggkitBridgeApis` | An object mapping L2 network IDs (as strings) to aggkit REST base URLs | The mode's networks are served by **distinct** per-network aggkit backends — no single proxy in front of all of them. This is mainnet/testnet's shape (see the per-network example below). |
+
+Bridge API and proxy are not the same thing: a bridge API is one aggkit REST backend for
+one network, while a proxy is a superset that also fronts the tracker and multiplexes
+every network behind one URL. The app appends `/bridge/v1` to whichever URL(s) it
+resolves for a mode when making bridge API requests.
+
+### `aggkitProxy` — one proxy for every network
 
 ```json
 {
   "appModes": {
     "configs": {
       "devnet": {
-        "aggkitBridgeApis": {
-          "1": "http://127.0.0.1:33460/aggkitapi",
-          "2": "http://127.0.0.1:33460/aggkitapi"
-        }
+        "aggkitProxy": "http://127.0.0.1:33460/aggkitapi"
       }
     }
   }
 }
 ```
 
-**Important:** In a multi-L2 devnet (2 L2s or more), the `aggkitBridgeApis` map can have **identical URLs for multiple network IDs**. This is correct and necessary — the URL points to the AggKit proxy, which multiplexes all networks via the `network_id` query parameter. The URL itself does not change per chain; the routing happens server-side based on the query parameter.
+This is the correct shape whenever one `aggkit-proxy` instance multiplexes every network
+in the mode (any number of L2s, including just one) — routing happens server-side, keyed
+off the `network_id` query parameter, so the URL itself never varies per chain. Internally,
+the app fans this single value out to every non-L1 chain's network ID before handing it to
+the SDK, so downstream code sees the same per-network shape either way (see `aggkitBridgeApis`
+below) — `aggkitProxy` only changes what you write in `config.json`, not how the app calls
+aggkit.
 
-For mainnet/testnet modes with distinct per-network bridge services, use distinct URLs per network:
+Prior to this field existing, a multi-L2 devnet had to hand-duplicate the same URL under
+every network ID in an `aggkitBridgeApis` map (e.g. `{"1": url, "2": url}`) to get this
+same multiplexing behavior — `aggkitProxy` says the same thing with one value instead of
+one per network, and removes the class of bug where a newly-added L2's key is forgotten.
+
+### `aggkitBridgeApis` — distinct per-network backends
+
+Use this instead when a mode's networks are **not** behind one shared proxy — for
+example mainnet/testnet, where each L2 has its own standalone aggkit REST service:
+
 ```json
 {
   "mainnet": {
@@ -80,37 +106,50 @@ For mainnet/testnet modes with distinct per-network bridge services, use distinc
 }
 ```
 
-If set, the `NEXT_PUBLIC_AGGKIT_BRIDGE_APIS` environment variable (a JSON string) overrides the active mode's `aggkitBridgeApis` for that build environment.
+`aggkitBridgeApis` may also be `{}`, or omitted entirely, to mark a mode "not yet
+configured" — see [Validation](#validation) below. That escape hatch is how the
+mainnet/testnet placeholder modes stay valid before real backend URLs exist.
 
-**Precedence, stated explicitly:** the served `config.json` is always the base. If
-`NEXT_PUBLIC_AGGKIT_BRIDGE_APIS` is set, it is shallow-merged over the active mode's
-`aggkitBridgeApis` (per network-id key), applied identically to every app mode. This
-merge happens at page-load time, inside the app's config bootstrap — not at build time —
-but the *value* of `NEXT_PUBLIC_AGGKIT_BRIDGE_APIS` itself is still fixed at build time,
-because Next.js inlines `NEXT_PUBLIC_*` variables into the JS bundle when it builds.
+### Environment overrides
 
-**This override is build-time only and has no effect in a prebuilt container image.** A
-published Docker image (see [`docs/docker.md`](./docker.md)) is built with
-`NEXT_PUBLIC_AGGKIT_BRIDGE_APIS` unset, so the merge is a structural no-op there — the
-mounted `config.json` is the *only* configuration mechanism in a container. This variable
-remains useful for local dev and Cloudflare Workers builds (see the Kurtosis setup below,
-and `.env.example`), where it is genuinely evaluated at each build.
+If set, `NEXT_PUBLIC_AGGKIT_PROXY` (a bare URL string) overrides a mode's `aggkitProxy`
+value, and `NEXT_PUBLIC_AGGKIT_BRIDGE_APIS` (a JSON string) overrides a mode's
+`aggkitBridgeApis` map, both for that build environment.
 
-### Relative `aggkitBridgeApis` URLs
+**Precedence, stated explicitly:** the served `config.json` is always the base.
+- `NEXT_PUBLIC_AGGKIT_PROXY`, if set, is fanned out over every non-L1 network ID in every
+  app mode, exactly like a mode's own `aggkitProxy` field would be.
+- `NEXT_PUBLIC_AGGKIT_BRIDGE_APIS`, if set, is then shallow-merged on top (per network-id
+  key), applied identically to every app mode — so it still wins per-key even over a
+  fanned-out `NEXT_PUBLIC_AGGKIT_PROXY` value, and remains the right tool for overriding
+  one specific network's URL.
 
-Each `aggkitBridgeApis` value may be an absolute URL, or a single origin-relative path
-(exactly one leading slash, e.g. `/aggkitapi`). A relative value is resolved against the
-page's own origin (`window.location.origin` in the browser) the moment the config is
-loaded, so every consumer downstream — the SDK, the tracker preflight check — only ever
-sees an absolute URL. Protocol-relative values (`//host`) are deliberately rejected: they
-would change origin, reintroducing the cross-origin surface that relative URLs exist to
-remove. This is the single-origin reverse-proxy path described in
-[`docs/deployment.md`](./deployment.md) (`/aggkitapi/* → aggkit-proxy`).
+Both merges happen at page-load time, inside the app's config bootstrap — not at build
+time — but the *value* of each variable is still fixed at build time, because Next.js
+inlines `NEXT_PUBLIC_*` variables into the JS bundle when it builds.
 
-Relative URLs are **only** accepted for `aggkitBridgeApis`. `rpcUrl`, `explorerUrl`, and
-`iconUrl` on a chain, and every `externalLinks` value, remain absolute-URL-only —
-wallets require an absolute RPC URL, and explorer/icon/external links are inherently
-cross-origin.
+**These overrides are build-time only and have no effect in a prebuilt container image.**
+A published Docker image (see [`docs/docker.md`](./docker.md)) is built with neither
+variable set, so the merge is a structural no-op there — the mounted `config.json` is
+the *only* configuration mechanism in a container. Both variables remain useful for local
+dev and Cloudflare Workers builds (see the Kurtosis setup below, and `.env.example`),
+where they are genuinely evaluated at each build.
+
+### Relative `aggkitProxy` and `aggkitBridgeApis` URLs
+
+Each `aggkitProxy` value, and each `aggkitBridgeApis` entry, may be an absolute URL, or a
+single origin-relative path (exactly one leading slash, e.g. `/aggkitapi`). A relative
+value is resolved against the page's own origin (`window.location.origin` in the browser)
+the moment the config is loaded, so every consumer downstream — the SDK, the tracker
+preflight check — only ever sees an absolute URL. Protocol-relative values (`//host`) are
+deliberately rejected: they would change origin, reintroducing the cross-origin surface
+that relative URLs exist to remove. This is the single-origin reverse-proxy path described
+in [`docs/deployment.md`](./deployment.md) (`/aggkitapi/* → aggkit-proxy`).
+
+Relative URLs are **only** accepted for `aggkitProxy` and `aggkitBridgeApis`. `rpcUrl`,
+`explorerUrl`, and `iconUrl` on a chain, and every `externalLinks` value, remain
+absolute-URL-only — wallets require an absolute RPC URL, and explorer/icon/external links
+are inherently cross-origin.
 
 ### Kurtosis / Local Devnet Setup
 
@@ -129,8 +168,8 @@ This script automatically:
 1. Discovers L2 suffixes from the enclave (defaults to `[001, 002]`, or override with `--l2-suffixes`)
 2. Resolves all RPC URLs (L1 and both L2s)
 3. Discovers the haproxy proxy service name (defaults to automatic discovery, or override with `--proxy-service`)
-4. Writes `config.json` with `chains.DEVNET_L1`, `chains.DEVNET_L2_001`, `chains.DEVNET_L2_002`
-5. Writes `.env.local` with `NEXT_PUBLIC_AGGKIT_BRIDGE_APIS` pointing to `{1, 2}` under the same proxy URL
+4. Writes `config.json` with `chains.DEVNET_L1`, `chains.DEVNET_L2_001`, `chains.DEVNET_L2_002`, and `appModes.configs.devnet.aggkitProxy` set to the enclave's live proxy URL
+5. Writes `.env.local` with `NEXT_PUBLIC_AGGKIT_BRIDGE_APIS` pointing every discovered L2 network ID at that same proxy URL, as a fallback override that takes effect at runtime (`app/config.ts` resolves either the map or `aggkitProxy` form to the identical shape, so this override still applies correctly regardless of which form `config.json` uses — see [Environment overrides](#environment-overrides) above)
 
 **Manual setup:**
 
@@ -140,9 +179,13 @@ kurtosis port print cdk agglayer-dev-ui-proxy-002 http
 # Example output: 127.0.0.1:33460
 ```
 
-2. Set `NEXT_PUBLIC_AGGKIT_BRIDGE_APIS` with all L2 network IDs pointing to the same proxy URL:
+2. Set `NEXT_PUBLIC_AGGKIT_PROXY` to the proxy URL (the simplest override, matching `config.json`'s own `aggkitProxy` field):
 ```bash
-# For a 2-L2 devnet (both under the same proxy):
+export NEXT_PUBLIC_AGGKIT_PROXY='http://127.0.0.1:33460/aggkitapi'
+```
+`NEXT_PUBLIC_AGGKIT_BRIDGE_APIS` (all L2 network IDs pointing to the same proxy URL) still
+works too, and is what the automated setup above writes:
+```bash
 export NEXT_PUBLIC_AGGKIT_BRIDGE_APIS='{"1":"http://127.0.0.1:33460/aggkitapi","2":"http://127.0.0.1:33460/aggkitapi"}'
 ```
 
@@ -245,7 +288,8 @@ A mode is **enabled** only if `chainKeys` has at least two entries (bridging req
 |-------|----------|-------------|
 | `label` | Yes | Display label in the mode switcher |
 | `bridgeAddress` | Yes | Bridge contract address |
-| `aggkitBridgeApis` | Yes | Object mapping L2 networkId (string keys) to aggkit REST base URLs (without `/bridge/v1` suffix) |
+| `aggkitProxy` | Conditional | A single URL fronting every network in this mode via one multiplexing aggkit-proxy. Mutually exclusive with `aggkitBridgeApis` — declare one or neither, never both (see [Validation](#validation)). |
+| `aggkitBridgeApis` | Conditional | Object mapping L2 networkId (string keys) to aggkit REST base URLs (without `/bridge/v1` suffix), for a mode with distinct per-network backends. Mutually exclusive with `aggkitProxy`. May be `{}` or omitted as the "not yet configured" escape hatch. |
 | `chainKeys` | Yes | Array of chain keys from `chains` (need >= 2 to enable) |
 | `defaultFromChainKey` | No | Default source chain (defaults to first in `chainKeys`) |
 | `defaultToChainKey` | No | Default destination chain (defaults to second in `chainKeys`) |
@@ -271,7 +315,7 @@ It is **byte-identical to the committed `config.json` except for a single key**:
 is already in the committed file:
 
 - `chains` already carries the three fixed-URL entries — `DEVNET_L1` (chain id `271828`), `DEVNET_L2_001` (`20201`), `DEVNET_L2_002` (`20202`) — with `rpcUrl` pointed at `http://127.0.0.1:8555/l1rpc`, `/l2rpc-001`, `/l2rpc-002` respectively. `8555` is the vendored compose bundle's fixed haproxy port (`DEVNET_PROXY_PORT`, see [`tests/devnet/README.md`](../tests/devnet/README.md) and kurtosis-cdk's [Anvil-Flavor DevUI Snapshot](https://github.com/0xPolygon/kurtosis-cdk/blob/feat/aggkit-bridge-ui-backend/docs/docs/advanced/anvil-devui-snapshot.md#the-bundle-contract) doc), never an ephemeral `kurtosis port print` value — this file is only valid against the fixed-port compose bundle, not a live Kurtosis enclave (use `scripts/kurtosisDevnetEnv.mjs` for that instead, which writes the committed `config.json` directly).
-- `appModes.configs.devnet.chainKeys` is already `["DEVNET_L1", "DEVNET_L2_001", "DEVNET_L2_002"]`, `bridgeAddress` is the deterministic devnet bridge address `0xC8cbEBf950B9Df44d987c8619f092beA980fF038`, and `aggkitBridgeApis` maps both L2 network ids (`1`, `2`) to `http://127.0.0.1:8555/aggkitapi` (the single aggkit-proxy origin, selected per-network via `?network_id=`).
+- `appModes.configs.devnet.chainKeys` is already `["DEVNET_L1", "DEVNET_L2_001", "DEVNET_L2_002"]`, `bridgeAddress` is the deterministic devnet bridge address `0xC8cbEBf950B9Df44d987c8619f092beA980fF038`, and `aggkitProxy` is `http://127.0.0.1:8555/aggkitapi` — the single aggkit-proxy origin fronting both L2s, selected per-network server-side via `?network_id=`.
 
 This file is committed and never overwrites `config.json` in git — the workflow copies it over the working tree's `config.json` inside the CI job only, and no step ever commits the result. Run `pnpm run validate:config -- config/config.ci.devnet.json` to validate it directly without copying it over `config.json` first.
 
@@ -288,13 +332,14 @@ Optional:
 | Variable | Description |
 |----------|-------------|
 | `NEXT_PUBLIC_PROJECT_ID` | WalletConnect project ID; optional, placeholder → graceful degradation (see README) |
-| `NEXT_PUBLIC_AGGKIT_BRIDGE_APIS` | JSON string (`{"networkId":"url"}`); overrides the active mode's `aggkitBridgeApis` from `config.json`. Used for ephemeral devnet proxies. **Build-time only — has no effect in a prebuilt container image** (see [`docs/docker.md`](./docker.md)); the mounted `config.json` is the only configuration mechanism there. |
+| `NEXT_PUBLIC_AGGKIT_PROXY` | Bare URL (or origin-relative path); fanned out over every non-L1 network ID in every app mode, overriding `aggkitProxy` (and, for a map-form mode, acting as if it declared `aggkitProxy` too). Used for ephemeral devnet proxies. **Build-time only — has no effect in a prebuilt container image** (see [`docs/docker.md`](./docker.md)); the mounted `config.json` is the only configuration mechanism there. |
+| `NEXT_PUBLIC_AGGKIT_BRIDGE_APIS` | JSON string (`{"networkId":"url"}`); shallow-merged over the active mode's resolved per-network map, applied identically to every app mode. Used for ephemeral devnet proxies, or to override one specific network's URL. **Build-time only — has no effect in a prebuilt container image** (see [`docs/docker.md`](./docker.md)); the mounted `config.json` is the only configuration mechanism there. |
 
 Set them in `.env.local`:
 ```bash
 cp .env.example .env.local
 # Optionally set NEXT_PUBLIC_PROJECT_ID (see README for degraded-mode behavior)
-# Optionally set NEXT_PUBLIC_AGGKIT_BRIDGE_APIS for devnet/kurtosis setups
+# Optionally set NEXT_PUBLIC_AGGKIT_PROXY or NEXT_PUBLIC_AGGKIT_BRIDGE_APIS for devnet/kurtosis setups
 ```
 
 ## Migration from Bridge Hub API (Old Config)
@@ -355,23 +400,29 @@ All absolute URLs in `config.json` must use the `http` or `https` scheme. Other 
 are rendered into links and passed to `window.open`, so a non-http(s) scheme there would
 be script execution in the app's origin.
 
-Beyond the schema, the validator enforces three cross-field rules per app mode so a
-mis-generated devnet config cannot silently drop a chain's data:
+Beyond the schema, the validator enforces one rule that applies to every mode regardless
+of which field it uses, plus three cross-field rules that apply only to a mode using
+`aggkitBridgeApis` (the per-network map form):
 
-| Rule | Rejected when |
-|---|---|
-| Every non-L1 chain has a backend | A chain in `chainKeys` with `networkId !== 0` has no `aggkitBridgeApis` entry for that networkId |
-| Every backend has a chain | An `aggkitBridgeApis` key matches no `networkId` among the mode's `chainKeys` |
-| networkIds are unique | Two chains in `chainKeys` share a `networkId` (L1 chains, `networkId 0`, are exempt) |
+| Rule | Applies to | Rejected when |
+|---|---|---|
+| `aggkitProxy` / `aggkitBridgeApis` are mutually exclusive | Every mode | A mode declares both a non-empty `aggkitProxy` and a non-empty `aggkitBridgeApis` |
+| Every non-L1 chain has a backend | `aggkitBridgeApis` only | A chain in `chainKeys` with `networkId !== 0` has no `aggkitBridgeApis` entry for that networkId |
+| Every backend has a chain | `aggkitBridgeApis` only | An `aggkitBridgeApis` key matches no `networkId` among the mode's `chainKeys` |
+| networkIds are unique | `aggkitBridgeApis` only | Two chains in `chainKeys` share a `networkId` (L1 chains, `networkId 0`, are exempt) |
 
-The third rule matters because `networkId` — not the chain id — is what keys
+The last three rules don't apply to a mode using `aggkitProxy`: one proxy fronts every
+network in the mode by construction, so per-chain key agreement is meaningless for it —
+this is exactly why a multi-L2 devnet used to hand-duplicate one URL under every network
+ID in an `aggkitBridgeApis` map before `aggkitProxy` existed. The "networkIds are unique"
+rule matters for the map form because `networkId` — not the chain id — is what keys
 `aggkitBridgeApis` and what the SDK keys its per-network clients by. Two chains sharing a
 networkId would collapse onto one backend and merge one chain's transactions into the
-other's, while still satisfying the first two rules.
+other's, while still satisfying the first two map-form rules.
 
-Setting a mode's `aggkitBridgeApis` to `{}` marks it "not yet configured" and exempts it
-from all three rules. That is how the mainnet/testnet placeholder modes stay valid before
-real proxy URLs exist.
+Setting a mode's `aggkitBridgeApis` to `{}`, or omitting it (and `aggkitProxy`) entirely,
+marks that mode "not yet configured" and exempts it from all three map-form rules. That is
+how the mainnet/testnet placeholder modes stay valid before real backend URLs exist.
 
 If validation fails with errors like `Unrecognized key: "proofApiSuffix"` or `Unrecognized key: "bridgeHubApiBaseUrl"`, see the "Migration from Bridge Hub API" section above.
 

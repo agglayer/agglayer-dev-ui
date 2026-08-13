@@ -44,6 +44,39 @@ export const resolveAggkitBridgeApiUrl = (value, origin, allowRelative) => {
 };
 
 /**
+ * Resolves both aggkit URL fields a mode config may carry: the per-network
+ * `aggkitBridgeApis` map (unchanged behavior) and the single `aggkitProxy`
+ * string (new). At most one is actually present per configSchema.mjs's
+ * mutual-exclusion check, but both are handled uniformly here rather than
+ * branching on which form this mode uses -- `aggkitBridgeApis` defaults to
+ * `{}` when absent (the "not configured" escape hatch, or a mode using
+ * `aggkitProxy` instead) so every mode config coming out of this function has
+ * a concrete (possibly empty) map, matching JsonAppModeConfig's shape before
+ * this normalization pass ran.
+ *
+ * @param {JsonConfig['appModes']['configs'][string]} modeConfig
+ * @param {string | undefined} origin
+ * @param {boolean} allowRelative
+ * @returns {JsonConfig['appModes']['configs'][string]}
+ */
+const resolveModeConfigAggkitUrls = (modeConfig, origin, allowRelative) => {
+  const resolvedAggkitBridgeApis = Object.fromEntries(
+    Object.entries(modeConfig.aggkitBridgeApis ?? {}).map(([networkIdKey, value]) => [
+      networkIdKey,
+      resolveAggkitBridgeApiUrl(value, origin, allowRelative)
+    ])
+  );
+
+  return {
+    ...modeConfig,
+    aggkitBridgeApis: resolvedAggkitBridgeApis,
+    ...(modeConfig.aggkitProxy === undefined
+      ? {}
+      : { aggkitProxy: resolveAggkitBridgeApiUrl(modeConfig.aggkitProxy, origin, allowRelative) })
+  };
+};
+
+/**
  * @param {JsonConfig} config
  * @param {string | undefined} origin
  * @param {boolean} allowRelative
@@ -53,15 +86,7 @@ const resolveAggkitBridgeApisInConfig = (config, origin, allowRelative) => {
   const resolvedConfigs = Object.fromEntries(
     Object.entries(config.appModes.configs).map(([modeKey, modeConfig]) => [
       modeKey,
-      {
-        ...modeConfig,
-        aggkitBridgeApis: Object.fromEntries(
-          Object.entries(modeConfig.aggkitBridgeApis).map(([networkIdKey, value]) => [
-            networkIdKey,
-            resolveAggkitBridgeApiUrl(value, origin, allowRelative)
-          ])
-        )
-      }
+      resolveModeConfigAggkitUrls(modeConfig, origin, allowRelative)
     ])
   );
 

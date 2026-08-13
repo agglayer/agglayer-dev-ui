@@ -113,4 +113,57 @@ describe('parseConfigOrThrow — chains <-> aggkitBridgeApis cross-field validat
 
     expect(() => parseConfigOrThrow(config)).not.toThrow();
   });
+
+  it('a mode using aggkitProxy is exempt from all three map-form cross-field checks', () => {
+    const config = buildConfig();
+    // Deliberately shaped so it WOULD fail E1 (missing entry) if the map-form
+    // checks ran against it -- proving they are skipped for aggkitProxy, not
+    // just coincidentally satisfied.
+    config.appModes.configs.devnet.aggkitBridgeApis = undefined;
+    config.appModes.configs.devnet.aggkitProxy = 'https://aggkit-proxy.example/aggkitapi';
+
+    expect(() => parseConfigOrThrow(config)).not.toThrow();
+  });
+});
+
+describe('parseConfigOrThrow — aggkitProxy / aggkitBridgeApis mutual exclusion', () => {
+  it('passes for a mode declaring only aggkitProxy', () => {
+    const config = buildConfig();
+    delete config.appModes.configs.devnet.aggkitBridgeApis;
+    config.appModes.configs.devnet.aggkitProxy = 'https://aggkit-proxy.example/aggkitapi';
+
+    expect(() => parseConfigOrThrow(config)).not.toThrow();
+  });
+
+  it("passes for a mode declaring only aggkitBridgeApis (buildConfig's default shape)", () => {
+    expect(() => parseConfigOrThrow(buildConfig())).not.toThrow();
+  });
+
+  it('the escape hatch (neither field configured) passes, both as {} and as fully omitted', () => {
+    const withEmptyMap = buildConfig();
+    withEmptyMap.appModes.configs.devnet.aggkitBridgeApis = {};
+    expect(() => parseConfigOrThrow(withEmptyMap)).not.toThrow();
+
+    const withOmittedField = buildConfig();
+    delete withOmittedField.appModes.configs.devnet.aggkitBridgeApis;
+    expect(() => parseConfigOrThrow(withOmittedField)).not.toThrow();
+  });
+
+  it('fails when a mode declares both aggkitProxy and a non-empty aggkitBridgeApis', () => {
+    const config = buildConfig();
+    config.appModes.configs.devnet.aggkitProxy = 'https://aggkit-proxy.example/aggkitapi';
+    // config.appModes.configs.devnet.aggkitBridgeApis is already non-empty from buildConfig().
+
+    expect(() => parseConfigOrThrow(config)).toThrow(
+      /aggkitProxy and aggkitBridgeApis are mutually exclusive/
+    );
+  });
+
+  it('allows aggkitProxy alongside an explicitly-empty aggkitBridgeApis ({}) -- {} never counts as "declared"', () => {
+    const config = buildConfig();
+    config.appModes.configs.devnet.aggkitProxy = 'https://aggkit-proxy.example/aggkitapi';
+    config.appModes.configs.devnet.aggkitBridgeApis = {};
+
+    expect(() => parseConfigOrThrow(config)).not.toThrow();
+  });
 });

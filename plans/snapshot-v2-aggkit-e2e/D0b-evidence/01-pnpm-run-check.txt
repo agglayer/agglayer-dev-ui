@@ -1,0 +1,42 @@
+
+> agglayer-dev-ui@0.1.0 check /home/brolygon/repos/agglayer/agglayer-dev-ui
+> pnpm run validate:config && pnpm run lint && pnpm run typecheck && pnpm run test
+
+
+> agglayer-dev-ui@0.1.0 validate:config /home/brolygon/repos/agglayer/agglayer-dev-ui
+> node ./scripts/validateConfig.mjs
+
+config.json validation passed
+
+> agglayer-dev-ui@0.1.0 lint /home/brolygon/repos/agglayer/agglayer-dev-ui
+> eslint .
+
+
+/home/brolygon/repos/agglayer/agglayer-dev-ui/app/utils/bigNumber.ts
+  1:8  warning  Using exported name 'BigNumber' as identifier for default export  import-x/no-named-as-default
+
+/home/brolygon/repos/agglayer/agglayer-dev-ui/app/utils/format.ts
+  1:13  warning  Using exported name 'BigNumber' as identifier for default export  import-x/no-named-as-default
+
+/home/brolygon/repos/agglayer/agglayer-dev-ui/app/utils/tokens.ts
+  5:8  warning  Using exported name 'BigNumber' as identifier for default export  import-x/no-named-as-default
+
+✖ 3 problems (0 errors, 3 warnings)
+
+
+> agglayer-dev-ui@0.1.0 typecheck /home/brolygon/repos/agglayer/agglayer-dev-ui
+> tsc --noEmit
+
+
+> agglayer-dev-ui@0.1.0 test /home/brolygon/repos/agglayer/agglayer-dev-ui
+> vitest run
+
+
+ RUN  v4.1.6 /home/brolygon/repos/agglayer/agglayer-dev-ui
+
+
+ Test Files  14 passed (14)
+      Tests  114 passed (114)
+   Start at  17:29:43
+   Duration  2.22s (transform 1.09s, setup 0ms, import 4.11s, tests 572ms, environment 6.78s)
+

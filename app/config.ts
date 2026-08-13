@@ -4,6 +4,7 @@ import type {
   AutoclaimRouteConfig,
   ChainEntry,
   JsonAggkitBridgeApis,
+  JsonAppModeConfig,
   JsonConfig,
   RouteType
 } from '@/app/types/config';
@@ -12,7 +13,7 @@ import type { Chain } from 'wagmi/chains';
 import { buildWagmiChain, createChainEntry, toNonEmptyChainArray } from '@/app/utils/config';
 import { APP_MODES } from '@/config/appModes.mjs';
 import { resolveAggkitBridgeApiUrl } from '@/config/configLoader.mjs';
-import { aggkitBridgeApisSchema } from '@/config/configSchema.mjs';
+import { aggkitBridgeApisSchema, aggkitProxySchema } from '@/config/configSchema.mjs';
 
 // Per-route autoclaim UX defaults. config.json's optional `autoclaim` block
 // overrides these per route; any omitted route (or omitted waitForAutoclaimMs)
@@ -46,20 +47,23 @@ export type ResolvedAppConfig = {
   defaultWagmiChain: Chain;
 };
 
-// NEXT_PUBLIC_AGGKIT_BRIDGE_APIS is inlined by Next at build time, so it can
-// only ever carry a build-environment value (dev / Cloudflare) -- it is
-// structurally absent from a published image (design.md §6). window is only
-// available once this runs in the browser (AppConfigGate's effect, or a
-// Playwright-driven page); the Node bootstrap (tests/e2e/appConfig.ts) has no
-// window, so a relative override value there resolves to `undefined` and
-// resolveAggkitBridgeApiUrl throws loudly rather than silently misresolving.
+// NEXT_PUBLIC_AGGKIT_BRIDGE_APIS / NEXT_PUBLIC_AGGKIT_PROXY are inlined by Next
+// at build time, so they can only ever carry a build-environment value (dev /
+// Cloudflare) -- both are structurally absent from a published image (design.md
+// §6). window is only available once this runs in the browser (AppConfigGate's
+// effect, or a Playwright-driven page); the Node bootstrap
+// (tests/e2e/appConfig.ts) has no window, so a relative override value there
+// resolves to `undefined` and resolveAggkitBridgeApiUrl throws loudly rather
+// than silently misresolving.
 const resolveEnvOrigin = (): string | undefined =>
   typeof window === 'undefined' ? undefined : window.location.origin;
 
 // Devnet's aggkit REST port is ephemeral per enclave recreate (kurtosis assigns
 // it at runtime); this env var lets a bring-up script inject the live proxy
 // URL without editing config.json. Keyed by L2 networkId, same shape as
-// config.json's per-mode `aggkitBridgeApis`.
+// config.json's per-mode `aggkitBridgeApis`. Successor: NEXT_PUBLIC_AGGKIT_PROXY
+// below, for a mode using the single-proxy `aggkitProxy` field instead -- this
+// override remains for modes using the per-network map form.
 const resolveAggkitBridgeApisOverride = (): JsonAggkitBridgeApis | undefined => {
   const envOverride = process.env.NEXT_PUBLIC_AGGKIT_BRIDGE_APIS?.trim();
   if (!envOverride) return undefined;
@@ -88,11 +92,57 @@ const resolveAggkitBridgeApisOverride = (): JsonAggkitBridgeApis | undefined => 
   );
 };
 
-const resolveAggkitBridgeApis = (
-  modeAggkitBridgeApis: JsonAggkitBridgeApis,
+// Successor to NEXT_PUBLIC_AGGKIT_BRIDGE_APIS for a mode using the single-proxy
+// `aggkitProxy` field: a bare URL (or origin-relative path), not JSON, since
+// there is only one value to inject. Used the same way -- e.g. a devnet
+// bring-up script overriding config.json's baked-in proxy URL with the live
+// enclave's ephemeral port.
+const resolveAggkitProxyOverride = (): string | undefined => {
+  const envOverride = process.env.NEXT_PUBLIC_AGGKIT_PROXY?.trim();
+  if (!envOverride) return undefined;
+
+  const parsed = aggkitProxySchema.safeParse(envOverride);
+  if (!parsed.success) {
+    throw new Error(
+      'APP_CONFIG_INVALID: NEXT_PUBLIC_AGGKIT_PROXY must be an absolute http(s) URL or a ' +
+        'single origin-relative path'
+    );
+  }
+
+  const origin = resolveEnvOrigin();
+  return resolveAggkitBridgeApiUrl(parsed.data, origin, false);
+};
+
+/**
+ * Builds the resolved, per-networkId aggkitBridgeApis map every downstream
+ * consumer (AggkitBridgeAggregator, app/utils/appMode.ts, ...) expects,
+ * regardless of which form (aggkitProxy or aggkitBridgeApis) this mode's
+ * config.json entry actually declares -- that distinction exists only in the
+ * JSON config; the runtime shape stays a single Record<number, string> so it
+ * never has to ripple past this function.
+ *
+ * A proxy override (env or config.json's own aggkitProxy) is fanned out across
+ * every non-L1 networkId this mode's chains use -- exactly the shape devnet's
+ * config.json used to hand-duplicate under aggkitBridgeApis. The per-network
+ * map override, when set, is then shallow-merged on top per networkId
+ * (unchanged precedence from before aggkitProxy existed), so an operator
+ * overriding one specific network's URL still works even when the mode's base
+ * is a fanned-out proxy.
+ */
+const buildAggkitBridgeApisMap = (
+  modeConfigJson: JsonAppModeConfig,
+  nonL1NetworkIds: number[],
+  aggkitProxyOverride: string | undefined,
   aggkitBridgeApisOverride: JsonAggkitBridgeApis | undefined
 ): Record<number, string> => {
-  const merged = { ...modeAggkitBridgeApis, ...aggkitBridgeApisOverride };
+  const effectiveProxy = aggkitProxyOverride ?? modeConfigJson.aggkitProxy;
+
+  const baseAggkitBridgeApis: JsonAggkitBridgeApis =
+    effectiveProxy === undefined
+      ? (modeConfigJson.aggkitBridgeApis ?? {})
+      : Object.fromEntries(nonL1NetworkIds.map((networkId) => [String(networkId), effectiveProxy]));
+
+  const merged = { ...baseAggkitBridgeApis, ...aggkitBridgeApisOverride };
   return Object.fromEntries(
     Object.entries(merged).map(([networkId, url]) => [Number(networkId), url])
   );
@@ -126,6 +176,7 @@ const buildModeConfig = (
   modeKey: string,
   configJson: JsonConfig,
   chainRegistry: Record<string, ChainEntry>,
+  aggkitProxyOverride: string | undefined,
   aggkitBridgeApisOverride: JsonAggkitBridgeApis | undefined
 ): AppModeConfig => {
   const modeConfigJson = configJson.appModes.configs[modeKey];
@@ -134,12 +185,19 @@ const buildModeConfig = (
   }
 
   const chains = modeConfigJson.chainKeys.map((chainKey) => chainRegistry[chainKey].app);
+  // L1 (networkId 0) never keys an aggkitBridgeApis entry (design.md §1.2) --
+  // only non-L1 networks get fanned out when this mode uses aggkitProxy.
+  const nonL1NetworkIds = chains
+    .filter((chain) => chain.networkId !== 0)
+    .map((chain) => chain.networkId);
 
   const base = {
     label: modeConfigJson.label,
     bridgeAddress: modeConfigJson.bridgeAddress,
-    aggkitBridgeApis: resolveAggkitBridgeApis(
-      modeConfigJson.aggkitBridgeApis,
+    aggkitBridgeApis: buildAggkitBridgeApisMap(
+      modeConfigJson,
+      nonL1NetworkIds,
+      aggkitProxyOverride,
       aggkitBridgeApisOverride
     )
   };
@@ -184,13 +242,14 @@ const resolveDefaultWagmiChain = (
 
 /**
  * Pure function of a schema-valid, URL-normalized JsonConfig (see
- * config/configLoader.mjs) plus process.env.NEXT_PUBLIC_AGGKIT_BRIDGE_APIS
- * (unchanged precedence: build-time env shallow-merges over the served
- * config, per mode -- design.md §6.2). Exported separately from
- * `initAppConfig` so tests can exercise the derivations and the precedence
- * rule without touching the module store.
+ * config/configLoader.mjs) plus process.env.NEXT_PUBLIC_AGGKIT_PROXY and
+ * process.env.NEXT_PUBLIC_AGGKIT_BRIDGE_APIS (unchanged precedence:
+ * build-time env shallow-merges over the served config, per mode -- design.md
+ * §6.2). Exported separately from `initAppConfig` so tests can exercise the
+ * derivations and the precedence rule without touching the module store.
  */
 export const buildAppConfig = (configJson: JsonConfig): ResolvedAppConfig => {
+  const aggkitProxyOverride = resolveAggkitProxyOverride();
   const aggkitBridgeApisOverride = resolveAggkitBridgeApisOverride();
 
   const chainRegistry: Record<string, ChainEntry> = Object.fromEntries(
@@ -211,7 +270,13 @@ export const buildAppConfig = (configJson: JsonConfig): ResolvedAppConfig => {
   const appModeConfig: Record<AppMode, AppModeConfig> = Object.fromEntries(
     APP_MODES.map((mode) => [
       mode,
-      buildModeConfig(mode, configJson, chainRegistry, aggkitBridgeApisOverride)
+      buildModeConfig(
+        mode,
+        configJson,
+        chainRegistry,
+        aggkitProxyOverride,
+        aggkitBridgeApisOverride
+      )
     ])
   ) as Record<AppMode, AppModeConfig>;
 

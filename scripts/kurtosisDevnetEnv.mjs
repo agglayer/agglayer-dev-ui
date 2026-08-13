@@ -290,16 +290,16 @@ const upsertConfigJsonDevnet = async ({ l1RpcUrl, l1ChainId, l2Chains, aggkitBri
   configJson.appModes.configs.devnet = {
     label: 'Devnet',
     bridgeAddress: BRIDGE_ADDRESS,
-    // All discovered networkIds -> the SAME proxy URL: one
-    // multiplexing aggkit-proxy instance fronts every network, distinguished
-    // by the `?network_id=` query param on each request, not by host.
-    // Also kept in sync here as a fallback; NEXT_PUBLIC_AGGKIT_BRIDGE_APIS
-    // (written to .env.local below) is the value that actually takes effect
-    // at runtime per the S7 config design (env override merges over
-    // config.json in app/config.ts).
-    aggkitBridgeApis: Object.fromEntries(
-      l2Chains.map((l2) => [String(l2.networkId), aggkitBridgeApiUrl])
-    ),
+    // One multiplexing aggkit-proxy instance fronts every network,
+    // distinguished by the `?network_id=` query param on each request, not by
+    // host -- so it is a single URL (`aggkitProxy`), not a per-networkId map
+    // hand-duplicated under every discovered L2's key (that duplication is
+    // exactly what this field replaced; see docs/config.md). Also kept in
+    // sync here as a fallback; NEXT_PUBLIC_AGGKIT_BRIDGE_APIS (written to
+    // .env.local below) is the value that actually takes effect at runtime
+    // per the S7 config design (env override merges over config.json in
+    // app/config.ts).
+    aggkitProxy: aggkitBridgeApiUrl,
     chainKeys: ['DEVNET_L1', ...l2Chains.map((l2) => l2.chainKey)],
     defaultFromChainKey: 'DEVNET_L1',
     // Always the lowest discovered suffix (l2Chains is sorted ascending).
@@ -315,8 +315,11 @@ const upsertConfigJsonDevnet = async ({ l1RpcUrl, l1ChainId, l2Chains, aggkitBri
   configJson.appModes.default = 'devnet';
 
   // Fail loudly before writing anything if this would produce an invalid
-  // config.json (same schema + semantic validation the app runs at startup,
-  // now including configValidator.mjs's chains<->aggkitBridgeApis cross-check).
+  // config.json (same schema + semantic validation the app runs at startup;
+  // devnet uses aggkitProxy, so configValidator.mjs's chains<->aggkitBridgeApis
+  // cross-check doesn't apply to it -- a single proxy fronts every network by
+  // construction -- but the schema's aggkitProxy/aggkitBridgeApis
+  // mutual-exclusion check still runs).
   parseConfigOrThrow(configJson, { sourceName: 'config.json (kurtosisDevnetEnv.mjs preview)' });
 
   // Format through the repo's own prettier config (not a bare
@@ -370,8 +373,9 @@ const upsertEnvLocal = ({ l1ChainId, l2Chains, aggkitBridgeApiUrl }) => {
       : '# NEXT_PUBLIC_PROJECT_ID preserved from existing .env.local',
     `NEXT_PUBLIC_PROJECT_ID=${projectId}`,
     '',
-    '# Overrides config.json devnet.aggkitBridgeApis with the live enclave proxy URL',
-    '# Keyed by L2 networkId; the SDK client appends /bridge/v1.',
+    '# Overrides config.json devnet.aggkitProxy with the live enclave proxy URL, fanned out',
+    '# per L2 networkId (app/config.ts resolves either form to this same shape); the SDK',
+    '# client appends /bridge/v1.',
     `NEXT_PUBLIC_AGGKIT_BRIDGE_APIS=${aggkitBridgeApis}`,
     '',
     '# Funded devnet key (kurtosis-cdk l2_admin key, funded on every L2) for E2E use.',
