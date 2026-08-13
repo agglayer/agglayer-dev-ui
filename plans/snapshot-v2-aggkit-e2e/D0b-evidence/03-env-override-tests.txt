@@ -1,0 +1,26 @@
+
+ RUN  v4.1.6 /home/brolygon/repos/agglayer/agglayer-dev-ui
+
+ ✓ app/config.test.ts > buildAppConfig — loader success (A-5 item 1) > derives the expected chain registry and mode configs from a valid config 4ms
+ ✓ app/config.test.ts > buildAppConfig — env override precedence (A-1 §6, A-5 item 4) > shallow-merges NEXT_PUBLIC_AGGKIT_BRIDGE_APIS over the served config, per network id 2ms
+ ✓ app/config.test.ts > buildAppConfig — env override precedence (A-1 §6, A-5 item 4) > falls back entirely to the served config when no override is set 0ms
+ ✓ app/config.test.ts > buildAppConfig — env override precedence (A-1 §6, A-5 item 4) > throws APP_CONFIG_INVALID for a malformed override rather than silently ignoring it 1ms
+ ✓ app/config.test.ts > buildAppConfig — aggkitProxy fan-out (D0b) > fans a single aggkitProxy value out to every non-L1 chain networkId in the mode 0ms
+ ✓ app/config.test.ts > buildAppConfig — aggkitProxy fan-out (D0b) > never fans the proxy value out under the L1 networkId (0) 0ms
+ ✓ app/config.test.ts > buildAppConfig — NEXT_PUBLIC_AGGKIT_PROXY override precedence (D0b) > overrides every non-L1 networkId with the single override URL 0ms
+ ✓ app/config.test.ts > buildAppConfig — NEXT_PUBLIC_AGGKIT_PROXY override precedence (D0b) > falls back to the served aggkitProxy value when no override is set 0ms
+ ✓ app/config.test.ts > buildAppConfig — NEXT_PUBLIC_AGGKIT_PROXY override precedence (D0b) > throws APP_CONFIG_INVALID for a malformed override (not an absolute URL or relative path) 1ms
+ ✓ app/config.test.ts > buildAppConfig — NEXT_PUBLIC_AGGKIT_PROXY override precedence (D0b) > applies identically to a map-form mode too (same "applied to every mode" precedent as NEXT_PUBLIC_AGGKIT_BRIDGE_APIS) 0ms
+ ✓ app/config.test.ts > buildAppConfig — NEXT_PUBLIC_AGGKIT_PROXY override precedence (D0b) > NEXT_PUBLIC_AGGKIT_BRIDGE_APIS still wins per-key when both overrides are set, since the map override merges on top 0ms
+ ✓ app/config.test.ts > the module store > is unready before initAppConfig and ready after 0ms
+ ✓ app/config.test.ts > the module store > serves accessors from the config passed to initAppConfig 0ms
+ ✓ app/config.test.ts > the module store > resetAppConfig clears the store back to not-loaded 0ms
+ ✓ app/config.test.ts > regression guard: no module-scope config reads (A-5 item 6) > importing the module with no served config does not throw 4ms
+ ✓ app/config.test.ts > regression guard: no module-scope config reads (A-5 item 6) > calling an accessor before init throws the documented APP_CONFIG_NOT_LOADED error 4ms
+ ✓ app/config.test.ts > regression guard: no module-scope config reads (A-5 item 6) > a fresh module becomes ready once initAppConfig is called on it 3ms
+
+ Test Files  1 passed (1)
+      Tests  17 passed (17)
+   Start at  17:29:53
+   Duration  707ms (transform 61ms, setup 0ms, import 122ms, tests 24ms, environment 430ms)
+

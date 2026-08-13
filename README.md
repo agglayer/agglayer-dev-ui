@@ -12,13 +12,20 @@ pnpm install
 
 2) Configure the app:
 
-Edit `config.json` at the project root to set chains, app modes, aggkit bridge APIs, and external links. See [`docs/config.md`](docs/config.md) for the full guide. For deploying the UI alongside `aggkit-proxy` (DevOps-facing, incl. rollback), see [`docs/deployment.md`](docs/deployment.md). To run the app as a self-hosted Docker container instead, see [`docs/docker.md`](docs/docker.md).
+Edit `config.json` at the project root to set chains, app modes (each pointed at either a
+single `aggkitProxy` or a per-network `aggkitBridgeApis` map — see
+[`docs/config.md`](docs/config.md#aggkit-bridge-apis-aggkitproxy-vs-aggkitbridgeapis) for
+which one applies to your deployment), and external links. See
+[`docs/config.md`](docs/config.md) for the full guide. For deploying the UI alongside
+`aggkit-proxy` (DevOps-facing, incl. rollback), see [`docs/deployment.md`](docs/deployment.md).
+To run the app as a self-hosted Docker container instead, see [`docs/docker.md`](docs/docker.md).
 
 Optionally set `NEXT_PUBLIC_PROJECT_ID` (WalletConnect project ID) in `.env.local`. It is not
 required: leaving it at the placeholder (or empty) runs AppKit in a graceful degraded `basic`
 mode — injected-wallet connect fully works, only WalletConnect-cloud features (wallet directory
 images, remote config) are skipped. Get a real id at https://cloud.reown.com.
-Optionally set `NEXT_PUBLIC_AGGKIT_BRIDGE_APIS` to override `config.json` per environment:
+Optionally set `NEXT_PUBLIC_AGGKIT_PROXY` (single-proxy modes) or `NEXT_PUBLIC_AGGKIT_BRIDGE_APIS`
+(per-network modes) to override `config.json` per environment:
 
 ```bash
 cp .env.example .env.local

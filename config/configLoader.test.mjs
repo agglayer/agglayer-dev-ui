@@ -212,6 +212,73 @@ describe('normalizeConfigOrThrow — URL normalization (design.md §5, A-5 item 
   });
 });
 
+// buildConfig() always sets `aggkitBridgeApis`, so these mutate the built
+// config to switch that mode to the aggkitProxy (single-URL) form instead --
+// mirrors what devnet's real config.json now uses (see docs/config.md).
+const buildConfigWithProxy = (aggkitProxy) => {
+  const config = buildConfig(undefined);
+  delete config.appModes.configs.devnet.aggkitBridgeApis;
+  config.appModes.configs.devnet.aggkitProxy = aggkitProxy;
+  return config;
+};
+
+describe('normalizeConfigOrThrow — aggkitProxy URL normalization', () => {
+  it('resolves a relative aggkitProxy value against the given origin', () => {
+    const result = normalizeConfigOrThrow(buildConfigWithProxy('/aggkitapi'), {
+      sourceName: 'config.json',
+      origin: 'https://served-from.example'
+    });
+
+    expect(result.appModes.configs.devnet.aggkitProxy).toBe(
+      'https://served-from.example/aggkitapi'
+    );
+  });
+
+  it('passes an already-absolute aggkitProxy value through unchanged', () => {
+    const result = normalizeConfigOrThrow(
+      buildConfigWithProxy('https://aggkit-proxy.example/aggkitapi'),
+      {
+        sourceName: 'config.json',
+        origin: 'https://served-from.example'
+      }
+    );
+
+    expect(result.appModes.configs.devnet.aggkitProxy).toBe(
+      'https://aggkit-proxy.example/aggkitapi'
+    );
+  });
+
+  it('defaults aggkitBridgeApis to {} for a mode using aggkitProxy, rather than leaving it undefined', () => {
+    const result = normalizeConfigOrThrow(
+      buildConfigWithProxy('https://aggkit-proxy.example/aggkitapi'),
+      {
+        sourceName: 'config.json',
+        origin: 'https://served-from.example'
+      }
+    );
+
+    expect(result.appModes.configs.devnet.aggkitBridgeApis).toEqual({});
+  });
+
+  it('leaves aggkitProxy untouched when the field is absent (map-form mode)', () => {
+    const result = normalizeConfigOrThrow(
+      buildConfig({ 1: 'https://aggkit.example/1', 2: 'https://aggkit.example/2' }),
+      { sourceName: 'config.json', origin: 'https://served-from.example' }
+    );
+
+    expect(result.appModes.configs.devnet.aggkitProxy).toBeUndefined();
+  });
+
+  it('rejects a protocol-relative aggkitProxy URL at the schema level, same as aggkitBridgeApis', () => {
+    expect(() =>
+      normalizeConfigOrThrow(buildConfigWithProxy('//evil.example'), {
+        sourceName: 'config.json',
+        origin: 'https://served-from.example'
+      })
+    ).toThrow(/config\.json schema validation failed:\n- appModes\.configs\.devnet\.aggkitProxy/);
+  });
+});
+
 // X-1: the protocol-relative rejection must not live only in the schema.
 // resolveAggkitBridgeApiUrl is exported and is called directly by
 // app/config.ts's NEXT_PUBLIC_AGGKIT_BRIDGE_APIS path, so it carries its own

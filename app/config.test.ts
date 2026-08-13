@@ -134,6 +134,113 @@ describe('buildAppConfig — env override precedence (A-1 §6, A-5 item 4)', () 
   });
 });
 
+// Same fixture as buildConfigJson(), but devnet uses the single-proxy
+// aggkitProxy field instead of a per-network aggkitBridgeApis map -- the
+// shape devnet's real config.json now uses (see docs/config.md).
+const buildConfigJsonWithProxy = (aggkitProxy: string): JsonConfig => {
+  const config = buildConfigJson();
+  delete (config.appModes.configs.devnet as { aggkitBridgeApis?: unknown }).aggkitBridgeApis;
+  (config.appModes.configs.devnet as { aggkitProxy?: string }).aggkitProxy = aggkitProxy;
+  return config;
+};
+
+describe('buildAppConfig — aggkitProxy fan-out (D0b)', () => {
+  it('fans a single aggkitProxy value out to every non-L1 chain networkId in the mode', () => {
+    const resolved = buildAppConfig(
+      buildConfigJsonWithProxy('https://aggkit-proxy.example/aggkitapi')
+    );
+
+    // Same resolved Record<number, string> shape as the map form -- every
+    // downstream consumer (AggkitBridgeAggregator, app/utils/appMode.ts) is
+    // unaffected by which config.json form produced it.
+    expect(resolved.appModeConfig.devnet.aggkitBridgeApis).toEqual({
+      1: 'https://aggkit-proxy.example/aggkitapi',
+      2: 'https://aggkit-proxy.example/aggkitapi'
+    });
+  });
+
+  it('never fans the proxy value out under the L1 networkId (0)', () => {
+    const resolved = buildAppConfig(
+      buildConfigJsonWithProxy('https://aggkit-proxy.example/aggkitapi')
+    );
+
+    expect(resolved.appModeConfig.devnet.aggkitBridgeApis[0]).toBeUndefined();
+  });
+});
+
+describe('buildAppConfig — NEXT_PUBLIC_AGGKIT_PROXY override precedence (D0b)', () => {
+  afterEach(() => {
+    delete process.env.NEXT_PUBLIC_AGGKIT_PROXY;
+  });
+
+  it('overrides every non-L1 networkId with the single override URL', () => {
+    process.env.NEXT_PUBLIC_AGGKIT_PROXY = 'https://override.example/aggkitapi';
+
+    const resolved = buildAppConfig(
+      buildConfigJsonWithProxy('https://aggkit-proxy.example/aggkitapi')
+    );
+
+    expect(resolved.appModeConfig.devnet.aggkitBridgeApis).toEqual({
+      1: 'https://override.example/aggkitapi',
+      2: 'https://override.example/aggkitapi'
+    });
+  });
+
+  it('falls back to the served aggkitProxy value when no override is set', () => {
+    const resolved = buildAppConfig(
+      buildConfigJsonWithProxy('https://aggkit-proxy.example/aggkitapi')
+    );
+
+    expect(resolved.appModeConfig.devnet.aggkitBridgeApis).toEqual({
+      1: 'https://aggkit-proxy.example/aggkitapi',
+      2: 'https://aggkit-proxy.example/aggkitapi'
+    });
+  });
+
+  it('throws APP_CONFIG_INVALID for a malformed override (not an absolute URL or relative path)', () => {
+    process.env.NEXT_PUBLIC_AGGKIT_PROXY = 'not a url';
+
+    expect(() =>
+      buildAppConfig(buildConfigJsonWithProxy('https://aggkit-proxy.example/aggkitapi'))
+    ).toThrow(/APP_CONFIG_INVALID: NEXT_PUBLIC_AGGKIT_PROXY must be an absolute http\(s\) URL/);
+  });
+
+  it('applies identically to a map-form mode too (same "applied to every mode" precedent as NEXT_PUBLIC_AGGKIT_BRIDGE_APIS)', () => {
+    // Mirrors docs/config.md's documented behavior for the pre-existing
+    // NEXT_PUBLIC_AGGKIT_BRIDGE_APIS override: a build-time global override is
+    // applied identically to every app mode, not scoped to modes that happen
+    // to declare the matching field in config.json. An operator who sets this
+    // is choosing to fan one proxy URL across every non-L1 network,
+    // regardless of what config.json's own per-mode form is.
+    process.env.NEXT_PUBLIC_AGGKIT_PROXY = 'https://override.example/aggkitapi';
+
+    const resolved = buildAppConfig(buildConfigJson());
+
+    expect(resolved.appModeConfig.devnet.aggkitBridgeApis).toEqual({
+      1: 'https://override.example/aggkitapi',
+      2: 'https://override.example/aggkitapi'
+    });
+  });
+
+  it('NEXT_PUBLIC_AGGKIT_BRIDGE_APIS still wins per-key when both overrides are set, since the map override merges on top', () => {
+    process.env.NEXT_PUBLIC_AGGKIT_PROXY = 'https://proxy-override.example/aggkitapi';
+    process.env.NEXT_PUBLIC_AGGKIT_BRIDGE_APIS = JSON.stringify({
+      1: 'https://map-override.example/1'
+    });
+
+    const resolved = buildAppConfig(
+      buildConfigJsonWithProxy('https://aggkit-proxy.example/aggkitapi')
+    );
+
+    expect(resolved.appModeConfig.devnet.aggkitBridgeApis).toEqual({
+      1: 'https://map-override.example/1',
+      2: 'https://proxy-override.example/aggkitapi'
+    });
+
+    delete process.env.NEXT_PUBLIC_AGGKIT_BRIDGE_APIS;
+  });
+});
+
 describe('the module store', () => {
   beforeEach(() => {
     resetAppConfig();

@@ -1,0 +1,35 @@
+
+ RUN  v4.1.6 /home/brolygon/repos/agglayer/agglayer-dev-ui
+
+ ✓ config/configLoader.test.mjs > resolveAggkitBridgeApiUrl (design.md §5.4) > passes an absolute URL through unchanged, regardless of origin 2ms
+ ✓ config/configLoader.test.mjs > resolveAggkitBridgeApiUrl (design.md §5.4) > resolves a relative path against the given origin 0ms
+ ✓ config/configLoader.test.mjs > resolveAggkitBridgeApiUrl (design.md §5.4) > strips a trailing slash from the origin before concatenating 0ms
+ ✓ config/configLoader.test.mjs > resolveAggkitBridgeApiUrl (design.md §5.4) > leaves a relative path untouched when allowRelative is true and origin is undefined (validate-only paths) 0ms
+ ✓ config/configLoader.test.mjs > resolveAggkitBridgeApiUrl (design.md §5.4) > throws loudly for a relative path with no origin and allowRelative false 1ms
+ ✓ config/configLoader.test.mjs > normalizeConfigOrThrow — URL normalization (design.md §5, A-5 item 3) > resolves a relative aggkitBridgeApis entry against the given origin 6ms
+ ✓ config/configLoader.test.mjs > normalizeConfigOrThrow — URL normalization (design.md §5, A-5 item 3) > passes an already-absolute aggkitBridgeApis entry through unchanged 1ms
+ ✓ config/configLoader.test.mjs > normalizeConfigOrThrow — URL normalization (design.md §5, A-5 item 3) > leaves a relative entry byte-for-byte when allowRelative is set and no origin is given (sync/validate scripts) 1ms
+ ✓ config/configLoader.test.mjs > normalizeConfigOrThrow — URL normalization (design.md §5, A-5 item 3) > never mutates its input 1ms
+ ✓ config/configLoader.test.mjs > normalizeConfigOrThrow — URL normalization (design.md §5, A-5 item 3) > rejects a protocol-relative URL ("//evil.example") at the schema level -- the security-relevant case 1ms
+ ✓ config/configLoader.test.mjs > normalizeConfigOrThrow — URL normalization (design.md §5, A-5 item 3) > rejects a non-http(s) URL scheme in externalLinks.contactSupport 1ms
+ ✓ config/configLoader.test.mjs > normalizeConfigOrThrow — URL normalization (design.md §5, A-5 item 3) > rejects a non-http(s) URL scheme in externalLinks.privacyPolicy 1ms
+ ✓ config/configLoader.test.mjs > normalizeConfigOrThrow — URL normalization (design.md §5, A-5 item 3) > rejects a non-http(s) URL scheme in chains.DEVNET_L1.explorerUrl 1ms
+ ✓ config/configLoader.test.mjs > normalizeConfigOrThrow — URL normalization (design.md §5, A-5 item 3) > rejects a non-http(s) URL scheme in chains.DEVNET_L1.iconUrl 1ms
+ ✓ config/configLoader.test.mjs > normalizeConfigOrThrow — URL normalization (design.md §5, A-5 item 3) > rejects a non-http(s) URL scheme in chains.DEVNET_L1.rpcUrl 1ms
+ ✓ config/configLoader.test.mjs > normalizeConfigOrThrow — URL normalization (design.md §5, A-5 item 3) > rejects a non-http(s) URL scheme in appModes.configs.devnet.aggkitBridgeApis 1ms
+ ✓ config/configLoader.test.mjs > normalizeConfigOrThrow — URL normalization (design.md §5, A-5 item 3) > still accepts plain http and https URLs 1ms
+ ✓ config/configLoader.test.mjs > normalizeConfigOrThrow — URL normalization (design.md §5, A-5 item 3) > rejects a bare relative path with no leading slash ("aggkitapi") 1ms
+ ✓ config/configLoader.test.mjs > normalizeConfigOrThrow — URL normalization (design.md §5, A-5 item 3) > propagates a schema violation unrelated to URLs (E1-style, from configValidator.mjs) verbatim 1ms
+ ✓ config/configLoader.test.mjs > normalizeConfigOrThrow — aggkitProxy URL normalization > resolves a relative aggkitProxy value against the given origin 0ms
+ ✓ config/configLoader.test.mjs > normalizeConfigOrThrow — aggkitProxy URL normalization > passes an already-absolute aggkitProxy value through unchanged 0ms
+ ✓ config/configLoader.test.mjs > normalizeConfigOrThrow — aggkitProxy URL normalization > defaults aggkitBridgeApis to {} for a mode using aggkitProxy, rather than leaving it undefined 0ms
+ ✓ config/configLoader.test.mjs > normalizeConfigOrThrow — aggkitProxy URL normalization > leaves aggkitProxy untouched when the field is absent (map-form mode) 0ms
+ ✓ config/configLoader.test.mjs > normalizeConfigOrThrow — aggkitProxy URL normalization > rejects a protocol-relative aggkitProxy URL at the schema level, same as aggkitBridgeApis 1ms
+ ✓ config/configLoader.test.mjs > resolveAggkitBridgeApiUrl — protocol-relative guard (X-1) > throws for "//host" even with an origin supplied 0ms
+ ✓ config/configLoader.test.mjs > resolveAggkitBridgeApiUrl — protocol-relative guard (X-1) > throws for "//host" on the allowRelative branch, where the value would be returned verbatim 0ms
+
+ Test Files  1 passed (1)
+      Tests  26 passed (26)
+   Start at  17:29:55
+   Duration  680ms (transform 42ms, setup 0ms, import 103ms, tests 23ms, environment 425ms)
+

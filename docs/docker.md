@@ -107,11 +107,13 @@ There are exactly two states, decided once at container start by `entrypoint.sh:
    in at build time) is served unmodified, after printing the warning described above.
 
 There is no merge of the two, and no environment-variable-based configuration mechanism
-at all in the container — the entrypoint does **not** read `NEXT_PUBLIC_AGGKIT_BRIDGE_APIS`
-or any other env var to synthesize or override config (see
-[`docs/config.md`](./config.md#environment-variables) for why that variable has no
-effect here). The mounted file (or the baked default, if nothing is mounted) is the
-single, only source of configuration.
+at all in the container — the entrypoint does **not** read `NEXT_PUBLIC_AGGKIT_PROXY`,
+`NEXT_PUBLIC_AGGKIT_BRIDGE_APIS`, or any other env var to synthesize or override config
+(see [`docs/config.md`](./config.md#environment-variables) for why those variables have
+no effect here). The mounted file (or the baked default, if nothing is mounted) is the
+single, only source of configuration — including which of `aggkitProxy` or
+`aggkitBridgeApis` a mode uses (see
+[docs/config.md](./config.md#aggkit-bridge-apis-aggkitproxy-vs-aggkitbridgeapis)).
 
 If the host path passed to `-v` does not exist, Docker creates an empty directory at the
 container-side mount point rather than failing the `docker run` — this is a classic typo

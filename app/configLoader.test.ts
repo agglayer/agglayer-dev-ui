@@ -82,7 +82,10 @@ describe('fetchAppConfig — success (A-5 item 1)', () => {
 
     const result = await fetchAppConfig({ origin: 'https://app.example' });
 
-    expect(result.appModes.configs.devnet.aggkitBridgeApis['1']).toBe(
+    // Non-null: normalizeConfigOrThrow always resolves aggkitBridgeApis to a
+    // concrete (possibly empty) map, but the JsonAppModeConfig type keeps it
+    // optional since the field may be absent on the mode's raw JSON shape.
+    expect(result.appModes.configs.devnet.aggkitBridgeApis!['1']).toBe(
       'https://app.example/aggkitapi'
     );
   });
@@ -93,7 +96,7 @@ describe('fetchAppConfig — success (A-5 item 1)', () => {
 
     const result = await fetchAppConfig();
 
-    expect(result.appModes.configs.devnet.aggkitBridgeApis['1']).toBe(
+    expect(result.appModes.configs.devnet.aggkitBridgeApis!['1']).toBe(
       `${window.location.origin}/aggkitapi`
     );
   });

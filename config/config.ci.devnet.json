@@ -166,10 +166,7 @@
       "devnet": {
         "label": "Devnet",
         "bridgeAddress": "0xC8cbEBf950B9Df44d987c8619f092beA980fF038",
-        "aggkitBridgeApis": {
-          "1": "http://127.0.0.1:8555/aggkitapi",
-          "2": "http://127.0.0.1:8555/aggkitapi"
-        },
+        "aggkitProxy": "http://127.0.0.1:8555/aggkitapi",
         "chainKeys": ["DEVNET_L1", "DEVNET_L2_001", "DEVNET_L2_002"],
         "defaultFromChainKey": "DEVNET_L1",
         "defaultToChainKey": "DEVNET_L2_001"

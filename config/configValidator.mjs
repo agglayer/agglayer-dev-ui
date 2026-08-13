@@ -96,9 +96,14 @@ const getModeConfigErrors = (modeKey, modeConfig, chainsByKey) => {
  * design.md §1.2: a mode's `aggkitBridgeApis` and its `chainKeys` must agree on
  * which non-L1 (networkId !== 0) networks exist, so a bad devnet-script run or a
  * hand-edit can't silently produce "3 chains configured, 1 backend, the third
- * chain's rows never appear and nothing says why". `aggkitBridgeApis: {}` is the
- * documented "mode not yet configured" escape hatch (configSchema.mjs's own
- * comment) and is exempt from every check below.
+ * chain's rows never appear and nothing says why". `aggkitBridgeApis: {}` (or the
+ * key omitted entirely) is the documented "mode not yet configured" escape hatch
+ * (configSchema.mjs's own comment) and is exempt from every check below --
+ * as is a mode using `aggkitProxy` instead (configSchema.mjs's superRefine
+ * guarantees the two are never both present): a single proxy fronts every
+ * network in the mode by construction, so per-chain key agreement is
+ * meaningless for it -- which is exactly why devnet's per-network map used to
+ * duplicate one URL under every networkId key instead of using this field.
  *
  * The duplicate-networkId check closes the same gap reached from the other side.
  * `networkId` — not the chain id — is what keys `aggkitBridgeApis` and what the
@@ -117,7 +122,11 @@ const getModeConfigErrors = (modeKey, modeConfig, chainsByKey) => {
  * @returns {string[]}
  */
 const getChainsAggkitBridgeApiErrors = (modeKey, modeConfig, chainsByKey) => {
-  const aggkitBridgeApis = modeConfig.aggkitBridgeApis;
+  // Undefined (field omitted) and {} are both the "not configured" escape
+  // hatch; a mode using aggkitProxy instead always lands here too, since
+  // configSchema.mjs's superRefine guarantees aggkitBridgeApis is then absent
+  // or empty -- this whole check is map-form-only (see the comment above).
+  const aggkitBridgeApis = modeConfig.aggkitBridgeApis ?? {};
   const isIntentionallyUnconfigured = Object.keys(aggkitBridgeApis).length === 0;
   if (isIntentionallyUnconfigured) return [];
 
