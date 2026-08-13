@@ -1,0 +1,11 @@
+=== gh pr view 24 ===
+{"headRefName":"feat/aggkit-backend","isDraft":true,"number":24,"state":"OPEN","url":"https://github.com/agglayer/agglayer-dev-ui/pull/24"}
+
+=== gh pr checks 24 (after push of 5f00a79) ===
+Analyze (actions)	pass	44s	https://github.com/agglayer/agglayer-dev-ui/actions/runs/31726116707/job/94534796145	
+Analyze (javascript-typescript)	pass	56s	https://github.com/agglayer/agglayer-dev-ui/actions/runs/31726116707/job/94534796054	
+Build (single-arch, no push) and smoke test	pass	1m53s	https://github.com/agglayer/agglayer-dev-ui/actions/runs/31726120046/job/94534803813	
+CI - lint / typecheck / test	pass	53s	https://github.com/agglayer/agglayer-dev-ui/actions/runs/31726120041/job/94534802723	
+CodeQL	pass	3s	https://github.com/agglayer/agglayer-dev-ui/runs/94534985419	
+claude-review / claude-review	pass	1m32s	https://github.com/agglayer/agglayer-dev-ui/actions/runs/31726120949/job/94534806080	
+e2e	pass	10m10s	https://github.com/agglayer/agglayer-dev-ui/actions/runs/31726120031/job/94534803122	
