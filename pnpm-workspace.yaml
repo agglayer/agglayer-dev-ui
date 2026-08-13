@@ -8,22 +8,14 @@ minimumReleaseAgeExclude:
   - '@0xtrails/*'
 overrides:
   '@wagmi/connectors': ^5.9.9
-  # feat/aggkit-backend: link the local SDK build (branch feat/aggkit-bridge-client
-  # in ../sdk) instead of the last npm-published beta. Not a real pnpm workspace
-  # (sdk is a sibling repo, not a package.json `packages:` entry) — see
-  # handoff-sdk.md §4 for the link rationale.
-  #
-  # Known consequence: `pnpm install --frozen-lockfile` fails on GitHub CI
-  # (ENOENT scandir '<work>/agglayer-dev-ui/../sdk') because CI runners don't
-  # have a sibling sdk checkout. This is intentional for now, not a bug — local
-  # dev and local CI-equivalent checks (lint/typecheck/test) work fine since a
-  # sibling ../sdk checkout is present. Dependency ordering to clear it:
-  #   1. agglayer/sdk#28 (bridge tracker API) merges to sdk main.
-  #   2. A published sdk version containing that API is cut (manual
-  #      workflow_dispatch release).
-  #   3. Swap this override to that published semver — required before or
-  #      immediately after step 2 lands, so GitHub CI can install again.
-  '@agglayer/sdk': 'file:../sdk'
+  # feat/aggkit-backend: previously linked the local SDK build (branch
+  # feat/aggkit-bridge-client in ../sdk) instead of a published version,
+  # because CI needed the bridge tracker API (agglayer/sdk#28) before it was
+  # published. That API is now published as 1.0.0-snapshot-5680d83 (see
+  # package.json), so this override just re-states the same pin pnpm would
+  # already resolve from the dependency specifier — kept explicit so a future
+  # bump to package.json's version doesn't silently drift from this override.
+  '@agglayer/sdk': '1.0.0-snapshot-5680d83'
 trustPolicy: no-downgrade
 trustPolicyExclude:
   - 'undici-types@6.21.0'
