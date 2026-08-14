@@ -1,19 +1,27 @@
-=== Final green run: 31785962610, commit bf790fc ===
-https://github.com/agglayer/agglayer-dev-ui/actions/runs/31785962610/job/94721802483
+=== Final green run at HEAD (commit ad292ff): run 31786588506 ===
+https://github.com/agglayer/agglayer-dev-ui/actions/runs/31786588506/job/94723763859
+PR: https://github.com/agglayer/agglayer-dev-ui/pull/24
 
-Run Playwright preflight: Running 4 tests using 1 worker -> 4 passed (23.2s)
+Run Playwright preflight: Running 4 tests using 1 worker -> 4 passed (25.3s)
 Run Playwright bridge tests: Running 12 tests using 1 worker -> 12 passed (5.7m)
 
 Baseline (pre-D0c/D0d, plan's ground truth): 12 tests across 10 files.
 This run: 12 tests collected, 12 passed, 0 failed, 0 skipped.
 
 Coverage delta from the partial-failure.spec.ts decision (see
-partial-failure-decision.md): count matches baseline exactly (the spec was
-restored to an active, passing test rather than left counted-but-skipped),
-so there is no hidden coverage loss at the suite-count level. The one
-explicit, accepted gap is narrower than "the whole spec": the
+partial-failure-decision.md): spec count matches baseline exactly (the spec
+was restored to an active, passing test rather than left counted-but-skipped
+or deleted), so there is no hidden coverage loss at the suite-count level.
+The one explicit, accepted gap is narrower than "the whole spec": the
 transactionsView.tsx `getChainByNetworkId(...) ?? 'Unknown network'` label
 fallback for an UNREGISTERED network id no longer has dedicated coverage,
 because the restored mechanism targets a real, configured network
 (Devnet L2-002) instead of a synthetic unregistered one. See
 partial-failure-decision.md for the full rationale.
+
+Prior attempt (run 31785182452, commit d95d9d6): same mechanism, 12
+collected / 11 passed / 1 failed on a locator strict-mode ambiguity in the
+test's own assertion (not the mechanism) -- see
+bridge-suite-result-attempt1.txt. Fixed in commit bf790fc, reverified
+passing in run 31785962610 (commit bf790fc), and reverified again here
+after an evidence-only commit (ad292ff) triggered one more full CI cycle.
