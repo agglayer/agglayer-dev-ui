@@ -57,11 +57,14 @@ validate_config() {
             (.appModes.configs? | type == "object") and ((.appModes.configs | length) > 0) and
             (.appModes.configs[.appModes.default]? != null) and
             (.autoclaim? | type == "object") and
-            (.externalLinks? | type == "object")
+            (.externalLinks? | type == "object") and
+            (.walletConnect? | type == "object") and
+            (.walletConnect.projectId? | type == "string") and
+            ((.walletConnect.projectId | length) > 0)
         ' "$file" >/dev/null 2>/tmp/agglayer-dev-ui-jq-error
     then
         log "config validation failed: $file is missing required top-level fields, or they have the wrong shape."
-        log "Expected: chains (non-empty object), appModes.default (string), appModes.configs (non-empty object containing the appModes.default key), autoclaim (object), externalLinks (object)."
+        log "Expected: chains (non-empty object), appModes.default (string), appModes.configs (non-empty object containing the appModes.default key), autoclaim (object), externalLinks (object), walletConnect.projectId (non-empty string)."
         log "Note: this is a structural check only -- it does not validate individual field values (see this script's header comment)."
         return 1
     fi

@@ -22,6 +22,7 @@ const chain = (overrides = {}) => ({
 // accepts as of this config surface cleanup (the per-network `aggkitBridgeApis`
 // map has been removed; see configSchema.mjs's comment on aggkitProxySchema).
 const buildConfig = () => ({
+  walletConnect: { projectId: 'test-project-id' },
   externalLinks: { privacyPolicy: '', termsOfUse: '', contactSupport: '' },
   chains: {
     DEVNET_L1: chain({ id: 271828, name: 'Devnet L1', networkId: 0 }),
@@ -81,6 +82,44 @@ describe('parseConfigOrThrow — aggkitProxy (the only supported aggkit backend 
     config.appModes.configs.devnet.aggkitProxy = '/aggkitapi';
 
     expect(() => parseConfigOrThrow(config)).not.toThrow();
+  });
+});
+
+// D0e: walletConnect.projectId is REQUIRED (not `.optional()`) so a
+// config.json missing it fails loudly, matching the entrypoint.sh jq
+// structural check's added requirement -- see docs/docker.md and
+// app/config.ts's getWalletConnectProjectId.
+describe('parseConfigOrThrow — walletConnect.projectId (required, D0e)', () => {
+  it('passes for a well-formed config with walletConnect.projectId set', () => {
+    expect(() => parseConfigOrThrow(buildConfig())).not.toThrow();
+  });
+
+  it('rejects a config missing the walletConnect field entirely', () => {
+    const config = buildConfig();
+    delete config.walletConnect;
+
+    expect(() => parseConfigOrThrow(config)).toThrow(/walletConnect/);
+  });
+
+  it('rejects a config with an empty walletConnect.projectId', () => {
+    const config = buildConfig();
+    config.walletConnect.projectId = '';
+
+    expect(() => parseConfigOrThrow(config)).toThrow(/walletConnect\.projectId/);
+  });
+
+  it('rejects a config with walletConnect.projectId of the wrong type', () => {
+    const config = buildConfig();
+    config.walletConnect.projectId = 12345;
+
+    expect(() => parseConfigOrThrow(config)).toThrow(/walletConnect\.projectId/);
+  });
+
+  it('rejects an unrecognized key under walletConnect (.strict())', () => {
+    const config = buildConfig();
+    config.walletConnect.extraField = 'unexpected';
+
+    expect(() => parseConfigOrThrow(config)).toThrow(/Unrecognized key: "extraField"/);
   });
 });
 

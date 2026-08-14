@@ -35,9 +35,11 @@ const chain = (overrides: Partial<JsonConfig['chains'][string]> = {}) => ({
 // configured" escape hatch) -- distinct from an ordinary omitted argument,
 // which defaults to a concrete proxy URL below.
 const buildConfigJson = (
-  aggkitProxy: string | null = 'https://aggkit-proxy.example/aggkitapi'
+  aggkitProxy: string | null = 'https://aggkit-proxy.example/aggkitapi',
+  projectId = 'served-project-id'
 ): JsonConfig =>
   ({
+    walletConnect: { projectId },
     externalLinks: {
       privacyPolicy: 'https://privacy.example',
       termsOfUse: 'https://terms.example',
@@ -161,6 +163,40 @@ describe('buildAppConfig — NEXT_PUBLIC_AGGKIT_PROXY override precedence', () =
     expect(() => buildAppConfig(buildConfigJson('https://aggkit-proxy.example/aggkitapi'))).toThrow(
       /APP_CONFIG_INVALID: NEXT_PUBLIC_AGGKIT_PROXY must be an absolute http\(s\) URL/
     );
+  });
+});
+
+// D0e: walletConnect.projectId is the runtime-configurable source (settable
+// in a mounted config.json with no rebuild -- see entrypoint.sh/docs/docker.md);
+// NEXT_PUBLIC_PROJECT_ID, when set, overrides it -- the same precedence rule
+// already established for NEXT_PUBLIC_AGGKIT_PROXY above, kept only as a
+// local-dev/Playwright convenience (see app/config.ts's
+// resolveProjectIdOverride).
+describe('buildAppConfig — walletConnect.projectId resolution', () => {
+  afterEach(() => {
+    delete process.env.NEXT_PUBLIC_PROJECT_ID;
+  });
+
+  it('resolves to the served config value when no env override is set', () => {
+    const resolved = buildAppConfig(buildConfigJson(undefined, 'served-project-id'));
+
+    expect(resolved.walletConnect.projectId).toBe('served-project-id');
+  });
+
+  it('NEXT_PUBLIC_PROJECT_ID overrides the served config value when set', () => {
+    process.env.NEXT_PUBLIC_PROJECT_ID = 'env-override-project-id';
+
+    const resolved = buildAppConfig(buildConfigJson(undefined, 'served-project-id'));
+
+    expect(resolved.walletConnect.projectId).toBe('env-override-project-id');
+  });
+
+  it('an empty/whitespace-only env override is ignored, falling back to the served value', () => {
+    process.env.NEXT_PUBLIC_PROJECT_ID = '   ';
+
+    const resolved = buildAppConfig(buildConfigJson(undefined, 'served-project-id'));
+
+    expect(resolved.walletConnect.projectId).toBe('served-project-id');
   });
 });
 

@@ -37,6 +37,55 @@ container: after a restart with a different mount — see
 so silently re-initializing the app in place against different config (without a reload)
 could leave stale chain data resident from the previous config.
 
+## WalletConnect / Reown: `walletConnect.projectId`
+
+A single required top-level field:
+
+```json
+{
+  "walletConnect": {
+    "projectId": "your-real-reown-cloud-project-id"
+  }
+}
+```
+
+This is the [Reown Cloud](https://cloud.reown.com) (formerly WalletConnect Cloud) project
+id used to initialize AppKit (`app/context/wallet.tsx`). It is **read from the runtime
+config, not baked into the JS bundle** — this is what lets a single built Docker image be
+repointed at a different project id per deployment, with no rebuild (see
+[`docs/docker.md`](./docker.md)).
+
+**Required, but a placeholder is a valid value.** `walletConnect.projectId` must be
+present and non-empty (a config.json missing it, or with an empty string, fails both the
+app's Zod validation and the container's structural `jq` check — see
+[Validation](#validation) below). The checked-in placeholder `YOUR_PROJECT_ID_HERE`
+satisfies that requirement while still triggering the graceful degraded `basic: true` mode
+described below — leaving the placeholder in place is a supported, working configuration;
+an empty string or a missing field is not.
+
+If left at the placeholder `YOUR_PROJECT_ID_HERE` (or any other non-real-shaped/empty
+value), AppKit runs in a degraded `basic` mode: injected-wallet connect fully works, only
+WalletConnect-cloud features (wallet directory images, remote config) are skipped, along
+with a handful of benign 401/403 console lines from Reown endpoints. Get a real id at
+https://cloud.reown.com.
+
+### Environment override (local dev / Cloudflare only)
+
+`NEXT_PUBLIC_PROJECT_ID`, if set, overrides `walletConnect.projectId` — the same
+precedence rule as `NEXT_PUBLIC_AGGKIT_PROXY` below (env wins over the served config when
+both are present). This exists purely as a local-dev/Playwright convenience, so
+`pnpm run dev` and the Playwright configs keep working without editing `config.json`.
+
+**This override is build-time only and has no effect in a prebuilt container image.**
+`build:production`'s `.env.production` deliberately never sets `NEXT_PUBLIC_PROJECT_ID`
+(see that file's own header comment), so a published Docker image never has an override to
+fall back to and always reads the mounted `config.json`'s value — exactly the property the
+two-configs-one-image proof in `docs/docker.md` demonstrates. The Cloudflare Workers
+deploy path is unaffected: `deploy.yaml` sets `NEXT_PUBLIC_PROJECT_ID` as a real build-time
+secret, which still takes effect there since that path has no runtime config bind mount at
+all — the entire app config, including `walletConnect.projectId`, is decided once at build
+time for that deployment target.
+
 Supporting files:
 - `config/configSchema.mjs` — shared Zod schema (single source of truth)
 - `config/configValidator.mjs` — schema + validator used by CLI and app startup
@@ -308,17 +357,21 @@ On first load, the UI shows **only the native gas token** for each configured ch
 
 Required: none.
 
-Optional:
+Optional — both are local-dev/Cloudflare-build-time overrides of a `config.json` value,
+and **neither has any effect in a prebuilt container image** (see
+[`docs/docker.md`](./docker.md)); the mounted `config.json` is the only configuration
+mechanism there:
 
 | Variable | Description |
 |----------|-------------|
-| `NEXT_PUBLIC_PROJECT_ID` | WalletConnect project ID; optional, placeholder → graceful degradation (see README) |
-| `NEXT_PUBLIC_AGGKIT_PROXY` | Bare URL (or origin-relative path); fanned out over every non-L1 network ID in every app mode, overriding `aggkitProxy`. Used for ephemeral devnet proxies. **Build-time only — has no effect in a prebuilt container image** (see [`docs/docker.md`](./docker.md)); the mounted `config.json` is the only configuration mechanism there. |
+| `NEXT_PUBLIC_PROJECT_ID` | Overrides `walletConnect.projectId`; optional, placeholder/empty → graceful degradation (see README and [WalletConnect / Reown](#walletconnect--reown-walletconnectprojectid) above). |
+| `NEXT_PUBLIC_AGGKIT_PROXY` | Bare URL (or origin-relative path); fanned out over every non-L1 network ID in every app mode, overriding `aggkitProxy`. Used for ephemeral devnet proxies. |
 
 Set them in `.env.local`:
 ```bash
 cp .env.example .env.local
-# Optionally set NEXT_PUBLIC_PROJECT_ID (see README for degraded-mode behavior)
+# Optionally set NEXT_PUBLIC_PROJECT_ID to override config.json's walletConnect.projectId
+# locally (see README for degraded-mode behavior)
 # Optionally set NEXT_PUBLIC_AGGKIT_PROXY for devnet/kurtosis setups
 ```
 

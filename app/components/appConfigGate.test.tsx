@@ -34,6 +34,7 @@ const chain = (overrides: Partial<JsonConfig['chains'][string]> = {}) => ({
 });
 
 const validConfig: JsonConfig = {
+  walletConnect: { projectId: 'test-project-id' },
   externalLinks: { privacyPolicy: '', termsOfUse: '', contactSupport: '' },
   chains: {
     DEVNET_L1: chain({ id: 271828, name: 'Devnet L1', networkId: 0 }),

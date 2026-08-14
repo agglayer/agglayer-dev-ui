@@ -4,19 +4,14 @@ This is the consumption contract for the `agglayer-dev-ui` container image: what
 how to configure it, and how a new build gets published. It is written to stand alone —
 you should not need any other document in this repo to run the image.
 
-## Status: no image is published yet
+## Status: images are published via `workflow_dispatch`
 
-**As of this writing, no image has ever been pushed to GHCR.** The publish workflow
-(`.github/workflows/docker-publish.yaml`) exists and builds successfully in isolated
-verification runs, but it has not yet executed as a real, triggered GitHub Actions run
-in this repository, and the GHCR package does not exist. Do not attempt to `docker pull`
-the reference below yet.
-
-Once the first image is published (by a `release: published` event or a manual
-`workflow_dispatch` run), the GHCR package will start out **private**, matching this
-repo's visibility. An organization admin must explicitly flip the package's visibility
-to public/internal before `docker pull` will work for anyone outside the org, even
-after a successful publish.
+Multiple images have been published to GHCR from this branch via `workflow_dispatch`
+(see the "Tag scheme" table below for the `dispatch-<ref>-<sha>-<run-id>` naming), and
+have been verified pullable **anonymously** (no `docker login` needed) — the GHCR
+package's visibility is public. A tagged, non-prerelease `release: published` event
+(the "Cutting a release" path below) has not yet occurred against this repo, so no
+semver or `latest` tag exists yet; only dispatch-tagged images do.
 
 ## Image reference
 
@@ -86,13 +81,18 @@ prints a loud warning to this effect (`entrypoint.sh:89-97`) and serves the bake
 anyway — it does not refuse to start. Treat mounting a real `config.json` as a required
 step, not an optional override.
 
-Separately, because `NEXT_PUBLIC_PROJECT_ID` (the Reown/WalletConnect project ID) is
-baked into the JS bundle at build time and the image is built from `.env.production`
-(which contains only a placeholder value — see `Dockerfile:80-88`), **the published
-image always runs Reown AppKit in degraded `basic: true` mode**: injected-wallet connect
-works, but WalletConnect-cloud features (wallet directory images, remote config) are
-skipped. This is not something a mounted `config.json` can change — `config.json` has no
-field for it, and there is currently no way to set a real project ID in a prebuilt image.
+The mounted `config.json`'s `walletConnect.projectId` field (the Reown/WalletConnect
+project ID) is also part of this contract — see
+[docs/config.md](./config.md#walletconnect--reown-walletconnectprojectid). Unlike
+`NEXT_PUBLIC_PROJECT_ID`, this value is **read at runtime, not baked into the JS bundle**:
+`build:production`'s `.env.production` deliberately never sets that env var (see
+`Dockerfile:80-93`), so every published image reads whatever `walletConnect.projectId`
+value the operator mounts. Leaving it at the baked default's placeholder
+(`YOUR_PROJECT_ID_HERE`) runs Reown AppKit in the documented degraded `basic: true` mode
+(injected-wallet connect works, WalletConnect-cloud features are skipped); mounting a
+`config.json` with a real project id from https://cloud.reown.com enables full AppKit
+functionality, per container instance, with no rebuild. See "Proof: the same image, two
+different project ids" below.
 
 ### Precedence: mounted file vs. baked default
 
@@ -120,6 +120,37 @@ failure mode. The entrypoint detects that case specifically (a path that exists 
 not a regular file) and fails loudly with a dedicated message rather than silently
 falling through to the baked default (`entrypoint.sh:80-88`).
 
+### Proof: the same image, two different project ids
+
+This is the property that makes the image production-usable: **one built image, run
+twice, with two mounted `config.json` files carrying different `walletConnect.projectId`
+values, produces two different AppKit sessions** — not one frozen build-time value.
+Verified (D0e) by running the identical image digest twice with disjoint project ids and
+capturing the browser's own outgoing network requests (Reown AppKit forwards `projectId`
+to its remote-config/RPC endpoints on init):
+
+```
+run A: mounted config.json walletConnect.projectId = "proof-project-id-AAA111"
+  -> https://api.web3modal.org/appkit/v1/config?projectId=proof-project-id-AAA111&...
+  -> https://rpc.walletconnect.org/v1/?...&projectId=proof-project-id-AAA111
+  (zero requests contain "BBB222")
+
+run B: SAME image digest, mounted config.json walletConnect.projectId = "proof-project-id-BBB222"
+  -> https://api.web3modal.org/appkit/v1/config?projectId=proof-project-id-BBB222&...
+  -> https://rpc.walletconnect.org/v1/?...&projectId=proof-project-id-BBB222
+  (zero requests contain "AAA111")
+```
+
+`docker inspect --format '{{.Image}}'` confirmed both containers ran the exact same image
+content digest — this is one build, reconfigured twice at `docker run` time. Contrast
+this with `NEXT_PUBLIC_AGGKIT_PROXY`, which genuinely has no effect in a container (see
+above) because it is inlined at build time; `walletConnect.projectId` behaves oppositely
+by design.
+
+The container also **fails loudly** (non-zero exit, no nginx start) when
+`walletConnect.projectId` is missing or empty — see "Validation is structural only" below
+and `entrypoint.sh:44-70`.
+
 ### Validation is structural only — not a substitute for the app's schema
 
 The runtime (`nginx:alpine`) stage has no Node.js, so the app's real validator
@@ -135,6 +166,7 @@ verifies only:
      `appModes.default`**
    - `autoclaim` is an object
    - `externalLinks` is an object
+   - `walletConnect.projectId` is a non-empty string
 
 **This check does not validate:** URL formats or reachability, individual chain object
 shapes, `chainKeys` entries referencing chains that don't exist, `autoclaim`/`currency`

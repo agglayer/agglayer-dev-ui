@@ -19,10 +19,16 @@ Edit `config.json` at the project root to set chains, app modes (each pointed at
 `aggkit-proxy` (DevOps-facing, incl. rollback), see [`docs/deployment.md`](docs/deployment.md).
 To run the app as a self-hosted Docker container instead, see [`docs/docker.md`](docs/docker.md).
 
-Optionally set `NEXT_PUBLIC_PROJECT_ID` (WalletConnect project ID) in `.env.local`. It is not
-required: leaving it at the placeholder (or empty) runs AppKit in a graceful degraded `basic`
-mode — injected-wallet connect fully works, only WalletConnect-cloud features (wallet directory
-images, remote config) are skipped. Get a real id at https://cloud.reown.com.
+`config.json`'s `walletConnect.projectId` field sets the WalletConnect/Reown project ID —
+see [`docs/config.md`](docs/config.md#walletconnect--reown-walletconnectprojectid). It is
+required but a placeholder is a valid value: leaving it at the checked-in
+`YOUR_PROJECT_ID_HERE` (or empty) runs AppKit in a graceful degraded `basic` mode —
+injected-wallet connect fully works, only WalletConnect-cloud features (wallet directory
+images, remote config) are skipped. Get a real id at https://cloud.reown.com. For local
+dev only, `.env.local`'s `NEXT_PUBLIC_PROJECT_ID` overrides it without editing
+`config.json`; this override has no effect in a built Docker image (see
+[`docs/docker.md`](docs/docker.md)), where `config.json` is the only way to set it, at
+runtime, with no rebuild.
 Optionally set `NEXT_PUBLIC_AGGKIT_PROXY` to override `config.json`'s `aggkitProxy` per
 environment:
 
