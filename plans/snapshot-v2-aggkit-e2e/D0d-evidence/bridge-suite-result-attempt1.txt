@@ -1,0 +1,35 @@
+=== Attempt 1: run 31785182452, commit d95d9d6 ===
+https://github.com/agglayer/agglayer-dev-ui/actions/runs/31785182452/job/94719406302
+
+Playwright "Run Playwright bridge tests" step output:
+  Running 12 tests using 1 worker
+  ......xxF..... (11 dots + 1 F over 12 total slots incl. skipped markers)
+  1 failed: tests/bridge/partial-failure.spec.ts:43:5
+  11 passed (5.9m)
+
+Baseline (pre-D0c/D0d, plan's ground truth): 12 tests across 10 files, all
+passing (partial-failure.spec.ts contributed 1 of those 12 as a real,
+non-skipped test at that time).
+
+This attempt: 12 tests collected (matches baseline count -- confirms
+un-skipping partial-failure.spec.ts restored it to the active count, not
+left as a 13th/phantom entry), 11 passed, 1 failed.
+
+Failure cause: NOT the restored mechanism's core contract (route
+interception did fail network 2's fan-out and the banner DID render "We
+couldn't load activity from Devnet L2-002...") -- it was a locator bug in
+this attempt's assertion. `page.getByText(/devnet l2-002/i)` matched TWO
+elements: the banner's own message span, AND an unrelated transaction row
+(from an earlier spec's L2-to-L2 transfer already touching network 2),
+tripping Playwright's strict-mode "must resolve to exactly one element"
+check.
+
+  Error: strict mode violation: getByText(/devnet l2-002/i) resolved to 2 elements:
+      1) <span>We couldn't load activity from Devnet L2-002. Sho…</span>
+      2) <span class="font-medium">Devnet L2-002</span> (in a transaction row)
+
+Fix applied for attempt 2: scope the assertion to the banner's own message
+text (`/couldn't load activity from.*devnet l2-002/i`) instead of a bare
+network-name search, so it can only match the one banner span. This is the
+same "don't depend on which other specs already ran" lesson the pre-existing
+comment in this spec already documents for the "Total transactions" line.
