@@ -1,9 +1,9 @@
 {
-  "snapshot_name": "cdk-20260812-162931",
+  "snapshot_name": "cdk-20260814-093315",
   "enclave": "cdk",
   "flavor": "anvil-aggkit",
-  "created_at": "2026-08-12T16:30:09Z",
-  "captured_at": "2026-08-12T16:29:42Z",
+  "created_at": "2026-08-14T09:33:46Z",
+  "captured_at": "2026-08-14T09:33:24Z",
   "settlement_free": true,
   "agglayer_certificates_at_capture": [
     {
@@ -103,7 +103,7 @@
   },
   "dev_ui": {
     "service": "agglayer-dev-ui-002",
-    "image": "ghcr.io/agglayer/agglayer-dev-ui:dispatch-feat-aggkit-backend-dd070d7db256-31574163188",
+    "image": "ghcr.io/agglayer/agglayer-dev-ui:dispatch-feat-aggkit-backend-8563dd4ba876-31732860787",
     "url": "http://127.0.0.1:8557",
     "url_via_proxy": "http://127.0.0.1:8555/",
     "config_path": "/etc/agglayer-dev-ui/config.json"
@@ -113,7 +113,7 @@
       "service": "anvil-001",
       "chain_id": 271828,
       "network_id": 0,
-      "block_number_at_capture": 253,
+      "block_number_at_capture": 236,
       "rpc": {
         "internal": "http://anvil-001:8545",
         "external": "http://127.0.0.1:8545",
@@ -133,7 +133,7 @@
         "service": "l2-anvil-001",
         "chain_id": 20201,
         "network_id": 1,
-        "block_number_at_capture": 147,
+        "block_number_at_capture": 141,
         "rpc": {
           "internal": "http://l2-anvil-001:8545",
           "external": "http://127.0.0.1:11545",
@@ -142,23 +142,15 @@
         },
         "aggkit": {
           "service": "aggkit-001",
-          "components": "aggsender,aggoracle,autoclaim",
+          "components": "aggsender,aggoracle,autoclaim,bridge",
           "rpc": {
             "internal": "http://aggkit-001:5576",
             "external": "http://127.0.0.1:11576"
-          }
-        },
-        "aggkit_bridge": {
-          "service": "aggkit-001-bridge",
-          "components": "bridge",
+          },
           "rest_api": {
-            "internal": "http://aggkit-001-bridge:5577",
+            "internal": "http://aggkit-001:5577",
             "external": "http://127.0.0.1:11577",
             "host_port_env": "L2_001_AGGKIT_REST_PORT"
-          },
-          "rpc": {
-            "internal": "http://aggkit-001-bridge:5576",
-            "external": "http://127.0.0.1:11586"
           }
         },
         "contracts": {
@@ -172,7 +164,7 @@
         "service": "l2-anvil-002",
         "chain_id": 20202,
         "network_id": 2,
-        "block_number_at_capture": 31,
+        "block_number_at_capture": 29,
         "rpc": {
           "internal": "http://l2-anvil-002:8545",
           "external": "http://127.0.0.1:12545",
@@ -181,23 +173,15 @@
         },
         "aggkit": {
           "service": "aggkit-002",
-          "components": "aggsender,aggoracle,autoclaim",
+          "components": "aggsender,aggoracle,autoclaim,bridge",
           "rpc": {
             "internal": "http://aggkit-002:5576",
             "external": "http://127.0.0.1:12576"
-          }
-        },
-        "aggkit_bridge": {
-          "service": "aggkit-002-bridge",
-          "components": "bridge",
+          },
           "rest_api": {
-            "internal": "http://aggkit-002-bridge:5577",
+            "internal": "http://aggkit-002:5577",
             "external": "http://127.0.0.1:12577",
             "host_port_env": "L2_002_AGGKIT_REST_PORT"
-          },
-          "rpc": {
-            "internal": "http://aggkit-002-bridge:5576",
-            "external": "http://127.0.0.1:12586"
           }
         },
         "contracts": {
@@ -220,7 +204,7 @@
         "private_key": "0xbcdf20249abf0ed6d944c0288fad489e33f66b3960d9e6229c1cd214ed3bbe31",
         "mnemonic_index": 0,
         "funded_on": ["l1"],
-        "balance_at_capture": "0x334902bc112e20a5c211208"
+        "balance_at_capture": "0x334902bc112e08dadf81230"
       },
       {
         "address": "0xE25583099BA105D9ec0A67f5Ae86D90e50036425",
@@ -392,21 +376,6 @@
         "role": "sovereign admin"
       },
       {
-        "service": "aggkit-001-bridge",
-        "path_in_image": "/etc/aggkit/sequencer.keystore",
-        "role": "sequencer / aggsender signer"
-      },
-      {
-        "service": "aggkit-001-bridge",
-        "path_in_image": "/etc/aggkit/aggoracle.keystore",
-        "role": "aggoracle + autoclaim signer"
-      },
-      {
-        "service": "aggkit-001-bridge",
-        "path_in_image": "/etc/aggkit/sovereignadmin.keystore",
-        "role": "sovereign admin"
-      },
-      {
         "service": "aggkit-002",
         "path_in_image": "/etc/aggkit/sequencer.keystore",
         "role": "sequencer / aggsender signer"
@@ -418,21 +387,6 @@
       },
       {
         "service": "aggkit-002",
-        "path_in_image": "/etc/aggkit/sovereignadmin.keystore",
-        "role": "sovereign admin"
-      },
-      {
-        "service": "aggkit-002-bridge",
-        "path_in_image": "/etc/aggkit/sequencer.keystore",
-        "role": "sequencer / aggsender signer"
-      },
-      {
-        "service": "aggkit-002-bridge",
-        "path_in_image": "/etc/aggkit/aggoracle.keystore",
-        "role": "aggoracle + autoclaim signer"
-      },
-      {
-        "service": "aggkit-002-bridge",
         "path_in_image": "/etc/aggkit/sovereignadmin.keystore",
         "role": "sovereign admin"
       }
@@ -443,11 +397,11 @@
     }
   },
   "fixtures": {
-    "seeded_at": "2026-08-12T16:29:34Z",
+    "seeded_at": "2026-08-14T09:33:18Z",
     "l1_chain_id": 271828,
     "e2e_wallet": "0xE34aaF64b29273B7D567FCFc40544c014EEe9970",
     "e2e_private_key": "0x12d7de8621a77640c9241b2595ba78ce443d05e94090365ab3bb5e19df82c625",
-    "e2e_wallet_l1_native_balance_hex": "0x1a78435a15d038a1dbfea",
+    "e2e_wallet_l1_native_balance_hex": "0x1a78435caa8f2b5974a02",
     "erc20": {
       "address": "0xe293A6b8F558422813499bb5C89B60adD8c54636",
       "name": "Agglayer E2E Token",
@@ -461,66 +415,74 @@
     }
   },
   "images": {
-    "tag": "cdk-20260812-162942-d5dea8709c8d",
+    "tag": "cdk-20260814-093324-fc160450b55e",
     "image_prefix": "snapshot-",
     "busybox_image": "busybox:1.36-musl",
     "self_contained": true,
-    "built_at": "2026-08-12T16:29:56Z",
+    "built_at": "2026-08-14T09:33:37Z",
     "services": {
       "anvil-001": {
-        "name": "snapshot-anvil-001:cdk-20260812-162942-d5dea8709c8d",
+        "name": "snapshot-anvil-001:cdk-20260814-093324-fc160450b55e",
         "base_image": "ghcr.io/foundry-rs/foundry:v1.5.1",
-        "size": "479MB"
+        "size": "475MB",
+        "tag": "v1.5.1-1786700247",
+        "digest": "sha256:006932fc49ce501c8d6f8c3f4ac3b5873ec14b59b101b4f4e9db02b169e6c0c9"
       },
       "l2-anvil-001": {
-        "name": "snapshot-l2-anvil-001:cdk-20260812-162942-d5dea8709c8d",
+        "name": "snapshot-l2-anvil-001:cdk-20260814-093324-fc160450b55e",
         "base_image": "ghcr.io/foundry-rs/foundry:v1.5.1",
-        "size": "441MB"
+        "size": "440MB",
+        "tag": "v1.5.1-1786700247",
+        "digest": "sha256:e9bbeb7f9a76a4ea725f194059c6b23d49c65e89a8a00241d6df3b687c8ccbb8"
       },
       "l2-anvil-002": {
-        "name": "snapshot-l2-anvil-002:cdk-20260812-162942-d5dea8709c8d",
+        "name": "snapshot-l2-anvil-002:cdk-20260814-093324-fc160450b55e",
         "base_image": "ghcr.io/foundry-rs/foundry:v1.5.1",
-        "size": "422MB"
+        "size": "422MB",
+        "tag": "v1.5.1-1786700247",
+        "digest": "sha256:3555d50518f6f72d5811edd759293ba205ac192c04192695afc046c2cb595ef0"
       },
       "agglayer": {
-        "name": "snapshot-agglayer:cdk-20260812-162942-d5dea8709c8d",
-        "base_image": "ghcr.io/agglayer/agglayer:0.6.0-rc.5",
-        "size": "3.15GB"
+        "name": "snapshot-agglayer:cdk-20260814-093324-fc160450b55e",
+        "base_image": "ghcr.io/agglayer/agglayer:0.6.0-rc.8",
+        "size": "3.15GB",
+        "tag": "0.6.0-rc.8-1786700247",
+        "digest": "sha256:5a47d3778657ba618ff7dfc99dfd55a3863097d5fff4f960a0740d4d0ae80073"
       },
       "aggkit-001": {
-        "name": "snapshot-aggkit-001:cdk-20260812-162942-d5dea8709c8d",
+        "name": "snapshot-aggkit-001:cdk-20260814-093324-fc160450b55e",
         "base_image": "ghcr.io/agglayer/aggkit:0.11.0-rc5",
-        "size": "365MB"
-      },
-      "aggkit-001-bridge": {
-        "name": "snapshot-aggkit-001-bridge:cdk-20260812-162942-d5dea8709c8d",
-        "base_image": "ghcr.io/agglayer/aggkit:0.11.0-rc5",
-        "size": "365MB"
+        "size": "365MB",
+        "tag": "0.11.0-rc5-1786700247",
+        "digest": "sha256:6497f44d1a81a8f5a00b2a8d719103b8c1b8200c5eb6e2ff5083d33e9431f982"
       },
       "aggkit-002": {
-        "name": "snapshot-aggkit-002:cdk-20260812-162942-d5dea8709c8d",
+        "name": "snapshot-aggkit-002:cdk-20260814-093324-fc160450b55e",
         "base_image": "ghcr.io/agglayer/aggkit:0.11.0-rc5",
-        "size": "365MB"
-      },
-      "aggkit-002-bridge": {
-        "name": "snapshot-aggkit-002-bridge:cdk-20260812-162942-d5dea8709c8d",
-        "base_image": "ghcr.io/agglayer/aggkit:0.11.0-rc5",
-        "size": "365MB"
+        "size": "365MB",
+        "tag": "0.11.0-rc5-1786700247",
+        "digest": "sha256:aa93b661b6fe8e26fe06633d6e00398090a7f1d4b455cc26f8f75ce4e301bb88"
       },
       "aggkit-proxy-001": {
-        "name": "snapshot-aggkit-proxy-001:cdk-20260812-162942-d5dea8709c8d",
+        "name": "snapshot-aggkit-proxy-001:cdk-20260814-093324-fc160450b55e",
         "base_image": "ghcr.io/agglayer/aggkit:0.11.0-rc5",
-        "size": "365MB"
+        "size": "365MB",
+        "tag": "0.11.0-rc5-1786700247",
+        "digest": "sha256:cd5209a27d5bb2b03bca8fe8e1cf7923381e4eadaf00108162a0523d4fcefc8c"
       },
       "agglayer-dev-ui-proxy-002": {
-        "name": "snapshot-agglayer-dev-ui-proxy-002:cdk-20260812-162942-d5dea8709c8d",
+        "name": "snapshot-agglayer-dev-ui-proxy-002:cdk-20260814-093324-fc160450b55e",
         "base_image": "europe-west2-docker.pkg.dev/prj-polygonlabs-devtools-dev/virtual/haproxy:3.2-bookworm",
-        "size": "108MB"
+        "size": "108MB",
+        "tag": "3.2-bookworm-1786700247",
+        "digest": "sha256:310e3b235599ac25687f9bf1a0b9458705472fd9ca993447663d647866a83332"
       },
       "agglayer-dev-ui-002": {
-        "name": "snapshot-agglayer-dev-ui-002:cdk-20260812-162942-d5dea8709c8d",
-        "base_image": "ghcr.io/agglayer/agglayer-dev-ui:dispatch-feat-aggkit-backend-dd070d7db256-31574163188",
-        "size": "72.2MB"
+        "name": "snapshot-agglayer-dev-ui-002:cdk-20260814-093324-fc160450b55e",
+        "base_image": "ghcr.io/agglayer/agglayer-dev-ui:dispatch-feat-aggkit-backend-8563dd4ba876-31732860787",
+        "size": "72.2MB",
+        "tag": "dispatch-feat-aggkit-backend-8563dd4ba87-1786700247",
+        "digest": "sha256:3961d9fab267d64a6115464dc6513238fd705a8cc8fa826ca8ba31d65de7629e"
       }
     }
   },
@@ -554,20 +516,12 @@
           "host_default": 11576,
           "container": 5576,
           "description": "aggkit JSON-RPC (debug)"
-        }
-      ],
-      "aggkit-001-bridge": [
-        {
-          "env": "L2_001_AGGKIT_BRIDGE_RPC_PORT",
-          "host_default": 11586,
-          "container": 5576,
-          "description": "aggkit-bridge JSON-RPC (debug)"
         },
         {
           "env": "L2_001_AGGKIT_REST_PORT",
           "host_default": 11577,
           "container": 5577,
-          "description": "aggkit-bridge REST API"
+          "description": "aggkit bridge REST API"
         }
       ],
       "l2-anvil-002": [
@@ -584,20 +538,12 @@
           "host_default": 12576,
           "container": 5576,
           "description": "aggkit JSON-RPC (debug)"
-        }
-      ],
-      "aggkit-002-bridge": [
-        {
-          "env": "L2_002_AGGKIT_BRIDGE_RPC_PORT",
-          "host_default": 12586,
-          "container": 5576,
-          "description": "aggkit-bridge JSON-RPC (debug)"
         },
         {
           "env": "L2_002_AGGKIT_REST_PORT",
           "host_default": 12577,
           "container": 5577,
-          "description": "aggkit-bridge REST API"
+          "description": "aggkit bridge REST API"
         }
       ],
       "agglayer": [

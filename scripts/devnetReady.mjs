@@ -222,10 +222,11 @@ const main = async () => {
   // network_id 0 (L1) is not itself a ROUTES entry. The aggkit-proxy DOES
   // read network_id -- routing per network is its whole job -- but in this
   // bundle its BridgeURLs map sends BOTH 0 and 1 to the same upstream
-  // (aggkit-001-bridge), and each aggkit instance reports its own L1+L2
-  // status regardless. So this probe hits the same upstream as network_id=1
-  // below; its value is confirming the aggkit backing route 1 is reachable
-  // at all, not that L1 has an independent syncer.
+  // (aggkit-001, which now serves the bridge REST API as one of its
+  // components), and each aggkit instance reports its own L1+L2 status
+  // regardless. So this probe hits the same upstream as network_id=1 below;
+  // its value is confirming the aggkit backing route 1 is reachable at all,
+  // not that L1 has an independent syncer.
   checks.push({
     label: 'sync-status network_id=0 (L1)',
     run: () => assertNetworkSynced(aggkitApiUrl, 0, 'L1')

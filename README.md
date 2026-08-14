@@ -90,7 +90,7 @@ of E2E-only env vars.
 vendors a frozen, self-contained snapshot bundle (`tests/devnet/`, see
 [`tests/devnet/README.md`](tests/devnet/README.md)) produced by
 `0xPolygon/kurtosis-cdk`'s [anvil-flavor
-snapshot](https://github.com/0xPolygon/kurtosis-cdk/blob/feat/aggkit-bridge-ui-backend/docs/docs/advanced/anvil-devui-snapshot.md)
+snapshot](https://github.com/0xPolygon/kurtosis-cdk/blob/feat/aggkit-bridge-ui-backend/docs/docs/advanced/anvil-devnet-snapshot.md)
 and brings it up with plain `docker compose`. This is the fastest way to get a real
 bridging backend locally too -- it complements the live Kurtosis bring-up above rather
 than replacing it (the live enclave is still the right tool when iterating on
@@ -98,9 +98,12 @@ kurtosis-cdk itself, e.g. testing a params-file change); the vendored bundle is 
 "just run the suite" with nothing to build or configure:
 
 ```bash
-# Bring up all 11 services (anvil x3, agglayer, aggkit x2 + bridge x2,
-# aggkit-proxy, haproxy, dev-ui), self-contained -- no bind mounts, no
-# volumes, no Kurtosis CLI. Pulls 11 public images from GHCR on first run.
+# Bring up all 9 services (anvil x3, agglayer, aggkit x2 -- each running the
+# bridge as a component, not a separate service --, aggkit-proxy, haproxy),
+# self-contained -- no bind mounts, no volumes, no Kurtosis CLI. Pulls 9
+# public images from GHCR on first run. The baked dev-ui container itself is
+# NOT started (it's behind the `devui` compose profile, manual use only --
+# pass `--profile devui` to also bring it up).
 docker compose -f tests/devnet/docker-compose.yml up -d --wait
 
 # Replicates kurtosisDevnetEnv.mjs's readiness probes against the fixed
