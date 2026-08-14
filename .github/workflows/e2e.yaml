@@ -47,7 +47,11 @@ jobs:
       # anything outside this job's own throwaway containers.
       E2E_PRIVATE_KEY: '0x12d7de8621a77640c9241b2595ba78ce443d05e94090365ab3bb5e19df82c625'
       NEXT_PUBLIC_PROJECT_ID: ci-e2e
-      NEXT_PUBLIC_AGGKIT_BRIDGE_APIS: '{"1":"http://127.0.0.1:8555/aggkitapi","2":"http://127.0.0.1:8555/aggkitapi"}'
+      # Single-proxy form (see playwright.config.ts and app/config.ts): every
+      # non-L1 network in the mode fans out from this ONE URL, fetch()
+      # differentiating networks via a `network_id` query param -- there is
+      # no more per-network map to set here.
+      NEXT_PUBLIC_AGGKIT_PROXY: 'http://127.0.0.1:8555/aggkitapi'
       E2E_FROM_CHAIN_ID: '271828'
       E2E_TO_CHAIN_ID: '20201'
       E2E_L2_CHAIN_IDS: '20201,20202'
@@ -200,6 +204,7 @@ jobs:
           check E2E_L2_CHAIN_IDS    "$(jq -er '[.chain_ids.l2_001,.chain_ids.l2_002]|map(tostring)|join(",")' "$s")" "$E2E_L2_CHAIN_IDS"
           check E2E_PRIVATE_KEY     "$(jq -er '.accounts.e2e_wallet.private_key' "$s")" "$E2E_PRIVATE_KEY"
           check proxy_host_port     "$(jq -er '.proxy.host_port|tostring' "$s")" "8555"
+          check NEXT_PUBLIC_AGGKIT_PROXY "$(jq -er '.aggkit_proxy.rest_url_via_proxy' "$s")" "$NEXT_PUBLIC_AGGKIT_PROXY"
           # The vendored compose must pin the same snapshot the summary
           # describes: summary.images.tag ends with the 12-char sha that the
           # published tag is built from (snapshot-<sha>).
