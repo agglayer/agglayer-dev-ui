@@ -1,4 +1,7 @@
 {
+  "walletConnect": {
+    "projectId": "YOUR_PROJECT_ID_HERE"
+  },
   "externalLinks": {
     "privacyPolicy": "https://polygon.technology/privacy-policy",
     "termsOfUse": "https://polygon.technology/terms-of-use",
