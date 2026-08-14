@@ -119,6 +119,20 @@ export const autoclaimConfigSchema = z
   })
   .strict();
 
+// WalletConnect/Reown Cloud project id, read at RUNTIME from the served
+// config.json -- this is what makes it settable in a prebuilt container
+// image without a rebuild (a1-runtime-config-design.md §6.3; see
+// app/config.ts's resolveProjectIdOverride and entrypoint.sh's structural
+// check). Required (not `.optional()`) so a config.json missing this field
+// fails validation loudly rather than silently falling back to `undefined` --
+// see README/docs/config.md for the placeholder value that reproduces the
+// pre-existing graceful-degradation ("basic" AppKit mode) behavior.
+export const walletConnectConfigSchema = z
+  .object({
+    projectId: nonEmptyString
+  })
+  .strict();
+
 export const jsonConfigSchema = z
   .object({
     autoclaim: autoclaimConfigSchema.optional(),
@@ -135,6 +149,7 @@ export const jsonConfigSchema = z
         default: modeEnum,
         configs: z.record(nonEmptyString, jsonAppModeConfigSchema)
       })
-      .strict()
+      .strict(),
+    walletConnect: walletConnectConfigSchema
   })
   .strict();

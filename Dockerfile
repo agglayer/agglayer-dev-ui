@@ -80,12 +80,17 @@ ARG SDK_REF=unknown
 # A-1 §6.3(a) binding constraint: the builder must NOT set or forward
 # NEXT_PUBLIC_AGGKIT_PROXY. It is a build-time-only affordance for local dev /
 # Cloudflare Workers builds (baked into the JS bundle by Next at build time);
-# in a container the
-# mounted config.json is the only configuration mechanism (see
-# entrypoint.sh). build:production also copies .env.production over
-# .env.local and deletes .env.staging -- .env.production contains only a
-# NEXT_PUBLIC_PROJECT_ID placeholder, so this image runs Reown AppKit in the
-# documented degraded `basic: true` mode.
+# in a container the mounted config.json is the only configuration mechanism
+# (see entrypoint.sh). build:production also copies .env.production over
+# .env.local and deletes .env.staging -- .env.production is deliberately
+# empty of NEXT_PUBLIC_* values (see its own header comment), so this build
+# never bakes in a WalletConnect/Reown project id, an aggkit-proxy override,
+# or any E2E value. The project id is a RUNTIME value instead: it comes from
+# the mounted config.json's `walletConnect.projectId` field (see
+# entrypoint.sh's structural validation and docs/config.md), settable per
+# container instance with no rebuild. A container run with no real project
+# id mounted (or the baked default's placeholder) runs Reown AppKit in the
+# documented degraded `basic: true` mode -- see app/context/wallet.tsx.
 RUN pnpm run build:production
 
 # =============================================================================

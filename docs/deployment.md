@@ -55,8 +55,11 @@ Two deployment paths exist. Pick one:
 
 - **Container image** (recommended for self-hosting): `docker run` the published image
   with your `config.json` bind-mounted. See [`docs/docker.md`](./docker.md) for the full
-  image contract, tags, and a copy-pasteable `docker run` example. **As of this writing,
-  no image has been published yet** — see that document's Status section.
+  image contract, tags, and a copy-pasteable `docker run` example — including
+  `walletConnect.projectId`, the prod-required WalletConnect/Reown value, which (unlike
+  `NEXT_PUBLIC_AGGKIT_PROXY`) is read from the mounted `config.json` at runtime and can be
+  set per deployment with no rebuild. See that document's Status section for which tags
+  currently exist.
 - **Cloudflare Workers**: the steps below.
 
 ### Cloudflare Workers path

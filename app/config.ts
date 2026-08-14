@@ -44,6 +44,7 @@ export type ResolvedAppConfig = {
   appModeConfig: Record<AppMode, AppModeConfig>;
   allWagmiChains: readonly [Chain, ...Chain[]];
   defaultWagmiChain: Chain;
+  walletConnect: Readonly<{ projectId: string }>;
 };
 
 // NEXT_PUBLIC_AGGKIT_PROXY is inlined by Next at build time, so it can only
@@ -74,6 +75,20 @@ const resolveAggkitProxyOverride = (): string | undefined => {
 
   const origin = resolveEnvOrigin();
   return resolveAggkitProxyUrl(parsed.data, origin, false);
+};
+
+// WalletConnect/Reown project id: config.json's walletConnect.projectId (a
+// runtime value, settable per-container-instance -- see entrypoint.sh and
+// docs/docker.md) is authoritative. NEXT_PUBLIC_PROJECT_ID, when non-empty,
+// overrides it -- exactly the same precedence rule as
+// resolveAggkitProxyOverride above (design.md §6.2's "build-time env
+// overrides the served config" pattern), kept ONLY as a local-dev/Playwright
+// convenience. build:production's .env.production deliberately does not set
+// this var, so a published container image never has an override to fall
+// back to and always reads config.json's value.
+const resolveProjectIdOverride = (): string | undefined => {
+  const envOverride = process.env.NEXT_PUBLIC_PROJECT_ID?.trim();
+  return envOverride ? envOverride : undefined;
 };
 
 /**
@@ -221,6 +236,8 @@ export const buildAppConfig = (configJson: JsonConfig): ResolvedAppConfig => {
 
   const defaultWagmiChain = resolveDefaultWagmiChain(defaultAppMode, appModeConfig, allWagmiChains);
 
+  const projectId = resolveProjectIdOverride() ?? configJson.walletConnect.projectId;
+
   return {
     autoclaim: resolveAutoclaimConfig(configJson.autoclaim),
     externalLinks: Object.freeze({
@@ -232,7 +249,8 @@ export const buildAppConfig = (configJson: JsonConfig): ResolvedAppConfig => {
     defaultAppMode,
     appModeConfig,
     allWagmiChains,
-    defaultWagmiChain
+    defaultWagmiChain,
+    walletConnect: Object.freeze({ projectId })
   };
 };
 
@@ -274,3 +292,4 @@ export const getAppModeConfig = (): Record<AppMode, AppModeConfig> => getAppConf
 export const getDefaultAppMode = (): AppMode => getAppConfig().defaultAppMode;
 export const getAllWagmiChains = (): readonly [Chain, ...Chain[]] => getAppConfig().allWagmiChains;
 export const getDefaultWagmiChain = (): Chain => getAppConfig().defaultWagmiChain;
+export const getWalletConnectProjectId = (): string => getAppConfig().walletConnect.projectId;

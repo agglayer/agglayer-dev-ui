@@ -9,7 +9,8 @@ import {
   customRpcUrls,
   getAllWagmiChains,
   getDefaultWagmiChain,
-  getExternalLinks
+  getExternalLinks,
+  getWalletConnectProjectId
 } from '@/app/config';
 import { IS_E2E_ENABLED } from '@/app/constants/e2e';
 import { e2eWalletAddress } from '@/app/context/e2eAccount';
@@ -27,10 +28,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useChainId, useChains, useSwitchChain, WagmiProvider } from 'wagmi';
 
-// projectId/isDegradedProjectId are env-derived (NEXT_PUBLIC_PROJECT_ID),
-// not config -- they stay module-scope (design.md §2.1/§2.3).
-const projectId = process.env.NEXT_PUBLIC_PROJECT_ID!;
-
 const urlOrUndefined = (value: string): string | undefined =>
   value.trim() === '' ? undefined : value;
 
@@ -41,26 +38,27 @@ const walletIds = {
   RABBY: '18388be9ac2d02726dbac9777c96efaac06d744b2f6d580fccdd4127a6d01fd1'
 };
 
-// With no real WalletConnect Cloud project id
-// configured (the checked-in .env.example/.env.local literal, or an empty
-// value), AppKit's own remote-config round trip to api.web3modal.org 403s
-// (invalid projectId) on every load. The standing decision is to
-// degrade gracefully rather than require a real id for local/dev use.
-// `basic: true` is the narrowest documented AppKitOptions lever that does
-// anything about this (see @reown/appkit's AppKitOptions.basic jsdoc): it
-// skips AppKit's own `!options.basic` guard around fetching remote project
-// config at init (eliminating the `/appkit/v1/config` 403 and its
-// "[Reown Config] Failed to fetch remote project configuration" warning),
-// and it trims the modal-open prefetch to skip network/connector image
-// fetches (eliminating the `/public/getAssetImage/*` 403s). It does NOT
-// touch wallet detection/connection: `ConnectionController.state.wcBasic`
-// (what `basic: true` sets) is only read by the WalletConnect-explorer wallet
-// list (recommended/featured/"All Wallets" screens, sourced from AppKit's
-// own API) and by the unsupported-chain banner -- never by
-// ConnectorController's EIP-6963/injected connector detection or the
-// scaffold-ui Connect screen that renders it (verified against the
-// installed @reown/appkit-controllers@1.8.19 / @reown/appkit-scaffold-ui
-// sources; `wcBasic` does not appear anywhere in appkit-scaffold-ui). The
+// With no real WalletConnect Cloud project id configured (config.json's
+// walletConnect.projectId left at the checked-in placeholder, or an empty
+// value -- see app/config.ts's getWalletConnectProjectId), AppKit's own
+// remote-config round trip to api.web3modal.org 403s (invalid projectId) on
+// every load. The standing decision is to degrade gracefully rather than
+// require a real id for local/dev use. `basic: true` is the narrowest
+// documented AppKitOptions lever that does anything about this (see
+// @reown/appkit's AppKitOptions.basic jsdoc): it skips AppKit's own
+// `!options.basic` guard around fetching remote project config at init
+// (eliminating the `/appkit/v1/config` 403 and its "[Reown Config] Failed to
+// fetch remote project configuration" warning), and it trims the modal-open
+// prefetch to skip network/connector image fetches (eliminating the
+// `/public/getAssetImage/*` 403s). It does NOT touch wallet
+// detection/connection: `ConnectionController.state.wcBasic` (what
+// `basic: true` sets) is only read by the WalletConnect-explorer wallet list
+// (recommended/featured/"All Wallets" screens, sourced from AppKit's own
+// API) and by the unsupported-chain banner -- never by ConnectorController's
+// EIP-6963/injected connector detection or the scaffold-ui Connect screen
+// that renders it (verified against the installed
+// @reown/appkit-controllers@1.8.19 / @reown/appkit-scaffold-ui sources;
+// `wcBasic` does not appear anywhere in appkit-scaffold-ui). The
 // injected-wallet connect flow this app actually relies on is therefore
 // unaffected. Calls this can't reach (fetchUsage's unconditional
 // `/appkit/v1/project-limits`, the featured/recommended `/getWallets`
@@ -69,10 +67,9 @@ const walletIds = {
 //
 // A real-shaped project id (anything other than the placeholder/empty) skips
 // all of this and behaves exactly as before.
-const isDegradedProjectId = isPlaceholderProjectId(projectId);
 
 // createAppKit is a global side effect that needs config values
-// (chains/defaultChain/externalLinks) that are only available once
+// (chains/defaultChain/externalLinks/projectId) that are only available once
 // AppConfigGate has resolved -- so it can no longer run at module scope. It
 // runs instead inside WalletProvider's render (a useMemo, not a useEffect:
 // AppKitWalletProvider's child hooks -- useAppKit/useAppKitAccount/
@@ -87,13 +84,14 @@ const ensureAppKit = (params: {
   defaultChain: Chain;
   externalLinks: ResolvedAppConfig['externalLinks'];
   adapter: WagmiAdapter;
+  projectId: string;
 }): void => {
   if (appKitInitialized) return;
   appKitInitialized = true;
 
   createAppKit({
     adapters: [params.adapter],
-    projectId,
+    projectId: params.projectId,
     networks: [...params.chains],
     defaultNetwork: params.defaultChain,
     customRpcUrls,
@@ -113,7 +111,7 @@ const ensureAppKit = (params: {
       history: false,
       smartSessions: false
     },
-    ...(isDegradedProjectId ? { basic: true } : {}),
+    ...(isPlaceholderProjectId(params.projectId) ? { basic: true } : {}),
     themeMode: 'light',
     themeVariables: {
       '--w3m-accent': '#7b3fe4'
@@ -230,8 +228,13 @@ const WalletProvider = ({ children }: { children: ReactNode }) => {
   const [queryClient] = useState(() => new QueryClient());
 
   // WalletProvider only ever mounts behind AppConfigGate (app/providers.tsx),
-  // so getAllWagmiChains()/getDefaultWagmiChain()/getExternalLinks() are safe
-  // to call unconditionally in render.
+  // so getAllWagmiChains()/getDefaultWagmiChain()/getExternalLinks()/
+  // getWalletConnectProjectId() are safe to call unconditionally in render.
+  // projectId is a runtime config value (config.json's walletConnect.projectId,
+  // env-overridable for local dev -- see app/config.ts), no longer a
+  // build-time module-scope constant, so it can only be read here.
+  const projectId = getWalletConnectProjectId();
+
   const wagmiAdapter = useMemo(
     () =>
       new WagmiAdapter({
@@ -240,7 +243,7 @@ const WalletProvider = ({ children }: { children: ReactNode }) => {
         customRpcUrls,
         networks: [...getAllWagmiChains()]
       }),
-    []
+    [projectId]
   );
 
   // Render-phase init, not an effect -- see the comment on ensureAppKit above
@@ -253,9 +256,10 @@ const WalletProvider = ({ children }: { children: ReactNode }) => {
       chains: getAllWagmiChains(),
       defaultChain: getDefaultWagmiChain(),
       externalLinks: getExternalLinks(),
-      adapter: wagmiAdapter
+      adapter: wagmiAdapter,
+      projectId
     });
-  }, [wagmiAdapter]);
+  }, [wagmiAdapter, projectId]);
 
   return (
     <WagmiProvider config={wagmiAdapter.wagmiConfig}>
