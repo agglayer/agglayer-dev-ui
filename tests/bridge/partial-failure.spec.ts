@@ -73,7 +73,12 @@ test('activity page surfaces a partial-failure notice for the unreachable networ
   await expect(page.getByText(/some networks are temporarily unavailable/i)).toBeVisible({
     timeout: 45_000
   });
-  await expect(page.getByText(/devnet l2-002/i)).toBeVisible();
+  // Scoped to the banner's own message text (not a bare /devnet l2-002/i
+  // search): an earlier spec may have already bridged funds to/from
+  // Devnet L2-002, in which case a transaction row elsewhere on the page
+  // also renders that chain name and a loose match hits both, failing
+  // Playwright's strict-mode single-element requirement.
+  await expect(page.getByText(/couldn't load activity from.*devnet l2-002/i)).toBeVisible();
 
   // Network 1's query must still RESOLVE despite network 2 failing -- that is
   // the partial-failure contract: one bad network degrades to a notice instead
