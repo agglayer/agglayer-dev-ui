@@ -1,7 +1,0 @@
-Analyze (actions)	pass	43s	https://github.com/agglayer/agglayer-dev-ui/actions/runs/31786585199/job/94723756990	
-Analyze (javascript-typescript)	pass	59s	https://github.com/agglayer/agglayer-dev-ui/actions/runs/31786585199/job/94723756987	
-Build (single-arch, no push) and smoke test	pass	1m39s	https://github.com/agglayer/agglayer-dev-ui/actions/runs/31786588469/job/94723763971	
-CI - lint / typecheck / test	pass	51s	https://github.com/agglayer/agglayer-dev-ui/actions/runs/31786588478/job/94723763513	
-CodeQL	pass	3s	https://github.com/agglayer/agglayer-dev-ui/runs/94723899666	
-claude-review / claude-review	pass	2m27s	https://github.com/agglayer/agglayer-dev-ui/actions/runs/31786589270/job/94723765407	
-e2e	pass	8m0s	https://github.com/agglayer/agglayer-dev-ui/actions/runs/31786588506/job/94723763859	
