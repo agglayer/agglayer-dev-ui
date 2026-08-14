@@ -169,12 +169,82 @@ jobs:
         working-directory: dev-ui
         run: pnpm exec playwright install --with-deps chromium
 
+      # --- Built-image path (T4/D1) -----------------------------------------
+      # Everything above/below this block tests PR source served by
+      # `pnpm run dev` (see playwright.config.ts) -- it never builds or runs
+      # the actual shipped Docker image. These four steps close that gap by
+      # building the real image from this PR's checkout and running
+      # tests/container/ (playwright.container.config.ts) against it, before
+      # paying for devnet bring-up, so a broken image/container regression
+      # fails fast.
+      #
+      # tests/bridge/* CANNOT run against this built image and are not
+      # attempted here: `pnpm run build:production` (package.json:14, what
+      # the Dockerfile's app-builder stage runs) never sets
+      # NEXT_PUBLIC_E2E_ENABLED, so `IS_E2E_ENABLED` (app/constants/e2e.ts:6)
+      # is permanently baked to `false` in any image built this way, and
+      # `app/context/e2eAccount.ts:4-6`'s auto-injected E2E signer -- the
+      # mechanism every wallet-signing spec in tests/bridge/ relies on --
+      # never exists in a built image. Only tests/container/'s wallet-free
+      # assertions (config loading, static rendering, error-gate behavior)
+      # are wired to run against it. See plans/snapshot-v2-aggkit-e2e/devui-under-test.md
+      # for the full analysis.
+      #
+      # TEMPORARY -- remove per plans/dev-ui-docker-ghcr/d2-adr-dependency-strategy.md §5
+      # A THIRD, SHA-pinned checkout of agglayer/sdk, this time staged inside
+      # the Docker build context (dev-ui/.sdk-src, gitignored) so the
+      # Dockerfile's sdk-builder stage can compile it -- mirrors
+      # docker-pr.yaml's `.sdk-src` step exactly, except nested under dev-ui/
+      # because this job's primary checkout already lives at dev-ui/ (see the
+      # comment above the first checkout step). This is separate from and in
+      # addition to the sibling `sdk/` checkout above (that one feeds the
+      # local `pnpm-workspace.yaml` `file:../sdk` override for
+      # `pnpm install`/`next dev`; this one feeds the Docker build context,
+      # which cannot reach outside itself).
+      - name: Checkout agglayer/sdk (pinned, TEMPORARY, for image build)
+        uses: actions/checkout@v4
+        with:
+          repository: agglayer/sdk
+          ref: ${{ env.SDK_REF }}
+          path: dev-ui/.sdk-src
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Reuses docker-pr.yaml's exact build-args/context/cache pattern
+      # (context: dev-ui because this job's checkout lives there), and its
+      # `docker-pr` GHA cache scope -- same Dockerfile + build-args, so this
+      # maximizes cache hits from docker-pr.yaml's own runs on the same
+      # branch/PR. `push: false` / `load: true`: never publish, just load the
+      # image into this runner's local daemon for the container suite below.
+      - name: Build image for container suite (single-arch, push false)
+        uses: docker/build-push-action@v6
+        with:
+          context: dev-ui
+          platforms: linux/amd64
+          push: false
+          load: true
+          build-args: |
+            SDK_REF=${{ env.SDK_REF }}
+          tags: agglayer-dev-ui:c1-test
+          cache-from: type=gha,scope=docker-pr
+          cache-to: type=gha,mode=max,scope=docker-pr
+
+      - name: Run container suite (tests/container, against the built image)
+        working-directory: dev-ui
+        run: pnpm exec playwright test --config=playwright.container.config.ts
+      # --- end built-image path -----------------------------------------
+
       # Vendored self-contained bundle -- tests/devnet/docker-compose.yml,
       # see tests/devnet/README.md. No bind mounts/volumes, no kurtosis CLI,
-      # 11 public GHCR images. NOTE: they are pinned by a TAG that contains a
-      # commit sha (snapshot-<sha>), not by a digest -- a tag is mutable, so
-      # re-publishing kurtosis-cdk's snapshot workflow with the same input tag
-      # would change what this job tests against without any diff here.
+      # 9 public GHCR images (the aggkit bridge is a component of the main
+      # aggkit-00X process now, not a separate `aggkit-00X-bridge` service).
+      # Every image is pinned by DIGEST (immutable) -- re-publishing
+      # kurtosis-cdk's snapshot workflow can never silently change what this
+      # job tests against without a diff here. `agglayer-dev-ui-002` (the
+      # baked dev-ui, manual use only) sits behind the `devui` compose
+      # profile, so this plain `up -d --wait` never starts it.
       # `--wait` blocks until every service's own healthcheck passes.
       # Every E2E_* literal in this job's `env:` is hand-copied from
       # tests/devnet/summary.json, and nothing in the repo reads that file
@@ -205,21 +275,24 @@ jobs:
           check E2E_PRIVATE_KEY     "$(jq -er '.accounts.e2e_wallet.private_key' "$s")" "$E2E_PRIVATE_KEY"
           check proxy_host_port     "$(jq -er '.proxy.host_port|tostring' "$s")" "8555"
           check NEXT_PUBLIC_AGGKIT_PROXY "$(jq -er '.aggkit_proxy.rest_url_via_proxy' "$s")" "$NEXT_PUBLIC_AGGKIT_PROXY"
-          # The vendored compose must pin the same snapshot the summary
-          # describes: summary.images.tag ends with the 12-char sha that the
-          # published tag is built from (snapshot-<sha>).
-          compose_tag=$(grep -oE 'SNAPSHOT_IMAGE_TAG:-[A-Za-z0-9._-]+' tests/devnet/docker-compose.yml | sed 's/.*:-//' | sort -u)
-          if [ "$(printf '%s\n' "$compose_tag" | grep -c .)" -ne 1 ]; then
-            echo "::error::tests/devnet/docker-compose.yml does not pin ONE SNAPSHOT_IMAGE_TAG default: $compose_tag" >&2
+          # The vendored compose must pin the exact same 9 images the summary
+          # describes: every compose `image:` line is `<ref>@sha256:<digest>`
+          # (digest-pinned, see tests/devnet/README.md's "Tag scheme"), so
+          # comparing the full SORTED SET of digests in each file catches a
+          # missing/extra/swapped image, not just a drifted single value.
+          compose_digests=$(grep -oE 'sha256:[0-9a-f]{64}' tests/devnet/docker-compose.yml | sort -u)
+          summary_digests=$(jq -er '[.images.services[].digest] | sort | .[]' "$s")
+          compose_count=$(printf '%s\n' "$compose_digests" | grep -c .)
+          summary_count=$(printf '%s\n' "$summary_digests" | grep -c .)
+          if [ "$compose_count" -ne 9 ] || [ "$summary_count" -ne 9 ]; then
+            echo "::error::expected 9 image digests each side, got $compose_count in docker-compose.yml and $summary_count in summary.json" >&2
+            fail=1
+          elif [ "$compose_digests" != "$summary_digests" ]; then
+            echo "::error::tests/devnet/docker-compose.yml's pinned image digests do not match tests/devnet/summary.json's images.services[].digest set. Bump them together (see tests/devnet/README.md)." >&2
+            diff <(echo "$compose_digests") <(echo "$summary_digests") >&2 || true
             fail=1
           else
-            summary_sha=$(jq -er '.images.tag' "$s" | grep -oE '[0-9a-f]{12}$' || true)
-            if [ -z "$summary_sha" ] || [ "$compose_tag" != "snapshot-$summary_sha" ]; then
-              echo "::error::compose pins '$compose_tag' but summary.json's images.tag is '$(jq -er '.images.tag' "$s")' (expected suffix 'snapshot-<12-hex>')" >&2
-              fail=1
-            else
-              echo "ok: compose tag $compose_tag matches summary images.tag"
-            fi
+            echo "ok: all 9 compose image digests match summary.json"
           fi
           [ "$fail" -eq 0 ]
 
@@ -286,6 +359,7 @@ jobs:
           name: playwright-report-${{ github.run_id }}
           path: |
             dev-ui/playwright-report
+            dev-ui/playwright-report-container
             dev-ui/test-results
             dev-ui/devnet-compose.log
           retention-days: 30
