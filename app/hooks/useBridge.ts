@@ -28,7 +28,7 @@ const resolveInitialToChainId = (
 };
 
 export const useBridge = () => {
-  const { chains, bridgeAddress, defaultFromChainId, defaultToChainId } = useAppMode();
+  const { chains, defaultFromChainId, defaultToChainId } = useAppMode();
   const { listTokens } = useTokens();
   const { address, status } = useWallet();
 
@@ -120,10 +120,15 @@ export const useBridge = () => {
     return ZERO_ADDRESS;
   }, [selectedToken]);
 
+  // ERC20 allowance approval always targets the source chain's bridge
+  // contract -- useCheckAllowance below is scoped to fromChainId, so the
+  // spender must be that specific chain's (possibly overridden) bridgeAddress,
+  // not the mode-level default.
   const spenderAddress = useMemo(() => {
-    if (!bridgeAddress || !isValidEthereumAddress(bridgeAddress)) return undefined;
-    return bridgeAddress;
-  }, [bridgeAddress]);
+    const address = fromChain?.bridgeAddress;
+    if (!address || !isValidEthereumAddress(address)) return undefined;
+    return address;
+  }, [fromChain]);
 
   const canCheckAllowance = Boolean(
     !isNative && selectedToken && spenderAddress && walletAddress && amountWei > BigInt(0)

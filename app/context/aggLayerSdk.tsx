@@ -48,9 +48,7 @@ export const AggLayerSDKProvider: React.FC<PropsWithChildren> = ({ children }) =
         // collision, ChainRegistry.getChainByNetworkId prefers a
         // consumer-registered chain (this one) over its own pre-registered
         // Ethereum mainnet/Sepolia defaults, regardless of registration order.
-        chains: config.chains.map((chain: AppChain) =>
-          toSdkChainConfig(chain, config.bridgeAddress)
-        )
+        chains: config.chains.map((chain: AppChain) => toSdkChainConfig(chain, chain.bridgeAddress))
       }
     });
 

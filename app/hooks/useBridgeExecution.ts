@@ -18,7 +18,11 @@ import { usePublicClient, useSendTransaction } from 'wagmi';
 export const useBridgeExecution = (params: { fromChainId: number }) => {
   const { fromChainId } = params;
   const native = useAggNative();
-  const { chains, bridgeAddress } = useAppMode();
+  const { chains } = useAppMode();
+  // The bridge send always targets fromChainId's own (possibly overridden)
+  // bridge contract, not the mode-level default -- see app/config.ts's
+  // buildModeConfig for how each chain's bridgeAddress is resolved.
+  const bridgeAddress = chains.find((chain) => chain.id === fromChainId)?.bridgeAddress;
   const { address } = useWallet();
   const senderAccount = useSenderAccount();
   const publicClient = usePublicClient({ chainId: fromChainId });

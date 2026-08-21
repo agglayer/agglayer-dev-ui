@@ -23,13 +23,12 @@ import { useCallback, useState } from 'react';
 import { useConfig, useSendTransaction } from 'wagmi';
 
 interface UseClaimExecutionParams {
-  bridgeAddress?: string;
   chains: AppChain[];
   onComplete?: (result: ClaimExecutionResult) => void;
 }
 
 export const useClaimExecution = (params: UseClaimExecutionParams) => {
-  const { bridgeAddress, onComplete } = params;
+  const { chains, onComplete } = params;
   const native = useAggNative();
   const aggregator = useAggkitAggregator();
   const config = useConfig();
@@ -55,6 +54,12 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
         });
         return;
       }
+
+      // The claim always lands on destinationChainId's own (possibly
+      // overridden) bridge contract, not the mode-level default -- see
+      // app/config.ts's buildModeConfig for how each chain's bridgeAddress is
+      // resolved.
+      const bridgeAddress = chains.find((chain) => chain.id === destinationChainId)?.bridgeAddress;
 
       if (!bridgeAddress) {
         setState({
@@ -221,16 +226,7 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
         });
       }
     },
-    [
-      address,
-      aggregator,
-      bridgeAddress,
-      config,
-      native,
-      onComplete,
-      sendTransactionAsync,
-      senderAccount
-    ]
+    [address, aggregator, chains, config, native, onComplete, sendTransactionAsync, senderAccount]
   );
 
   const reset = useCallback(() => {

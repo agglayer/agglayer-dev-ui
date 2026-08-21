@@ -24,7 +24,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 export const TransactionsView = () => {
   const { address, status, chainId, connect } = useWallet();
-  const { defaultFromChainId, chains, bridgeAddress } = useAppMode();
+  const { defaultFromChainId, chains } = useAppMode();
   const { aggressiveRefetch, triggerAggressiveRefetch, clearAggressiveRefetch } = useRefetch();
   const queryClient = useQueryClient();
   const initialStatus = getTransactionInitialStatus();
@@ -83,7 +83,6 @@ export const TransactionsView = () => {
 
   const ensureCorrectChain = useEnforceCorrectChain();
   const claimExecution = useClaimExecution({
-    bridgeAddress,
     chains,
     onComplete: handleClaimComplete
   });
