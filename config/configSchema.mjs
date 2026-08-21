@@ -76,7 +76,13 @@ export const jsonChainConfigSchema = z
     iconUrl: urlString,
     networkId: z.number().int().min(0),
     isTestnet: z.boolean(),
-    eta: z.number().int().min(0)
+    eta: z.number().int().min(0),
+    // Per-chain override of the enclosing mode's `bridgeAddress` -- set this
+    // only when this specific chain's deployed bridge contract differs from
+    // every other chain in the mode (most modes share one deterministic
+    // address across all their chains, hence the mode-level default). Omit to
+    // inherit the mode's `bridgeAddress`; see app/config.ts's buildModeConfig.
+    bridgeAddress: addressString.optional()
   })
   .strict();
 

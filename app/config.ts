@@ -146,7 +146,17 @@ const buildModeConfig = (
     return { label: modeKey, bridgeAddress: '', aggkitBridgeApis: {}, chains: [] };
   }
 
-  const chains = modeConfigJson.chainKeys.map((chainKey) => chainRegistry[chainKey].app);
+  // Resolve each chain's effective bridgeAddress: its own config.json
+  // chains.<key>.bridgeAddress override when set, otherwise this mode's
+  // bridgeAddress default. chainRegistry.app.bridgeAddress is '' (the "no
+  // override" sentinel from createChainEntry) for the common case, so this
+  // only copies when a fallback is actually needed -- a chain shared by
+  // multiple modes never has its registry entry mutated with one mode's
+  // default (which could be wrong for another mode using the same chain key).
+  const chains = modeConfigJson.chainKeys.map((chainKey) => {
+    const chain = chainRegistry[chainKey].app;
+    return chain.bridgeAddress ? chain : { ...chain, bridgeAddress: modeConfigJson.bridgeAddress };
+  });
   // L1 (networkId 0) never keys an aggkitBridgeApis entry (design.md §1.2) --
   // only non-L1 networks get fanned out from this mode's aggkitProxy.
   const nonL1NetworkIds = chains
@@ -216,7 +226,8 @@ export const buildAppConfig = (configJson: JsonConfig): ResolvedAppConfig => {
         icon: chainConfigJson.iconUrl,
         networkId: chainConfigJson.networkId,
         isTestnet: chainConfigJson.isTestnet,
-        eta: chainConfigJson.eta
+        eta: chainConfigJson.eta,
+        bridgeAddress: chainConfigJson.bridgeAddress
       })
     ])
   );

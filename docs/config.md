@@ -284,6 +284,37 @@ Chains are defined in the `chains` object, keyed by an uppercase identifier:
 | `networkId` | Yes | AggLayer network ID |
 | `isTestnet` | Yes | Whether this is a test network |
 | `eta` | Yes | Estimated bridging time in minutes |
+| `bridgeAddress` | No | Per-chain override of the enclosing mode's `bridgeAddress` (see below). Omit to inherit the mode's value. |
+
+#### Per-chain `bridgeAddress` override
+
+Every mode's `bridgeAddress` (see [App Modes](#app-modes) below) is the *default* bridge
+contract address applied to every chain in that mode's `chainKeys` — this is the correct
+shape whenever all of a mode's chains share one deterministic bridge address, which is
+every mode this app currently ships.
+
+If one specific chain's bridge contract genuinely differs from the rest of its mode (e.g.
+a chain onboarded with its own deployment), set `bridgeAddress` directly on that chain
+entry in `chains`:
+
+```json
+{
+  "chains": {
+    "MY_CHAIN": {
+      "...": "...",
+      "bridgeAddress": "0x000000000000000000000000000000000000dd"
+    }
+  }
+}
+```
+
+The chain's own value always wins; it is resolved once per mode by
+`app/config.ts`'s `buildModeConfig` before the chain reaches any UI code, so every
+consumer (the SDK's per-chain `chains` registration in
+`app/context/aggLayerSdk.tsx`, the bridge/claim execution hooks) already sees the
+effective address and never needs to know whether it came from the chain or the mode.
+Because `chains` is a single global map (not nested per mode), a chain-level override
+applies in every mode that lists that chain key, not just one.
 
 ## App Modes
 
@@ -318,7 +349,7 @@ deployed for them yet. See [Aggkit Bridge APIs](#aggkit-bridge-apis-aggkitproxy)
 | Field | Required | Description |
 |-------|----------|-------------|
 | `label` | Yes | Display label in the mode switcher |
-| `bridgeAddress` | Yes | Bridge contract address |
+| `bridgeAddress` | Yes | Default bridge contract address for every chain in `chainKeys`, unless a chain sets its own override (see [Per-chain `bridgeAddress` override](#per-chain-bridgeaddress-override)) |
 | `aggkitProxy` | Conditional | A single URL fronting every network in this mode via one multiplexing aggkit-proxy. May be omitted as the "not yet configured" escape hatch (see [Validation](#validation)). |
 | `chainKeys` | Yes | Array of chain keys from `chains` (need >= 2 to enable) |
 | `defaultFromChainKey` | No | Default source chain (defaults to first in `chainKeys`) |

@@ -1,3 +1,4 @@
+import type { AppChain } from '@/app/types/appMode';
 import type { JsonConfig } from '@/app/types/config';
 
 import {
@@ -118,6 +119,53 @@ describe('buildAppConfig — aggkitProxy fan-out', () => {
     const resolved = buildAppConfig(buildConfigJson(null));
 
     expect(resolved.appModeConfig.devnet.aggkitBridgeApis).toEqual({});
+  });
+});
+
+describe('buildAppConfig — per-chain bridgeAddress override', () => {
+  it("falls back to the mode's bridgeAddress when a chain has no override", () => {
+    const resolved = buildAppConfig(buildConfigJson());
+
+    const [devnetL1, devnetL2001] = resolved.appModeConfig.devnet.chains as [AppChain, AppChain];
+    expect(devnetL1.bridgeAddress).toBe('0xC8cbEBf950B9Df44d987c8619f092beA980fF038');
+    expect(devnetL2001.bridgeAddress).toBe('0xC8cbEBf950B9Df44d987c8619f092beA980fF038');
+  });
+
+  it("a chain's own bridgeAddress wins over the mode's default", () => {
+    const configJson = buildConfigJson();
+    configJson.chains.DEVNET_L2_001 = chain({
+      id: 20201,
+      name: 'Devnet L2-001',
+      networkId: 1,
+      bridgeAddress: '0x000000000000000000000000000000000000dd'
+    });
+
+    const resolved = buildAppConfig(configJson);
+
+    const [devnetL1, devnetL2001, devnetL2002] = resolved.appModeConfig.devnet.chains as [
+      AppChain,
+      AppChain,
+      AppChain
+    ];
+    expect(devnetL1.bridgeAddress).toBe('0xC8cbEBf950B9Df44d987c8619f092beA980fF038');
+    expect(devnetL2001.bridgeAddress).toBe('0x000000000000000000000000000000000000dd');
+    expect(devnetL2002.bridgeAddress).toBe('0xC8cbEBf950B9Df44d987c8619f092beA980fF038');
+  });
+
+  it("does not leak one mode's bridgeAddress default onto a chain shared by another mode", () => {
+    const configJson = buildConfigJson();
+    configJson.appModes.configs.testnet = {
+      label: 'Testnet',
+      bridgeAddress: '0x1111111111111111111111111111111111111a',
+      chainKeys: ['DEVNET_L1', 'DEVNET_L2_001']
+    };
+
+    const resolved = buildAppConfig(configJson);
+
+    const [devnetL1] = resolved.appModeConfig.devnet.chains as [AppChain, ...AppChain[]];
+    const [testnetL1] = resolved.appModeConfig.testnet.chains as [AppChain, ...AppChain[]];
+    expect(devnetL1.bridgeAddress).toBe('0xC8cbEBf950B9Df44d987c8619f092beA980fF038');
+    expect(testnetL1.bridgeAddress).toBe('0x1111111111111111111111111111111111111a');
   });
 });
 

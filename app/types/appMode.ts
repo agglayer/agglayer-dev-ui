@@ -18,6 +18,12 @@ export type AppChain = {
     symbol: string;
     logoURI: string;
   };
+  // Resolved bridge contract address for this chain: config.json's
+  // chains.<key>.bridgeAddress override when set, otherwise the enclosing
+  // mode's bridgeAddress default. Always resolved by app/config.ts's
+  // buildModeConfig before an AppChain reaches this array -- never read the
+  // raw, possibly-unset per-chain value directly.
+  bridgeAddress: string;
 };
 
 type BaseModeConfig = {

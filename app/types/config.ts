@@ -22,6 +22,10 @@ export type ChainEntryParams = {
   eta: number;
   rpcUrl?: string;
   explorer?: string;
+  // Raw per-chain bridgeAddress override from config.json (chains.<key>.bridgeAddress),
+  // possibly unset -- app/config.ts's buildModeConfig resolves the mode-level
+  // fallback, this is not the final value AppChain consumers should read.
+  bridgeAddress?: string;
 };
 
 export type JsonNativeCurrencyConfig = z.infer<typeof JsonNativeCurrencyConfigSchema>;

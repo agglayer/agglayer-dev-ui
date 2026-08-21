@@ -14,6 +14,11 @@ export const createChainEntry = (params: ChainEntryParams): ChainEntry => ({
     isTestnet: params.isTestnet,
     rpcUrl: params.rpcUrl ?? params.wagmi.rpcUrls.default.http[0] ?? '',
     eta: params.eta,
+    // '' is the "no per-chain override configured" sentinel -- never a valid
+    // address (config/configSchema.mjs's addressString rejects ''), so
+    // app/config.ts's buildModeConfig can safely treat it as "fall back to
+    // this mode's bridgeAddress".
+    bridgeAddress: params.bridgeAddress ?? '',
     nativeCurrency: {
       address: ZERO_ADDRESS,
       decimals: params.wagmi.nativeCurrency.decimals,
