@@ -17,6 +17,12 @@ export type AppChain = {
     name: string;
     symbol: string;
     logoURI: string;
+    // Resolved config.json chains.<key>.currency.wethToken, or ZERO_ADDRESS
+    // when unset. Read by app/hooks/useTokenBalance.ts to source the
+    // displayed balance from this ERC-20 instead of the native balance --
+    // see that hook and config/configSchema.mjs's wethToken comment. Never
+    // affects the bridge deposit itself.
+    wethToken: string;
   };
   // Resolved bridge contract address for this chain: config.json's
   // chains.<key>.bridgeAddress override when set, otherwise the enclosing

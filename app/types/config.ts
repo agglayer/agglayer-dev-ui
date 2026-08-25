@@ -26,6 +26,12 @@ export type ChainEntryParams = {
   // possibly unset -- app/config.ts's buildModeConfig resolves the mode-level
   // fallback, this is not the final value AppChain consumers should read.
   bridgeAddress?: string;
+  // config.json's chains.<key>.currency.address override, possibly unset --
+  // app/utils/config.ts's createChainEntry falls back to ZERO_ADDRESS.
+  nativeCurrencyAddress?: string;
+  // config.json's chains.<key>.currency.wethToken override, possibly unset --
+  // app/utils/config.ts's createChainEntry falls back to ZERO_ADDRESS.
+  nativeCurrencyWethToken?: string;
 };
 
 export type JsonNativeCurrencyConfig = z.infer<typeof JsonNativeCurrencyConfigSchema>;
