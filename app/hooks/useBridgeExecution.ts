@@ -11,6 +11,7 @@ import { useSenderAccount } from '@/app/hooks/useSenderAccount';
 import { ZERO_ADDRESS } from '@/app/types/bridge';
 import { isValidEthereumAddress } from '@/app/utils/address';
 import { getNetworkId } from '@/app/utils/chains';
+import { normalize } from '@/app/utils/format';
 import { mapTransactionRequest } from '@/app/utils/transaction';
 import { useCallback, useState } from 'react';
 import { usePublicClient, useSendTransaction } from 'wagmi';
@@ -19,10 +20,31 @@ export const useBridgeExecution = (params: { fromChainId: number }) => {
   const { fromChainId } = params;
   const native = useAggNative();
   const { chains } = useAppMode();
+  const fromChain = chains.find((chain) => chain.id === fromChainId);
   // The bridge send always targets fromChainId's own (possibly overridden)
   // bridge contract, not the mode-level default -- see app/config.ts's
   // buildModeConfig for how each chain's bridgeAddress is resolved.
-  const bridgeAddress = chains.find((chain) => chain.id === fromChainId)?.bridgeAddress;
+  const bridgeAddress = fromChain?.bridgeAddress;
+  // config.json's chains.<key>.currency.wethToken, resolved. On a network
+  // whose native/gas token isn't ether but a custom gasToken, the AggLayer
+  // bridge contract deploys a wrapped-ETH contract at this address (its own
+  // `WETHToken` state variable) to represent mainnet ETH bridged in — see
+  // AgglayerBridge.sol (agglayer/agglayer-contracts v12.2.3): "WETH address
+  // will only be present when the native token is not ether, but another
+  // gasToken." Bridging that OUT is `bridgeAsset(token: WETHToken, ...)`,
+  // which the contract special-cases into a privileged burn
+  // (`_bridgeWrappedAsset` -> `tokenWrapped.burn(msg.sender, amount)`, no
+  // ERC20 allowance needed) and REQUIRES msg.value to be 0 (reverts with
+  // MsgValueNotZero() otherwise) -- unlike the token === address(0) branch,
+  // which requires msg.value to equal amount. Passing this as `token` below
+  // is enough: native.bridge(...).buildBridgeAsset derives whether to attach
+  // value purely from `token === ZERO_ADDRESS`, so a non-zero token here
+  // already omits value on its own, matching the contract's requirement.
+  const wethToken =
+    fromChain?.nativeCurrency.wethToken &&
+    normalize(fromChain.nativeCurrency.wethToken) !== normalize(ZERO_ADDRESS)
+      ? fromChain.nativeCurrency.wethToken
+      : undefined;
   const { address } = useWallet();
   const senderAccount = useSenderAccount();
   const publicClient = usePublicClient({ chainId: fromChainId });
@@ -118,7 +140,7 @@ export const useBridgeExecution = (params: { fromChainId: number }) => {
                 destinationNetwork: destNetworkId,
                 destinationAddress: recipient,
                 amount: args.amountWei.toString(),
-                token: ZERO_ADDRESS,
+                token: wethToken ?? ZERO_ADDRESS,
                 forceUpdateGlobalExitRoot: true
               },
               walletAddress
@@ -177,7 +199,8 @@ export const useBridgeExecution = (params: { fromChainId: number }) => {
       native,
       publicClient,
       sendTransactionAsync,
-      senderAccount
+      senderAccount,
+      wethToken
     ]
   );
 

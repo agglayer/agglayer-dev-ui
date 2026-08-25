@@ -11,5 +11,6 @@ export type ChainMetadata = {
     name: string;
     symbol: string;
     logoURI: string;
+    wethToken: string;
   };
 };

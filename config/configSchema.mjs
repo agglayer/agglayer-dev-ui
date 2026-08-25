@@ -62,7 +62,30 @@ export const JsonNativeCurrencyConfigSchema = z
   .object({
     name: nonEmptyString,
     symbol: nonEmptyString,
-    decimals: z.number().int().min(0)
+    decimals: z.number().int().min(0),
+    // Optional override of the address this chain's native gas token is
+    // identified/displayed by. Omit to keep the default: app/utils/config.ts's
+    // createChainEntry falls back to ZERO_ADDRESS, the AggLayer bridge
+    // contract's convention for "native asset" regardless of this value --
+    // the actual on-chain bridge call always hardcodes ZERO_ADDRESS for a
+    // native-asset deposit (app/hooks/useBridgeExecution.ts), so this only
+    // affects the token's identity key and display, never what gets bridged.
+    address: addressString.optional(),
+    // Optional address of this chain's AggLayer bridge contract's own
+    // `WETHToken` -- present only on a network whose native/gas token isn't
+    // ether but a custom gasToken, where the bridge contract deploys a
+    // wrapped-ETH contract at this address to represent mainnet ETH bridged
+    // in (see AgglayerBridge.sol, agglayer/agglayer-contracts v12.2.3).
+    // Omit or leave at the zero address (the default) to change nothing.
+    // When set, gates two things in the app: the displayed balance for this
+    // chain's native gas token is read from this ERC-20 instead of the
+    // wallet's native balance (app/hooks/useTokenBalance.ts), AND bridging
+    // that token out passes this as the `token` param to `bridgeAsset`
+    // instead of the zero address (app/hooks/useBridgeExecution.ts) -- the
+    // contract special-cases `token === WETHToken` into a privileged burn
+    // requiring `msg.value === 0`, unlike the `token === address(0)` branch
+    // which requires `msg.value === amount`.
+    wethToken: addressString.optional()
   })
   .strict();
 

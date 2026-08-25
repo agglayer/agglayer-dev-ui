@@ -169,6 +169,67 @@ describe('buildAppConfig — per-chain bridgeAddress override', () => {
   });
 });
 
+describe('buildAppConfig — chains.<key>.currency.address (native-currency address override)', () => {
+  it('defaults nativeCurrency.address to the zero address when currency.address is omitted', () => {
+    const resolved = buildAppConfig(buildConfigJson());
+
+    const [devnetL1] = resolved.appModeConfig.devnet.chains as [AppChain, ...AppChain[]];
+    expect(devnetL1.nativeCurrency.address).toBe('0x0000000000000000000000000000000000000000');
+  });
+
+  it("a chain's own currency.address wins when set", () => {
+    const configJson = buildConfigJson();
+    configJson.chains.DEVNET_L1 = chain({
+      id: 271828,
+      name: 'Devnet L1',
+      networkId: 0,
+      currency: {
+        name: 'Ether',
+        symbol: 'ETH',
+        decimals: 18,
+        address: '0x0000003f0000003F0000003F0000003f0000003f'
+      }
+    });
+
+    const resolved = buildAppConfig(configJson);
+
+    const [devnetL1, devnetL2001] = resolved.appModeConfig.devnet.chains as [AppChain, AppChain];
+    expect(devnetL1.nativeCurrency.address).toBe('0x0000003f0000003F0000003F0000003f0000003f');
+    expect(devnetL2001.nativeCurrency.address).toBe('0x0000000000000000000000000000000000000000');
+  });
+});
+
+describe('buildAppConfig — chains.<key>.currency.wethToken (displayed-balance override)', () => {
+  it('defaults nativeCurrency.wethToken to the zero address when currency.wethToken is omitted', () => {
+    const resolved = buildAppConfig(buildConfigJson());
+
+    const [devnetL1] = resolved.appModeConfig.devnet.chains as [AppChain, ...AppChain[]];
+    expect(devnetL1.nativeCurrency.wethToken).toBe('0x0000000000000000000000000000000000000000');
+  });
+
+  it("a chain's own currency.wethToken wins when set, independent of currency.address", () => {
+    const configJson = buildConfigJson();
+    configJson.chains.DEVNET_L1 = chain({
+      id: 271828,
+      name: 'Devnet L1',
+      networkId: 0,
+      currency: {
+        name: 'Ether',
+        symbol: 'ETH',
+        decimals: 18,
+        wethToken: '0x0000003f0000003F0000003F0000003f0000003f'
+      }
+    });
+
+    const resolved = buildAppConfig(configJson);
+
+    const [devnetL1, devnetL2001] = resolved.appModeConfig.devnet.chains as [AppChain, AppChain];
+    expect(devnetL1.nativeCurrency.wethToken).toBe('0x0000003f0000003F0000003F0000003f0000003f');
+    expect(devnetL1.nativeCurrency.address).toBe('0x0000000000000000000000000000000000000000');
+    expect(devnetL2001.nativeCurrency.wethToken).toBe('0x0000000000000000000000000000000000000000');
+  });
+});
+
 describe('buildAppConfig — NEXT_PUBLIC_AGGKIT_PROXY override precedence', () => {
   afterEach(() => {
     delete process.env.NEXT_PUBLIC_AGGKIT_PROXY;

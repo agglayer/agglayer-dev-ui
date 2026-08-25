@@ -20,6 +20,21 @@ browser tab. No Next build/recompile is involved. `pnpm run dev` and `pnpm run b
 both already run this sync automatically before starting/building — you only need to run
 it manually mid-session, after an edit, without restarting the dev server.
 
+**Syncing from a config file outside the repo:** set `DEV_UI_CONFIG_PATH` to sync
+`public/config.json` from a different source file instead of the repo-root `config.json`
+— useful for switching between saved configs (e.g. a devnet config kept outside the repo)
+without overwriting the tracked `config.json`. Accepts an absolute path, a path relative
+to the repo root, or a `~`-prefixed path (expanded against the home directory, since a
+value set via an IDE launch config is not passed through a shell):
+
+```bash
+DEV_UI_CONFIG_PATH=~/my-configs/config-devnet.json pnpm run dev
+```
+
+This only affects `public/config.json` (what the dev server serves) — the repo-root
+`config.json` is left untouched. See [`DEV_UI_CONFIG_PATH`](#dev_ui_config_path-script-level-not-a-next_public_-variable)
+under [Environment Variables](#environment-variables) below.
+
 **Devnet corollary:** `scripts/kurtosisDevnetEnv.mjs` writes the **root** `config.json`
 only. `public/config.json` — and therefore what the dev server actually serves — stays
 stale until the next `pnpm run dev` (which re-syncs on start) or a manual
@@ -279,12 +294,63 @@ Chains are defined in the `chains` object, keyed by an uppercase identifier:
 | `name` | Yes | Display name |
 | `rpcUrl` | Yes | RPC endpoint URL |
 | `explorerUrl` | Yes | Block explorer URL |
-| `currency` | Yes | Native currency `{ name, symbol, decimals }` |
+| `currency` | Yes | Native currency `{ name, symbol, decimals, address?, wethToken? }` (see below) |
 | `iconUrl` | Yes | URL for the chain/native token icon shown in the UI |
 | `networkId` | Yes | AggLayer network ID |
 | `isTestnet` | Yes | Whether this is a test network |
 | `eta` | Yes | Estimated bridging time in minutes |
 | `bridgeAddress` | No | Per-chain override of the enclosing mode's `bridgeAddress` (see below). Omit to inherit the mode's value. |
+
+#### `currency.address` override
+
+`currency.address` is optional and defaults to the zero address
+(`0x0000...0000`) when omitted — the identity/display address the UI's native
+gas token entry for this chain uses (its dedup key in `app/context/token.tsx`
+and the address shown in the token selector). Set it only if you need that
+entry to carry a specific address (e.g. a canonical wrapped-native-token
+address some chains use as a convention for their gas token).
+
+This does **not** change what gets bridged on-chain: a native-asset bridge
+deposit always submits the zero address to the bridge contract regardless of
+this value (`app/hooks/useBridgeExecution.ts` hardcodes it, per the AggLayer
+bridge contract's "native asset" convention). It also does not add a
+*second*, separate wrapped-token entry to the token list — it only changes
+the address of the existing native-currency entry. To offer a chain's
+wrapped-native ERC-20 as an additional, separately selectable token, users
+still need to import it manually via "Manage tokens" (see
+[Tokens](#tokens) below) — there is no config-level mechanism for
+pre-populating extra tokens per chain.
+
+#### `currency.wethToken` override
+
+`currency.wethToken` is optional and defaults to the zero address
+(`0x0000...0000`) when omitted, which changes nothing. Set it on a network
+whose native/gas token is **not** ether but a custom `gasToken` — on such a
+network, the AggLayer bridge contract deploys a wrapped-ETH contract to
+represent mainnet ETH bridged in, exposed as the contract's own `WETHToken`
+state variable (see `AgglayerBridge.sol`, agglayer/agglayer-contracts
+v12.2.3: *"WETH address will only be present when the native token is not
+ether, but another gasToken"*). Set `currency.wethToken` to that contract's
+address. It drives two things, both gated on this same value being non-zero:
+
+- **Displayed balance** (`app/hooks/useTokenBalance.ts`): instead of reading
+  the wallet's native balance, the UI reads this ERC-20's `balanceOf` for the
+  connected wallet — the actual balance users hold for this chain's gas token
+  lives here, not as native balance.
+- **Bridge deposit** (`app/hooks/useBridgeExecution.ts`): bridging this
+  chain's native token out calls `bridgeAsset` with `token: <wethToken>`
+  instead of the zero address. The AggLayer bridge contract special-cases
+  `token === WETHToken` into a privileged burn
+  (`tokenWrapped.burn(msg.sender, amount)`, no ERC-20 allowance needed) and
+  *requires* `msg.value` to be `0` — unlike the `token === address(0)` branch,
+  which requires `msg.value` to equal the amount. `buildBridgeAsset` derives
+  whether to attach `value` purely from `token === ZERO_ADDRESS`, so passing
+  a non-zero `token` here already omits `value` correctly without any other
+  code change.
+
+It is independent of `currency.address` above (that one only affects the
+token's identity/display address, never the bridge call) — setting one does
+not require or affect the other.
 
 #### Per-chain `bridgeAddress` override
 
@@ -405,6 +471,16 @@ cp .env.example .env.local
 # locally (see README for degraded-mode behavior)
 # Optionally set NEXT_PUBLIC_AGGKIT_PROXY for devnet/kurtosis setups
 ```
+
+### `DEV_UI_CONFIG_PATH` (script-level, not a `NEXT_PUBLIC_` variable)
+
+Unlike the two variables above, `DEV_UI_CONFIG_PATH` is not inlined into the JS bundle —
+it is read only by `scripts/syncPublicConfig.mjs` (which both `pnpm run dev` and
+`pnpm run build` run automatically) to pick which file to sync into `public/config.json`.
+Set it to point the sync at a config file other than the repo-root `config.json` — see the
+"Syncing from a config file outside the repo" note near the top of this doc. It has no
+effect on a prebuilt container image either: that image's entrypoint serves a mounted
+`config.json` directly and never runs this script.
 
 ## Migration from Bridge Hub API (Old Config)
 

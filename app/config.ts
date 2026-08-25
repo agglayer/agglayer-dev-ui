@@ -227,7 +227,9 @@ export const buildAppConfig = (configJson: JsonConfig): ResolvedAppConfig => {
         networkId: chainConfigJson.networkId,
         isTestnet: chainConfigJson.isTestnet,
         eta: chainConfigJson.eta,
-        bridgeAddress: chainConfigJson.bridgeAddress
+        bridgeAddress: chainConfigJson.bridgeAddress,
+        nativeCurrencyAddress: chainConfigJson.currency.address,
+        nativeCurrencyWethToken: chainConfigJson.currency.wethToken
       })
     ])
   );

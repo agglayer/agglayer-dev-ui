@@ -20,11 +20,12 @@ export const createChainEntry = (params: ChainEntryParams): ChainEntry => ({
     // this mode's bridgeAddress".
     bridgeAddress: params.bridgeAddress ?? '',
     nativeCurrency: {
-      address: ZERO_ADDRESS,
+      address: params.nativeCurrencyAddress ?? ZERO_ADDRESS,
       decimals: params.wagmi.nativeCurrency.decimals,
       name: params.wagmi.nativeCurrency.name,
       symbol: params.wagmi.nativeCurrency.symbol,
-      logoURI: params.icon
+      logoURI: params.icon,
+      wethToken: params.nativeCurrencyWethToken ?? ZERO_ADDRESS
     }
   }
 });

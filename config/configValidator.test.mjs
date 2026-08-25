@@ -167,3 +167,55 @@ describe('parseConfigOrThrow — chains<->map and duplicate-networkId checks no 
     expect(() => parseConfigOrThrow(config)).not.toThrow();
   });
 });
+
+describe('parseConfigOrThrow — chains.<key>.currency.address (optional native-currency address override)', () => {
+  it('passes when currency.address is omitted', () => {
+    expect(() => parseConfigOrThrow(buildConfig())).not.toThrow();
+  });
+
+  it('passes when currency.address is a well-formed address', () => {
+    const config = buildConfig();
+    config.chains.DEVNET_L1.currency = {
+      ...config.chains.DEVNET_L1.currency,
+      address: '0x0000003f0000003F0000003F0000003f0000003f'
+    };
+
+    expect(() => parseConfigOrThrow(config)).not.toThrow();
+  });
+
+  it('rejects a malformed currency.address', () => {
+    const config = buildConfig();
+    config.chains.DEVNET_L1.currency = {
+      ...config.chains.DEVNET_L1.currency,
+      address: 'not-an-address'
+    };
+
+    expect(() => parseConfigOrThrow(config)).toThrow();
+  });
+});
+
+describe('parseConfigOrThrow — chains.<key>.currency.wethToken (optional displayed-balance override)', () => {
+  it('passes when currency.wethToken is omitted', () => {
+    expect(() => parseConfigOrThrow(buildConfig())).not.toThrow();
+  });
+
+  it('passes when currency.wethToken is a well-formed address', () => {
+    const config = buildConfig();
+    config.chains.DEVNET_L1.currency = {
+      ...config.chains.DEVNET_L1.currency,
+      wethToken: '0x0000003f0000003F0000003F0000003f0000003f'
+    };
+
+    expect(() => parseConfigOrThrow(config)).not.toThrow();
+  });
+
+  it('rejects a malformed currency.wethToken', () => {
+    const config = buildConfig();
+    config.chains.DEVNET_L1.currency = {
+      ...config.chains.DEVNET_L1.currency,
+      wethToken: 'not-an-address'
+    };
+
+    expect(() => parseConfigOrThrow(config)).toThrow();
+  });
+});
