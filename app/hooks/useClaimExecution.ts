@@ -4,6 +4,7 @@ import type { AppChain } from '@/app/types/appMode';
 import type {
   ClaimExecutionResult,
   ClaimExecutionState,
+  ClaimFailedStep,
   Transaction
 } from '@/app/types/transaction';
 import type { Hex } from 'viem';
@@ -50,7 +51,7 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
         setState({
           isExecuting: false,
           currentStep: 'error',
-          error: { message: 'Wallet not connected' }
+          error: { message: 'Wallet not connected', step: 'validating-wallet' }
         });
         return;
       }
@@ -65,7 +66,7 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
         setState({
           isExecuting: false,
           currentStep: 'error',
-          error: { message: 'Bridge address not configured' }
+          error: { message: 'Bridge address not configured', step: 'validating-configuration' }
         });
         return;
       }
@@ -78,6 +79,9 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
       });
 
       let localClaimHash: Hex | undefined;
+      // Tracks which sub-step we're attempting so the catch block below can
+      // report *where* an unexpected throw happened, not just that one did.
+      let failedStep: ClaimFailedStep = 'checking-claim-status';
 
       try {
         // isClaimed's leafIndex is the local deposit index (deposit_count),
@@ -95,7 +99,10 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
         });
 
         if (alreadyClaimed) {
-          const error = { message: 'This deposit has already been claimed' };
+          const error = {
+            message: 'This deposit has already been claimed',
+            step: failedStep
+          };
           setState({
             isExecuting: false,
             currentStep: 'error',
@@ -112,6 +119,7 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
           return;
         }
 
+        failedStep = 'fetching-claim-proof';
         const { proof: rawProof } = await aggregator.getClaimInputs({
           originNetworkId: transaction.sourceNetwork,
           destinationNetworkId: transaction.destinationNetwork,
@@ -119,9 +127,11 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
         });
         const proof = toClaimProof(rawProof);
 
+        failedStep = 'building-claim-transaction';
         const claimParams = buildClaimAssetParams({ transaction, proof });
         const claimTx = await bridge.buildClaimAsset(claimParams, walletAddress);
 
+        failedStep = 'sending-transaction';
         localClaimHash = await sendTransactionAsync({
           ...mapTransactionRequest(claimTx),
           account: senderAccount,
@@ -130,6 +140,7 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
 
         setState((prev) => ({ ...prev, claimTxHash: localClaimHash }));
 
+        failedStep = 'confirming-transaction';
         const publicClient = getPublicClient(config, { chainId: destinationChainId });
         if (!publicClient) {
           throw new Error('Failed to get public client for destination chain');
@@ -138,7 +149,11 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
         const receipt = await publicClient.waitForTransactionReceipt({ hash: localClaimHash });
 
         if (receipt.status === 'reverted') {
-          const error = { message: 'Claim transaction reverted', txHash: localClaimHash };
+          const error = {
+            message: 'Claim transaction reverted',
+            txHash: localClaimHash,
+            step: failedStep
+          };
           setState({
             isExecuting: false,
             currentStep: 'error',
@@ -208,7 +223,7 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
           : error instanceof Error
             ? error.message
             : 'Claim failed';
-        const errorState = { message, txHash: localClaimHash };
+        const errorState = { message, txHash: localClaimHash, step: failedStep };
         setState({
           isExecuting: false,
           currentStep: 'error',

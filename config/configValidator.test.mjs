@@ -219,3 +219,30 @@ describe('parseConfigOrThrow — chains.<key>.currency.wethToken (optional displ
     expect(() => parseConfigOrThrow(config)).toThrow();
   });
 });
+
+describe('parseConfigOrThrow — chains.<key>.nativeBridgeURL (optional native-bridge advisory)', () => {
+  it('passes when nativeBridgeURL is omitted', () => {
+    expect(() => parseConfigOrThrow(buildConfig())).not.toThrow();
+  });
+
+  it('passes when nativeBridgeURL is a well-formed http(s) URL', () => {
+    const config = buildConfig();
+    config.chains.DEVNET_L2_001.nativeBridgeURL = 'https://bridge.example.com';
+
+    expect(() => parseConfigOrThrow(config)).not.toThrow();
+  });
+
+  it('rejects a non-http(s) nativeBridgeURL scheme', () => {
+    const config = buildConfig();
+    config.chains.DEVNET_L2_001.nativeBridgeURL = 'javascript:alert(1)';
+
+    expect(() => parseConfigOrThrow(config)).toThrow();
+  });
+
+  it('rejects a malformed nativeBridgeURL', () => {
+    const config = buildConfig();
+    config.chains.DEVNET_L2_001.nativeBridgeURL = 'not-a-url';
+
+    expect(() => parseConfigOrThrow(config)).toThrow();
+  });
+});

@@ -19,6 +19,7 @@ export const createChainEntry = (params: ChainEntryParams): ChainEntry => ({
     // app/config.ts's buildModeConfig can safely treat it as "fall back to
     // this mode's bridgeAddress".
     bridgeAddress: params.bridgeAddress ?? '',
+    nativeBridgeURL: params.nativeBridgeURL,
     nativeCurrency: {
       address: params.nativeCurrencyAddress ?? ZERO_ADDRESS,
       decimals: params.wagmi.nativeCurrency.decimals,

@@ -105,7 +105,20 @@ export const jsonChainConfigSchema = z
     // every other chain in the mode (most modes share one deterministic
     // address across all their chains, hence the mode-level default). Omit to
     // inherit the mode's `bridgeAddress`; see app/config.ts's buildModeConfig.
-    bridgeAddress: addressString.optional()
+    bridgeAddress: addressString.optional(),
+    // Optional URL of this chain's own native/canonical bridge UI. Set this
+    // on a chain whose native/gas token isn't ether (a currency.wethToken
+    // chain -- see above): bridging mainnet ETH into it via the AggLayer
+    // bridge mints wrapped ETH (that same WETHToken contract) on arrival, not
+    // this chain's native currency, since the AggLayer bridge has no way to
+    // mint native currency directly -- only that chain's own native bridge
+    // can. When set on the DESTINATION chain, and the user is bridging native
+    // ETH (isNative) FROM mainnet (fromChain.networkId === 0), the bridge
+    // form shows an advisory explaining this and pointing at this URL -- see
+    // app/hooks/useBridge.ts's nativeBridgeUrl derivation. Purely
+    // informational: never blocks or otherwise changes the AggLayer bridge
+    // flow itself.
+    nativeBridgeURL: urlString.optional()
   })
   .strict();
 

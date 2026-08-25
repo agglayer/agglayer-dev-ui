@@ -109,6 +109,18 @@ export const useBridge = () => {
     (selectedToken.isNative || normalize(selectedToken.address) === normalize(ZERO_ADDRESS))
   );
 
+  // Advisory-only: when bridging native ETH FROM mainnet (networkId 0) TO a
+  // chain that declares its own native/canonical bridge (config.json's
+  // chains.<key>.nativeBridgeURL), the AggLayer bridge would only mint
+  // wrapped ETH there (never that chain's native currency) -- point the user
+  // at their native bridge instead if that's what they actually want. Never
+  // blocks or otherwise changes the AggLayer bridge flow -- see
+  // config/configSchema.mjs's nativeBridgeURL comment.
+  const nativeBridgeUrl = useMemo(() => {
+    if (!isNative || fromChain?.networkId !== 0) return undefined;
+    return toChain?.nativeBridgeURL;
+  }, [isNative, fromChain, toChain]);
+
   const amountWei = useMemo(() => {
     if (!selectedToken || !amount) return BigInt(0);
     return toWei(amount, selectedToken.decimals);
@@ -203,7 +215,8 @@ export const useBridge = () => {
       fromTokens,
       isConnected,
       walletAddress,
-      isNative
+      isNative,
+      nativeBridgeUrl
     },
     actions: {
       selectFromChain,

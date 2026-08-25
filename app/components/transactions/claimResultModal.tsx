@@ -1,5 +1,7 @@
 'use client';
 
+import type { ClaimFailedStep } from '@/app/types/transaction';
+
 import { Button } from '@/app/components/ui/button';
 import { Modal } from '@/app/components/ui/modal';
 import { getExternalLinks } from '@/app/config';
@@ -15,7 +17,22 @@ interface ClaimResultModalProps {
   claimTxHash?: string;
   explorerUrl?: string;
   errorMessage?: string;
+  errorStep?: ClaimFailedStep;
 }
+
+// User-facing label for each step useClaimExecution can fail at, shown in the
+// collapsible "technical details" section below -- keep these short and
+// specific enough to be useful in a support/bug report without requiring
+// engineering context to read.
+const CLAIM_FAILED_STEP_LABELS: Record<ClaimFailedStep, string> = {
+  'validating-wallet': 'Validating wallet connection',
+  'validating-configuration': 'Validating bridge configuration',
+  'checking-claim-status': 'Checking whether the deposit was already claimed',
+  'fetching-claim-proof': 'Fetching the claim proof',
+  'building-claim-transaction': 'Building the claim transaction',
+  'sending-transaction': 'Sending the claim transaction',
+  'confirming-transaction': 'Confirming the claim transaction'
+};
 
 const isUserRejection = (message?: string): boolean => {
   if (!message) return false;
@@ -44,7 +61,8 @@ export const ClaimResultModal = ({
   status,
   claimTxHash,
   explorerUrl,
-  errorMessage
+  errorMessage,
+  errorStep
 }: ClaimResultModalProps) => {
   if (!status) return null;
 
@@ -103,6 +121,25 @@ export const ClaimResultModal = ({
               <p className="text-sm text-grey">{getErrorMessage()}</p>
             </div>
           </>
+        )}
+        {status === 'error' && !userRejected && (errorStep || errorMessage) && (
+          <details className="w-full text-left text-sm" data-test-id="claim-error-details">
+            <summary className="cursor-pointer text-grey hover:text-foreground">
+              Technical details
+            </summary>
+            <div className="mt-2 space-y-1 rounded-lg bg-surface-muted p-3 text-xs text-grey">
+              {errorStep && (
+                <p>
+                  <span className="font-semibold">Step:</span> {CLAIM_FAILED_STEP_LABELS[errorStep]}
+                </p>
+              )}
+              {errorMessage && (
+                <p className="break-words">
+                  <span className="font-semibold">Error:</span> {errorMessage}
+                </p>
+              )}
+            </div>
+          </details>
         )}
         <div className="flex w-full flex-col gap-3 pt-2">
           {txExplorerUrl && (

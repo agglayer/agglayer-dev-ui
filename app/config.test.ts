@@ -230,6 +230,31 @@ describe('buildAppConfig — chains.<key>.currency.wethToken (displayed-balance 
   });
 });
 
+describe('buildAppConfig — chains.<key>.nativeBridgeURL (native-bridge advisory)', () => {
+  it('is undefined when nativeBridgeURL is omitted', () => {
+    const resolved = buildAppConfig(buildConfigJson());
+
+    const [devnetL1] = resolved.appModeConfig.devnet.chains as [AppChain, ...AppChain[]];
+    expect(devnetL1.nativeBridgeURL).toBeUndefined();
+  });
+
+  it("carries a chain's own nativeBridgeURL through verbatim", () => {
+    const configJson = buildConfigJson();
+    configJson.chains.DEVNET_L2_001 = chain({
+      id: 20201,
+      name: 'Devnet L2-001',
+      networkId: 1,
+      nativeBridgeURL: 'https://bridge.example.com'
+    });
+
+    const resolved = buildAppConfig(configJson);
+
+    const [devnetL1, devnetL2001] = resolved.appModeConfig.devnet.chains as [AppChain, AppChain];
+    expect(devnetL2001.nativeBridgeURL).toBe('https://bridge.example.com');
+    expect(devnetL1.nativeBridgeURL).toBeUndefined();
+  });
+});
+
 describe('buildAppConfig — NEXT_PUBLIC_AGGKIT_PROXY override precedence', () => {
   afterEach(() => {
     delete process.env.NEXT_PUBLIC_AGGKIT_PROXY;

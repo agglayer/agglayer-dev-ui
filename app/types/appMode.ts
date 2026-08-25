@@ -30,6 +30,11 @@ export type AppChain = {
   // buildModeConfig before an AppChain reaches this array -- never read the
   // raw, possibly-unset per-chain value directly.
   bridgeAddress: string;
+  // config.json's chains.<key>.nativeBridgeURL, verbatim, possibly unset --
+  // this chain's own native bridge, needed because the AggLayer bridge can
+  // only mint wrapped ETH (wethToken above) here, never native currency. See
+  // app/hooks/useBridge.ts's nativeBridgeUrl derivation.
+  nativeBridgeURL?: string;
 };
 
 type BaseModeConfig = {

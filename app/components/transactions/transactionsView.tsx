@@ -277,6 +277,7 @@ export const TransactionsView = () => {
         claimTxHash={claimExecution.state.claimTxHash}
         explorerUrl={destChain?.explorer}
         errorMessage={claimExecution.state.error?.message}
+        errorStep={claimExecution.state.error?.step}
       />
     </Card>
   );
