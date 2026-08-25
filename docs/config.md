@@ -300,6 +300,7 @@ Chains are defined in the `chains` object, keyed by an uppercase identifier:
 | `isTestnet` | Yes | Whether this is a test network |
 | `eta` | Yes | Estimated bridging time in minutes |
 | `bridgeAddress` | No | Per-chain override of the enclosing mode's `bridgeAddress` (see below). Omit to inherit the mode's value. |
+| `nativeBridgeURL` | No | This chain's own native/canonical bridge UI (see below). Omit for no advisory. |
 
 #### `currency.address` override
 
@@ -351,6 +352,33 @@ address. It drives two things, both gated on this same value being non-zero:
 It is independent of `currency.address` above (that one only affects the
 token's identity/display address, never the bridge call) — setting one does
 not require or affect the other.
+
+#### `nativeBridgeURL` advisory
+
+`nativeBridgeURL` is optional and omitted by default, which shows nothing.
+Set it on a chain whose native/gas token isn't ether (a `currency.wethToken`
+chain — see above) that also has its own native/canonical bridge UI (distinct
+from this app). Bridging mainnet ETH into such a chain through the AggLayer
+bridge mints wrapped ETH (WETH, the same `WETHToken` contract
+`currency.wethToken` points at) on arrival — it does **not** produce that
+chain's native currency. If the user actually wants native ETH there, they
+need that chain's own native bridge instead, since the AggLayer bridge has no
+way to mint native currency directly.
+
+When the user selects that chain as the **destination** while bridging
+**native ETH** (`isNative`) **from mainnet** (`fromChain.networkId === 0`),
+the bridge form shows an advisory explaining this and pointing at
+`nativeBridgeURL` (see `app/hooks/useBridge.ts`'s `nativeBridgeUrl`
+derivation and `app/components/bridge/bridgeCard.tsx`). It is purely
+informational: it never disables the bridge button, blocks the flow, or
+otherwise changes what `app/hooks/useBridgeExecution.ts` does — the user can
+still bridge through this app's AggLayer flow and receive WETH if they
+choose to.
+
+The condition is intentionally narrow — only mainnet-origin native ETH
+triggers it, not every route into that chain, and not an ERC-20 selected as
+the token — so setting this never surfaces the advisory for routes where it
+wouldn't apply.
 
 #### Per-chain `bridgeAddress` override
 

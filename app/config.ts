@@ -229,7 +229,8 @@ export const buildAppConfig = (configJson: JsonConfig): ResolvedAppConfig => {
         eta: chainConfigJson.eta,
         bridgeAddress: chainConfigJson.bridgeAddress,
         nativeCurrencyAddress: chainConfigJson.currency.address,
-        nativeCurrencyWethToken: chainConfigJson.currency.wethToken
+        nativeCurrencyWethToken: chainConfigJson.currency.wethToken,
+        nativeBridgeURL: chainConfigJson.nativeBridgeURL
       })
     ])
   );

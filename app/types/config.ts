@@ -32,6 +32,8 @@ export type ChainEntryParams = {
   // config.json's chains.<key>.currency.wethToken override, possibly unset --
   // app/utils/config.ts's createChainEntry falls back to ZERO_ADDRESS.
   nativeCurrencyWethToken?: string;
+  // config.json's chains.<key>.nativeBridgeURL, verbatim, possibly unset.
+  nativeBridgeURL?: string;
 };
 
 export type JsonNativeCurrencyConfig = z.infer<typeof JsonNativeCurrencyConfigSchema>;

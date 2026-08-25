@@ -13,4 +13,5 @@ export type ChainMetadata = {
     logoURI: string;
     wethToken: string;
   };
+  nativeBridgeURL?: string;
 };

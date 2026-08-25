@@ -6,6 +6,7 @@ import { BridgeTransactionModal } from '@/app/components/bridge/bridgeTransactio
 import { DestinationAddressModal } from '@/app/components/bridge/destinationAddressModal';
 import { EstimationInfo } from '@/app/components/bridge/estimationInfo';
 import { TokenSelector } from '@/app/components/bridge/tokenSelector';
+import { Alert } from '@/app/components/ui/alert';
 import { BadgeImageFallback } from '@/app/components/ui/badgeImageFallback';
 import { Card } from '@/app/components/ui/card';
 import { useAppMode } from '@/app/context/appMode';
@@ -132,6 +133,29 @@ const BridgeCardContent = () => {
           onOpenDestinationModal={() => setDestinationModalOpen(true)}
           onClearDestinationAddress={actions.clearDestination}
         />
+
+        {derived.nativeBridgeUrl && (
+          <Alert
+            type="info"
+            title="You'll receive WETH, not native ETH"
+            message={
+              <>
+                Bridging ETH to {derived.toChain?.name ?? 'this network'} this way mints wrapped ETH
+                (WETH) there, not native ETH. If you want native ETH on{' '}
+                {derived.toChain?.name ?? 'this network'}, use its{' '}
+                <a
+                  href={derived.nativeBridgeUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-semibold underline hover:no-underline"
+                >
+                  native bridge
+                </a>{' '}
+                instead.
+              </>
+            }
+          />
+        )}
 
         <button
           type="button"

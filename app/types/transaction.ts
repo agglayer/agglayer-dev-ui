@@ -59,11 +59,25 @@ export interface TransactionFilters {
 
 export type ClaimStep = 'idle' | 'claiming' | 'success' | 'error';
 
+// The sub-step useClaimExecution was attempting when a claim failed. Kept
+// separate from ClaimStep (which only tracks the coarse UI state) so the
+// error UI/logs can say *where* in the flow things broke, e.g. distinguishing
+// "the RPC send was rejected" from "the proof fetch from the aggregator
+// failed" -- both surface as currentStep: 'error' otherwise.
+export type ClaimFailedStep =
+  | 'validating-wallet'
+  | 'validating-configuration'
+  | 'checking-claim-status'
+  | 'fetching-claim-proof'
+  | 'building-claim-transaction'
+  | 'sending-transaction'
+  | 'confirming-transaction';
+
 export interface ClaimExecutionState {
   isExecuting: boolean;
   currentStep: ClaimStep;
   claimTxHash?: Hex;
-  error?: { message: string; txHash?: Hex };
+  error?: { message: string; txHash?: Hex; step?: ClaimFailedStep };
   transactionId?: string;
   destinationChainId?: number;
 }
@@ -73,5 +87,5 @@ export type ClaimExecutionResult = {
   transactionId: string;
   destinationChainId: number;
   claimTxHash?: Hex;
-  error?: { message: string; txHash?: Hex };
+  error?: { message: string; txHash?: Hex; step?: ClaimFailedStep };
 };
