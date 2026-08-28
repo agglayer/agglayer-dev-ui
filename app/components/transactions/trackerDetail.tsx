@@ -6,7 +6,7 @@ import { CopyText } from '@/app/components/copyText';
 import { DOT_CLASSES } from '@/app/components/transactions/trackerProgressBar';
 import { Alert } from '@/app/components/ui/alert';
 import { useAppMode } from '@/app/context/appMode';
-import { isTrackingTerminal, useBridgeTracking } from '@/app/hooks/useBridgeTracking';
+import { hasTrackingStarted, useBridgeTracking } from '@/app/hooks/useBridgeTracking';
 import { shortenAddress } from '@/app/utils/address';
 import { getChainByNetworkId } from '@/app/utils/chains';
 import { cn } from '@/app/utils/common';
@@ -176,14 +176,14 @@ export const TrackerDetail = ({ transaction, onDemand = false }: TrackerDetailPr
   // for a CLAIMED transaction.
   if (transaction.status === 'CLAIMED' && !onDemand) return null;
 
-  // On-demand mode only ever wants the FINAL picture: a single on-demand
-  // call can land mid-resolution (`tracking_status` still
-  // `registered`/`running`), and there is no "current step" worth showing
-  // for a bridge that has already completed -- so hold off on rendering
-  // anything (not even a partial timeline) until the tracker reaches a
-  // terminal state (`finished`, or its giving-up `error`). The hook keeps
-  // polling underneath until then.
-  if (onDemand && !isTrackingTerminal(data)) {
+  // On-demand mode still holds off on rendering anything until the tracker
+  // has resolved the route at all: a single on-demand call can land before
+  // that (`tracking_status` still `registered`, `all_steps` still null), so
+  // there is nothing yet worth showing. Once it leaves `registered` (e.g.
+  // `running`) there IS a current step worth showing, even mid-resolution --
+  // no need to wait for `finished`. The hook keeps polling underneath
+  // regardless (see useBridgeTracking.ts's isTrackingTerminal).
+  if (onDemand && !hasTrackingStarted(data)) {
     return (
       <div
         data-test-id="tracker-detail"
