@@ -1,36 +1,33 @@
 'use client';
 
-import { useAggkitAggregator } from '@/app/context/aggLayerSdk';
 import { useAppMode } from '@/app/context/appMode';
+import { fetchActivity, resolveAggkitProxyBaseUrl } from '@/app/services/activity';
 import { useQuery } from '@tanstack/react-query';
 
-// A cheap, bounded count — one bridges+claims page per
-// configured network (Tier 1) to build the unclaimed set, then
-// `/l1-info-tree-index` probes bounded to that unclaimed set only (Tier 2).
-// Never a full activity scan, and never rejects on a partial per-network
-// failure (AggkitBridgeAggregator.getReadyToClaimCount silently excludes
-// failed networks from the count rather than surfacing them — there is no
-// per-network breakdown here, unlike getActivity's `failedNetworks`).
+// Same GET /tracker/v1/activity/from/{address} call useTransactions makes,
+// selected down to a count -- deliberately the SAME queryKey (mode, chainId,
+// address) so that when the header badge and the Transactions page are both
+// mounted, react-query dedupes them into a single request instead of two.
 export const useReadyToClaimCount = (params: {
   chainId?: number;
   address?: string;
   enabled?: boolean;
 }) => {
   const { chainId, address, enabled = true } = params;
-  const { mode } = useAppMode();
-  const aggregator = useAggkitAggregator();
+  const { mode, config } = useAppMode();
+  const baseUrl = resolveAggkitProxyBaseUrl(config.aggkitBridgeApis);
 
   return useQuery({
-    queryKey: ['ready-to-claim-count', mode, chainId, address],
-    enabled: enabled && Boolean(chainId && address),
+    queryKey: ['activity', mode, chainId, address],
+    enabled: enabled && Boolean(chainId && address && baseUrl),
     queryFn: async () => {
-      if (!chainId || !address) throw new Error('MISSING_PARAMS');
-      return aggregator.getReadyToClaimCount({ fromAddress: address });
+      if (!address || !baseUrl) throw new Error('MISSING_PARAMS');
+      return fetchActivity({ baseUrl, fromAddress: address });
     },
+    select: (transactions) => transactions.filter((tx) => tx.status === 'READY_TO_CLAIM').length,
     staleTime: 30 * 1000,
-    // Poll steadily so the badge reflects deposits becoming claimable (aggkit
-    // has no push and status is derived per fetch). The count stays bounded
-    // (probes only the unclaimed set); 15s keeps it fresh without hammering the fan-out.
+    // Poll steadily so the badge reflects deposits becoming claimable even
+    // when the Transactions page (and its own, faster poll) isn't mounted.
     refetchInterval: 15 * 1000
   });
 };

@@ -1,8 +1,13 @@
 import type { Hex } from 'viem';
 
-import type { AggkitFailedNetwork } from '@agglayer/sdk';
+import type { AggkitTrackingData } from '@agglayer/sdk';
 
-export type TransactionStatus = 'BRIDGED' | 'LEAF_INCLUDED' | 'READY_TO_CLAIM' | 'CLAIMED';
+// PENDING replaces the old BRIDGED/LEAF_INCLUDED pair, and ERROR is new --
+// see app/services/activity.ts's deriveStatus doc comment for why: the
+// bridgetracker activity endpoint's claimed tri-state ("true"/"false"/
+// "error") plus its embedded per-bridge tracking data don't support the old
+// 4-state model, only this one.
+export type TransactionStatus = 'PENDING' | 'READY_TO_CLAIM' | 'CLAIMED' | 'ERROR';
 
 export interface Transaction {
   hubUID: string;
@@ -13,6 +18,10 @@ export interface Transaction {
   destinationNetwork: number;
   amount: string;
   status: TransactionStatus;
+  // Set only when status is ERROR: the destination bridge contract's
+  // isClaimed() check itself failed (e.g. no bridge address configured for
+  // that network) -- see app/services/activity.ts's deriveStatus.
+  statusError?: string;
   lastUpdatedAt: number;
   bridgeHash: string;
   metadata: string;
@@ -29,32 +38,19 @@ export interface Transaction {
   originTokenNetwork: number;
   timestamp: number;
   leafIndex: number;
-}
-
-export interface TransactionsResponse {
-  status: string;
-  data: Transaction[];
-  pagination: {
-    total: number;
-    limit: number;
-    nextStartAfterCursor?: string;
-  };
-  error?: string;
-  // Per-network fan-out failures from AggkitBridgeAggregator.getActivity.
-  // A network failing does not fail the whole page — its rows are simply
-  // absent. Consumed by the partial-failure notice in transactionsView.tsx.
-  failedNetworks?: AggkitFailedNetwork[];
+  // The bridgetracker's current step-by-step status for this bridge, embedded
+  // directly by the activity endpoint (includeTracking=true) when unclaimed.
+  // useBridgeTracking now just reads this back instead of polling its own
+  // per-row endpoint -- see that hook's doc comment.
+  tracking?: AggkitTrackingData;
 }
 
 export interface TransactionFilters {
   fromAddress?: string;
-  sourceNetworkIds?: number[];
-  destinationNetworkIds?: number[];
   updatedSince?: number;
   status?: TransactionStatus;
   order?: 'asc' | 'desc';
   limit?: number;
-  startAfter?: string;
 }
 
 export type ClaimStep = 'idle' | 'claiming' | 'success' | 'error';
