@@ -1,3 +1,4 @@
+import type * as UseBridgeTrackingModule from '@/app/hooks/useBridgeTracking';
 import type { Transaction } from '@/app/types/transaction';
 
 import '@testing-library/jest-dom/vitest';
@@ -13,13 +14,21 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@/app/context/appMode', () => ({
   useAppMode: vi.fn()
 }));
-vi.mock('@/app/hooks/useBridgeTracking', () => ({
-  useBridgeTracking: vi.fn()
-}));
+vi.mock('@/app/hooks/useBridgeTracking', async () => {
+  const actual = await vi.importActual<typeof UseBridgeTrackingModule>(
+    '@/app/hooks/useBridgeTracking'
+  );
+  // Only useBridgeTracking itself is mocked (per-test, via mockTracking
+  // below) -- isTrackingTerminal is a pure function trackerDetail.tsx
+  // imports directly, kept real here so the onDemand loading/terminal
+  // branches below exercise the actual terminal-state logic.
+  return { ...actual, useBridgeTracking: vi.fn() };
+});
 
 import {
   errorGiveupFixture,
   l1l2FinishedFixture,
+  l1l2RunningFixture,
   l2l1FinishedFixture,
   l2l2RunningStepErrorFixture
 } from '@/app/__fixtures__/tracker';
@@ -132,5 +141,45 @@ describe('TrackerDetail', () => {
     expect(screen.getByText('transient error (retry 2)')).toBeInTheDocument();
     // The full 7-step timeline still renders -- a step error is not terminal.
     expect(container.querySelectorAll('[data-test-id^="tracker-detail-step-"]')).toHaveLength(7);
+  });
+
+  // On-demand mode (transactionDetailsModal.tsx's "Show bridge steps" button
+  // for a completed row): the CLAIMED guard above is deliberately bypassed,
+  // and nothing renders except a loading state until the tracker reaches a
+  // terminal state -- a completed bridge has no "current step" worth
+  // showing mid-resolution.
+  describe('onDemand', () => {
+    it('renders a loading state for a CLAIMED transaction while the tracker has not resolved yet', () => {
+      mockTracking(undefined);
+      render(<TrackerDetail transaction={makeTransaction({ status: 'CLAIMED' })} onDemand />);
+      expect(screen.getByText('Loading bridge steps…')).toBeInTheDocument();
+    });
+
+    it('keeps the loading state while tracking_status is non-terminal (registered/running)', () => {
+      mockTracking(l1l2RunningFixture);
+      const { container } = render(
+        <TrackerDetail transaction={makeTransaction({ status: 'CLAIMED' })} onDemand />
+      );
+      expect(screen.getByText('Loading bridge steps…')).toBeInTheDocument();
+      expect(
+        container.querySelector('[data-test-id^="tracker-detail-step-"]')
+      ).not.toBeInTheDocument();
+    });
+
+    it('renders the full timeline once tracking_status is finished', () => {
+      mockTracking(l1l2FinishedFixture);
+      const { container } = render(
+        <TrackerDetail transaction={makeTransaction({ status: 'CLAIMED' })} onDemand />
+      );
+      expect(screen.queryByText('Loading bridge steps…')).not.toBeInTheDocument();
+      expect(container.querySelectorAll('[data-test-id^="tracker-detail-step-"]')).toHaveLength(4);
+    });
+
+    it('renders the giving-up alert (not the loading state) once the tracker terminally fails', () => {
+      mockTracking(errorGiveupFixture);
+      render(<TrackerDetail transaction={makeTransaction({ status: 'CLAIMED' })} onDemand />);
+      expect(screen.queryByText('Loading bridge steps…')).not.toBeInTheDocument();
+      expect(screen.getByText('Tracking unavailable')).toBeInTheDocument();
+    });
   });
 });
