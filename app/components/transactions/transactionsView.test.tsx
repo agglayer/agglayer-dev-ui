@@ -7,10 +7,13 @@ import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // TransactionsView pulls in a wide dependency graph (wallet/app-mode/refetch
-// contexts, claim execution, chain-switch enforcement). This step (S8) only
-// changes how `failedNetworks` from useTransactions is surfaced, so every
-// other collaborator is mocked to its simplest steady-state shape and the
-// assertions focus solely on the partial/all/zero-failure notice branching.
+// contexts, claim execution, chain-switch enforcement), so every collaborator
+// is mocked to its simplest steady-state shape and assertions focus on
+// useTransactions' {transactions, totalCount, error} -> rendered-view
+// contract. (S-review 2026-08-28: replaces the old suite, which exercised
+// the `failedNetworks` partial-failure notice -- removed along with the
+// per-network fan-out it described; the single-request activity endpoint has
+// no equivalent to report.)
 vi.mock('@/app/context/walletContext', () => ({
   useWallet: vi.fn()
 }));
@@ -32,15 +35,12 @@ vi.mock('@/app/hooks/useTransactions', () => ({
 }));
 // Stubs the real list (which pulls in token-metadata queries and other
 // unrelated context) with a minimal render that only proves the items made
-// it to the view — the notice/error branching is what this suite verifies.
+// it to the view.
 vi.mock('@/app/components/transactions/transactionList', () => ({
   TransactionList: ({ transactions }: { transactions: Transaction[] }) => (
     <div data-testid="transaction-list">{transactions.length} transaction(s)</div>
   )
 }));
-// Both modals pull in TokenProvider/other contexts unrelated to S8 and are
-// always rendered by TransactionsView (gated internally on `open`); stub
-// them out since this suite only exercises the notice/error branching.
 vi.mock('@/app/components/transactions/transactionDetailsModal/transactionDetailsModal', () => ({
   TransactionDetailsModal: () => null
 }));
@@ -59,8 +59,7 @@ import { TransactionsView } from './transactionsView';
 
 const mockChains = [
   { id: 1, networkId: 0, name: 'Ethereum' },
-  { id: 137, networkId: 137, name: 'Polygon zkEVM' },
-  { id: 1101, networkId: 1101, name: 'Astar zkEVM' }
+  { id: 137, networkId: 137, name: 'Polygon zkEVM' }
 ];
 
 const makeTransaction = (hubUID: string): Transaction =>
@@ -95,7 +94,7 @@ const renderView = () => {
   return render(<TransactionsView />, { wrapper });
 };
 
-describe('TransactionsView partial-failure notice', () => {
+describe('TransactionsView', () => {
   beforeEach(() => {
     vi.mocked(useWallet).mockReturnValue({
       address: '0xabc',
@@ -127,89 +126,60 @@ describe('TransactionsView partial-failure notice', () => {
     vi.mocked(useEnforceCorrectChain).mockReturnValue(vi.fn());
   });
 
-  it('partial failure renders items + a notice naming the failed network by display name', () => {
+  it('renders the fetched transactions and their total count', () => {
     vi.mocked(useTransactions).mockReturnValue({
-      data: {
-        pages: [
-          {
-            status: 'success',
-            data: [makeTransaction('tx-1'), makeTransaction('tx-2')],
-            pagination: { total: 2 },
-            failedNetworks: [{ networkId: 1101, error: 'timeout' }]
-          }
-        ],
-        pageParams: [undefined]
-      },
+      transactions: [makeTransaction('tx-1'), makeTransaction('tx-2')],
+      totalCount: 2,
       isLoading: false,
       isFetchingNextPage: false,
       hasNextPage: false,
       fetchNextPage: vi.fn(),
       error: null,
       refetch: vi.fn(),
-      isRefetching: false,
-      failedNetworks: [{ networkId: 1101, error: 'timeout' }]
+      isRefetching: false
     } as unknown as ReturnType<typeof useTransactions>);
 
     renderView();
 
-    // items are still shown despite the partial failure
     expect(screen.getByTestId('transaction-list')).toHaveTextContent('2 transaction(s)');
-
-    // notice names the failed network by display name, not raw network id
-    expect(screen.getByText(/Astar zkEVM/)).toBeInTheDocument();
-    expect(screen.queryByText(/1101/)).not.toBeInTheDocument();
-
-    // this is not the full "all networks failed" error state
-    expect(screen.queryByText('Something went wrong')).not.toBeInTheDocument();
+    expect(screen.getByText(/Total transactions:/)).toBeInTheDocument();
   });
 
-  it('all networks failing renders the existing full error state, not the partial notice', () => {
+  it('renders the full error state when the activity fetch fails, hiding the list', () => {
     vi.mocked(useTransactions).mockReturnValue({
-      data: undefined,
+      transactions: [],
+      totalCount: 0,
       isLoading: false,
       isFetchingNextPage: false,
       hasNextPage: false,
       fetchNextPage: vi.fn(),
-      error: new Error('AggkitBridgeAggregator.getActivity: all configured networks failed'),
+      error: new Error('ACTIVITY_FETCH_FAILED: 500'),
       refetch: vi.fn(),
-      isRefetching: false,
-      failedNetworks: []
+      isRefetching: false
     } as unknown as ReturnType<typeof useTransactions>);
 
     renderView();
 
     expect(screen.getByText('Something went wrong')).toBeInTheDocument();
     expect(screen.queryByTestId('transaction-list')).not.toBeInTheDocument();
-    expect(screen.queryByText(/temporarily unavailable/)).not.toBeInTheDocument();
   });
 
-  it('zero failures renders items with no notice', () => {
+  it('renders nothing extra when there are zero transactions and no error', () => {
     vi.mocked(useTransactions).mockReturnValue({
-      data: {
-        pages: [
-          {
-            status: 'success',
-            data: [makeTransaction('tx-1')],
-            pagination: { total: 1 },
-            failedNetworks: []
-          }
-        ],
-        pageParams: [undefined]
-      },
+      transactions: [],
+      totalCount: 0,
       isLoading: false,
       isFetchingNextPage: false,
       hasNextPage: false,
       fetchNextPage: vi.fn(),
       error: null,
       refetch: vi.fn(),
-      isRefetching: false,
-      failedNetworks: []
+      isRefetching: false
     } as unknown as ReturnType<typeof useTransactions>);
 
     renderView();
 
-    expect(screen.getByTestId('transaction-list')).toHaveTextContent('1 transaction(s)');
-    expect(screen.queryByText(/temporarily unavailable/)).not.toBeInTheDocument();
-    expect(screen.queryByText('Something went wrong')).not.toBeInTheDocument();
+    expect(screen.getByTestId('transaction-list')).toHaveTextContent('0 transaction(s)');
+    expect(screen.queryByText(/Total transactions:/)).not.toBeInTheDocument();
   });
 });

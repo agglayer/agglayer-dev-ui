@@ -7,7 +7,6 @@ import { getTransactionInitialStatus } from '@/app/components/transactions/intia
 import { TransactionDetailsModal } from '@/app/components/transactions/transactionDetailsModal/transactionDetailsModal';
 import { TransactionFilters } from '@/app/components/transactions/transactionFilters';
 import { TransactionList } from '@/app/components/transactions/transactionList';
-import { Alert } from '@/app/components/ui/alert';
 import { Button } from '@/app/components/ui/button';
 import { Card } from '@/app/components/ui/card';
 import { useAppMode } from '@/app/context/appMode';
@@ -18,7 +17,6 @@ import { useEnforceCorrectChain } from '@/app/hooks/useEnforceCorrectChain';
 import { TOTAL_REFETCH_TIME, useTransactions } from '@/app/hooks/useTransactions';
 import { getChainById, getChainByNetworkId } from '@/app/utils/chains';
 import { cn } from '@/app/utils/common';
-import { useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Plug, RotateCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
@@ -26,7 +24,6 @@ export const TransactionsView = () => {
   const { address, status, chainId, connect } = useWallet();
   const { defaultFromChainId, chains } = useAppMode();
   const { aggressiveRefetch, triggerAggressiveRefetch, clearAggressiveRefetch } = useRefetch();
-  const queryClient = useQueryClient();
   const initialStatus = getTransactionInitialStatus();
   const [filters, setFilters] = useState<{ status?: TransactionStatus; updatedSince?: number }>(
     () => ({
@@ -34,8 +31,13 @@ export const TransactionsView = () => {
     })
   );
   const statusKey = (initialStatus || filters.status || 'all') as string;
-  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
-  const [isDifferentAddress, setIsDifferentAddress] = useState<boolean>(false);
+  // Store just the id, not the Transaction object: allTransactions gets a
+  // fresh array (and fresh row objects) every poll, so looking the row up by
+  // id each render is what keeps the modal's status/tracker live while
+  // it's open, instead of freezing on the object captured at click time --
+  // see useBridgeTracking.ts, which now reads tracking straight off
+  // whatever Transaction object it's handed.
+  const [selectedTransactionId, setSelectedTransactionId] = useState<string | null>(null);
 
   const queryFilters = useMemo(
     () => ({
@@ -52,15 +54,15 @@ export const TransactionsView = () => {
   const isConnected = status === 'connected' && Boolean(address);
 
   const {
-    data,
+    transactions: allTransactions,
+    totalCount,
     isLoading,
     isFetchingNextPage,
     hasNextPage,
     fetchNextPage,
     error,
     refetch,
-    isRefetching,
-    failedNetworks
+    isRefetching
   } = useTransactions({
     chainId: effectiveChainId,
     filters: queryFilters,
@@ -77,9 +79,12 @@ export const TransactionsView = () => {
 
   const handleClaimComplete = useCallback(() => {
     triggerAggressiveRefetch();
+    // useReadyToClaimCount (header badge) shares this exact queryKey
+    // (['activity', mode, chainId, address], see useTransactions/
+    // useReadyToClaimCount) so refetching here also refreshes the badge --
+    // no separate invalidation needed.
     void refetch();
-    void queryClient.invalidateQueries({ queryKey: ['ready-to-claim-count'] });
-  }, [queryClient, refetch, triggerAggressiveRefetch]);
+  }, [refetch, triggerAggressiveRefetch]);
 
   const ensureCorrectChain = useEnforceCorrectChain();
   const claimExecution = useClaimExecution({
@@ -92,28 +97,26 @@ export const TransactionsView = () => {
   const claimStep = claimExecution.state.currentStep;
   const claimResultOpen = claimStep === 'success' || claimStep === 'error';
 
-  const allTransactions = useMemo(() => {
-    return data?.pages.flatMap((page) => page.data) ?? [];
-  }, [data]);
-
-  const totalCount = data?.pages[0]?.pagination.total ?? 0;
-
-  // Partial fan-out failures: the aggregator still returns
-  // results from healthy networks, so this is surfaced as a non-blocking
-  // notice rather than the full error state (which is reserved for the case
-  // where every configured network failed and `error` is set below).
-  const failedNetworkNames = useMemo(
-    () =>
-      (failedNetworks ?? []).map(
-        (failure) => getChainByNetworkId(chains, failure.networkId)?.name ?? 'Unknown network'
-      ),
-    [failedNetworks, chains]
-  );
-  const hasPartialFailure = !error && failedNetworkNames.length > 0;
-
   const destChain = claimExecution.state.destinationChainId
     ? getChainById(chains, claimExecution.state.destinationChainId)
     : undefined;
+
+  // Looked up fresh every render (not stored as its own state) so the modal
+  // reflects the latest poll -- see selectedTransactionId's comment above.
+  // Note: if the tx falls out of the currently visible/filtered page (e.g.
+  // it becomes CLAIMED while the status filter is "Ready to claim"), it
+  // disappears from allTransactions and the modal closes, same as its row
+  // would vanish from the list itself.
+  const selectedTransaction = useMemo(
+    () => allTransactions.find((tx) => tx.hubUID === selectedTransactionId) ?? null,
+    [allTransactions, selectedTransactionId]
+  );
+
+  const isDifferentAddress = useMemo(() => {
+    const walletAddr = address?.toLowerCase();
+    const receiver = selectedTransaction?.receiverAddress?.toLowerCase();
+    return Boolean(walletAddr && receiver && walletAddr !== receiver);
+  }, [address, selectedTransaction]);
 
   const handleClaim = async (transaction: Transaction) => {
     if (!address) return;
@@ -134,15 +137,11 @@ export const TransactionsView = () => {
   };
 
   const handleSelectTransaction = (transaction: Transaction) => {
-    setSelectedTransaction(transaction);
-    const walletAddr = address?.toLowerCase();
-    const receiver = transaction.receiverAddress?.toLowerCase();
-    setIsDifferentAddress(Boolean(walletAddr && receiver && walletAddr !== receiver));
+    setSelectedTransactionId(transaction.hubUID);
   };
 
   const handleCloseModal = () => {
-    setSelectedTransaction(null);
-    setIsDifferentAddress(false);
+    setSelectedTransactionId(null);
   };
 
   const handleManualRefetch = () => {
@@ -235,14 +234,6 @@ export const TransactionsView = () => {
             </Button>
           </div>
         </div>
-      )}
-
-      {isConnected && hasPartialFailure && (
-        <Alert
-          type="warning"
-          title="Some networks are temporarily unavailable"
-          message={`We couldn't load activity from ${failedNetworkNames.join(', ')}. Showing results from the remaining networks — this will retry automatically.`}
-        />
       )}
 
       {isConnected && !error && (

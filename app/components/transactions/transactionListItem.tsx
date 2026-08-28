@@ -38,7 +38,7 @@ export const TransactionListItem = ({
   const sourceChain = getChainByNetworkId(chains, transaction.sourceNetwork);
   const destChain = getChainByNetworkId(chains, transaction.destinationNetwork);
   const isClaimable = transaction.status === 'READY_TO_CLAIM';
-  const isPending = transaction.status === 'BRIDGED' || transaction.status === 'LEAF_INCLUDED';
+  const isPending = transaction.status === 'PENDING';
   // Per-route autoclaim grace period: 'no-autoclaim' shows the button now,
   // 'waiting' shows a "claim manually now" hint while autoclaim is expected,
   // 'overdue' shows the button plus a "taking longer than expected" note.
