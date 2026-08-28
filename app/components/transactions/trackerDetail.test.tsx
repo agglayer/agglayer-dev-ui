@@ -19,9 +19,9 @@ vi.mock('@/app/hooks/useBridgeTracking', async () => {
     '@/app/hooks/useBridgeTracking'
   );
   // Only useBridgeTracking itself is mocked (per-test, via mockTracking
-  // below) -- isTrackingTerminal is a pure function trackerDetail.tsx
+  // below) -- hasTrackingStarted is a pure function trackerDetail.tsx
   // imports directly, kept real here so the onDemand loading/terminal
-  // branches below exercise the actual terminal-state logic.
+  // branches below exercise the actual started/terminal-state logic.
   return { ...actual, useBridgeTracking: vi.fn() };
 });
 
@@ -30,7 +30,8 @@ import {
   l1l2FinishedFixture,
   l1l2RunningFixture,
   l2l1FinishedFixture,
-  l2l2RunningStepErrorFixture
+  l2l2RunningStepErrorFixture,
+  registeredFixture
 } from '@/app/__fixtures__/tracker';
 import { useAppMode } from '@/app/context/appMode';
 import { useBridgeTracking } from '@/app/hooks/useBridgeTracking';
@@ -155,8 +156,8 @@ describe('TrackerDetail', () => {
       expect(screen.getByText('Loading bridge steps…')).toBeInTheDocument();
     });
 
-    it('keeps the loading state while tracking_status is non-terminal (registered/running)', () => {
-      mockTracking(l1l2RunningFixture);
+    it('keeps the loading state while tracking_status is registered (route not resolved yet)', () => {
+      mockTracking(registeredFixture);
       const { container } = render(
         <TrackerDetail transaction={makeTransaction({ status: 'CLAIMED' })} onDemand />
       );
@@ -164,6 +165,15 @@ describe('TrackerDetail', () => {
       expect(
         container.querySelector('[data-test-id^="tracker-detail-step-"]')
       ).not.toBeInTheDocument();
+    });
+
+    it('renders the partial timeline once tracking_status leaves registered (running, not yet finished)', () => {
+      mockTracking(l1l2RunningFixture);
+      const { container } = render(
+        <TrackerDetail transaction={makeTransaction({ status: 'CLAIMED' })} onDemand />
+      );
+      expect(screen.queryByText('Loading bridge steps…')).not.toBeInTheDocument();
+      expect(container.querySelectorAll('[data-test-id^="tracker-detail-step-"]')).toHaveLength(4);
     });
 
     it('renders the full timeline once tracking_status is finished', () => {

@@ -26,6 +26,20 @@ export const isTrackingTerminal = (data: AggkitTrackingData | undefined): boolea
   return false;
 };
 
+// TrackerDetail's on-demand loading gate -- distinct from isTrackingTerminal
+// above, which drives the poll's stop condition and must stay narrow
+// (finished, or the giving-up error) so polling keeps running through
+// `running`. This one only cares whether the tracker has resolved the route
+// at all: once tracking_status leaves `registered` there is a current step
+// worth rendering (even mid-resolution, `all_steps` populated with pending/
+// inProgress entries), so this flips to true earlier than isTrackingTerminal
+// while the hook keeps polling underneath until the terminal condition above
+// is met.
+export const hasTrackingStarted = (data: AggkitTrackingData | undefined): boolean => {
+  if (!data) return false;
+  return data.tracking_status !== 'registered';
+};
+
 // The activity endpoint (GET /tracker/v1/activity/from/{address}, called
 // with includeTracking=true by app/services/activity.ts's fetchActivity)
 // embeds each unclaimed bridge's tracker state directly on the Transaction
