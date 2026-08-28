@@ -6,12 +6,13 @@ import { CopyText } from '@/app/components/copyText';
 import { DOT_CLASSES } from '@/app/components/transactions/trackerProgressBar';
 import { Alert } from '@/app/components/ui/alert';
 import { useAppMode } from '@/app/context/appMode';
-import { useBridgeTracking } from '@/app/hooks/useBridgeTracking';
+import { isTrackingTerminal, useBridgeTracking } from '@/app/hooks/useBridgeTracking';
 import { shortenAddress } from '@/app/utils/address';
 import { getChainByNetworkId } from '@/app/utils/chains';
 import { cn } from '@/app/utils/common';
 import { formatDateTime } from '@/app/utils/date';
 import { getTrackerStepLabel } from '@/app/utils/trackerSteps';
+import { Loader2 } from 'lucide-react';
 
 import type {
   AggkitBridgeStepPath,
@@ -27,6 +28,12 @@ import type {
 
 interface TrackerDetailProps {
   transaction: Transaction;
+  // Explicit opt-in for a completed (CLAIMED) transaction: fetches fresh
+  // tracker data on demand (useBridgeTracking's on-demand path) instead of
+  // reading the embedded tracking that a CLAIMED row never has. The only
+  // caller that ever sets this is transactionDetailsModal.tsx's "Show
+  // bridge steps" button.
+  onDemand?: boolean;
 }
 
 const STATUS_LABEL_CLASSES: Record<AggkitStepStatus, string> = {
@@ -151,22 +158,44 @@ const StepResultDetail = ({ step }: { step: AggkitBridgeStepPath }) => {
 // a second poll for the same transaction.
 //
 // Renders nothing when there is no tracking data at all. This covers CLAIMED
-// rows (the hook's query is `enabled: false` there, so `data` never
-// populates -- no tracker section, no polling) and the brief window before
-// the tracker has registered a freshly-sent bridge.
-export const TrackerDetail = ({ transaction }: TrackerDetailProps) => {
+// rows in the LIVE path (the hook's query is `enabled: false` there, so
+// `data` never populates -- no tracker section, no polling) and the brief
+// window before the tracker has registered a freshly-sent bridge. Pass
+// `onDemand` to render a completed row's detail instead -- see
+// useBridgeTracking.ts's on-demand path.
+export const TrackerDetail = ({ transaction, onDemand = false }: TrackerDetailProps) => {
   const { chains } = useAppMode();
-  const { data } = useBridgeTracking(transaction);
+  const { data } = useBridgeTracking(transaction, { enabled: onDemand });
 
-  // Explicit CLAIMED guard (S10a, mirrors trackerProgressBar.tsx): the
-  // caller (transactionDetailsModal.tsx) already gates mounting this
-  // component on `tx.status !== 'CLAIMED'`, which covers a fresh modal open
-  // on an already-completed row. This second guard is defense-in-depth for
-  // any other caller/path, and for the same reason trackerProgressBar.tsx
-  // needs one -- disabling useBridgeTracking's query on CLAIMED does not
-  // clear its already-cached `data`, so `data` alone is not a reliable
-  // "hide on CLAIMED" signal.
-  if (transaction.status === 'CLAIMED' || !data) return null;
+  // Explicit CLAIMED guard (S10a, mirrors trackerProgressBar.tsx) for the
+  // LIVE path: a row that transitions from non-CLAIMED -> CLAIMED while
+  // mounted keeps serving its last-cached, fully-`done` embedded tracking
+  // (disabling a query does not clear its cache), so `data` alone is not a
+  // reliable "hide on CLAIMED" signal there. `onDemand` is the deliberate
+  // escape hatch -- a completed row's on-demand detail is SUPPOSED to render
+  // for a CLAIMED transaction.
+  if (transaction.status === 'CLAIMED' && !onDemand) return null;
+
+  // On-demand mode only ever wants the FINAL picture: a single on-demand
+  // call can land mid-resolution (`tracking_status` still
+  // `registered`/`running`), and there is no "current step" worth showing
+  // for a bridge that has already completed -- so hold off on rendering
+  // anything (not even a partial timeline) until the tracker reaches a
+  // terminal state (`finished`, or its giving-up `error`). The hook keeps
+  // polling underneath until then.
+  if (onDemand && !isTrackingTerminal(data)) {
+    return (
+      <div
+        data-test-id="tracker-detail"
+        className="flex items-center justify-center gap-2 px-3 py-6 text-sm text-grey"
+      >
+        <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+        Loading bridge steps…
+      </div>
+    );
+  }
+
+  if (!data) return null;
 
   // Giving-up terminal (useBridgeTracking.ts's isTrackingTerminal): the
   // tracker could not resolve this tx as a bridge at all. No steps exist.
