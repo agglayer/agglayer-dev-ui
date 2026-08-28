@@ -10,13 +10,15 @@ import { Alert } from '@/app/components/ui/alert';
 import { BadgeImageFallback } from '@/app/components/ui/badgeImageFallback';
 import { Card } from '@/app/components/ui/card';
 import { useAppMode } from '@/app/context/appMode';
+import { usePendingBridges } from '@/app/context/pendingBridges';
 import { useWallet } from '@/app/context/walletContext';
 import { useBridge } from '@/app/hooks/useBridge';
 import { useBridgeExecution } from '@/app/hooks/useBridgeExecution';
 import { useEnforceCorrectChain } from '@/app/hooks/useEnforceCorrectChain';
+import { ZERO_ADDRESS } from '@/app/types/bridge';
 import { getBridgeCtaState } from '@/app/utils/bridge';
 import { ArrowDownUp } from 'lucide-react';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 const createChainOptions = (
   chains: { id: number; name: string; icon?: string }[],
@@ -40,6 +42,7 @@ const BridgeCardContent = () => {
 
   const ensureCorrectChain = useEnforceCorrectChain();
   const execution = useBridgeExecution({ fromChainId: form.fromChainId });
+  const { addPendingBridge } = usePendingBridges();
 
   const fromChainOptions = useMemo(() => createChainOptions(derived.chains), [derived.chains]);
   const toChainOptions = useMemo(
@@ -90,6 +93,70 @@ const BridgeCardContent = () => {
     balance,
     status.needsApproval,
     execution
+  ]);
+
+  // Adds a local placeholder row the instant the bridge tx confirms, so
+  // /transactions shows it immediately instead of looking empty until
+  // aggkit's activity endpoint indexes it (RefetchContext's aggressive-
+  // refetch burst still takes a few seconds -- see bridgeSuccessView.tsx /
+  // useTransactions.ts). Keyed off bridgeTxHash so a re-render (or the
+  // effect re-running for any other reason) never adds the same bridge
+  // twice; useTransactions.ts drops this placeholder as soon as the real
+  // activity feed reports the same transactionHash.
+  const addedBridgeHashRef = useRef<string | undefined>(undefined);
+  const { fromChain, toChain, walletAddress, isNative } = derived;
+  const { selectedToken, destinationAddress } = form;
+  const { amountWei } = balance;
+  const { currentStep, bridgeTxHash } = execution.state;
+  useEffect(() => {
+    if (currentStep !== 'success' || !bridgeTxHash) return;
+    if (addedBridgeHashRef.current === bridgeTxHash) return;
+    if (!fromChain || !toChain || !selectedToken || !walletAddress) return;
+    addedBridgeHashRef.current = bridgeTxHash;
+
+    const recipient = destinationAddress.trim() || walletAddress;
+    const nowSeconds = Math.floor(Date.now() / 1000);
+
+    addPendingBridge({
+      hubUID: `pending-${bridgeTxHash}`,
+      txSender: walletAddress,
+      fromAddress: walletAddress,
+      receiverAddress: recipient,
+      sourceNetwork: fromChain.networkId,
+      destinationNetwork: toChain.networkId,
+      amount: amountWei.toString(),
+      status: 'PENDING',
+      lastUpdatedAt: nowSeconds,
+      bridgeHash: `pending-${bridgeTxHash}`,
+      metadata: '0x',
+      leafType: 'asset',
+      depositCount: 0,
+      transactionIndex: 0,
+      transactionHash: bridgeTxHash,
+      blockNumber: 0,
+      // Best-effort: the token's true origin network (what the real activity
+      // row will report as originTokenNetwork) can differ from fromChain when
+      // bridging an already-wrapped token onward -- the app has no origin
+      // tracking for a selected Token beyond "configured on fromChain", so
+      // this approximates it as fromChain itself. Wrong only in that
+      // multi-hop case, and only for the few seconds this placeholder is
+      // visible before the real row replaces it.
+      originTokenAddress: isNative ? ZERO_ADDRESS : selectedToken.address,
+      originTokenNetwork: fromChain.networkId,
+      timestamp: nowSeconds,
+      leafIndex: 0
+    });
+  }, [
+    currentStep,
+    bridgeTxHash,
+    fromChain,
+    toChain,
+    selectedToken,
+    walletAddress,
+    isNative,
+    destinationAddress,
+    amountWei,
+    addPendingBridge
   ]);
 
   const handleCloseTransactionModal = useCallback(() => {

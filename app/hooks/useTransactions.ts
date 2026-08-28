@@ -3,6 +3,7 @@
 import type { Transaction, TransactionFilters } from '@/app/types/transaction';
 
 import { useAppMode } from '@/app/context/appMode';
+import { usePendingBridges } from '@/app/context/pendingBridges';
 import { fetchActivity, resolveAggkitProxyBaseUrl } from '@/app/services/activity';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -48,6 +49,7 @@ export const useTransactions = (params: {
   const { mode, config } = useAppMode();
   const baseUrl = resolveAggkitProxyBaseUrl(config.aggkitBridgeApis);
   const fromAddress = filters.fromAddress;
+  const { pendingBridges, removePendingBridge } = usePendingBridges();
 
   const fetchCountRef = useRef(0);
   const prevAggressiveRef = useRef(aggressiveRefetch);
@@ -90,12 +92,44 @@ export const useTransactions = (params: {
     }
   });
 
+  // Once the real activity feed reports a transactionHash, drop the matching
+  // local placeholder (added by bridgeCard.tsx right after a bridge tx
+  // confirms) -- the real row always wins, and it carries data (tracking,
+  // deposit count, block info) the placeholder never had.
+  useEffect(() => {
+    if (!query.data || pendingBridges.length === 0) return;
+    const realHashes = new Set(query.data.map((tx) => tx.transactionHash.toLowerCase()));
+    pendingBridges.forEach((tx) => {
+      if (realHashes.has(tx.transactionHash.toLowerCase())) {
+        removePendingBridge(tx.transactionHash);
+      }
+    });
+  }, [query.data, pendingBridges, removePendingBridge]);
+
+  // Fills the gap between "bridge tx confirmed" and "the activity endpoint's
+  // next poll picks it up" (RefetchContext's aggressive-refetch burst still
+  // takes up to TOTAL_REFETCH_TIME) so a freshly-submitted bridge shows up
+  // immediately instead of the list looking like it didn't register at all.
+  // Scoped to this address (a placeholder from a different wallet than the
+  // one currently filtered on shouldn't leak in) and to hashes the real feed
+  // hasn't reported yet (see the dedup effect above, which is what clears
+  // this out once the real row lands).
+  const combined = useMemo(() => {
+    const realHashes = new Set((query.data ?? []).map((tx) => tx.transactionHash.toLowerCase()));
+    const relevantPending = pendingBridges.filter(
+      (tx) =>
+        !realHashes.has(tx.transactionHash.toLowerCase()) &&
+        (!fromAddress || tx.fromAddress.toLowerCase() === fromAddress.toLowerCase())
+    );
+    return [...relevantPending, ...(query.data ?? [])];
+  }, [query.data, pendingBridges, fromAddress]);
+
   // filters is a fresh object every render (transactionsView.tsx recreates
   // queryFilters via its own useMemo), so this depends on its primitive
   // fields directly rather than on `filters` itself.
   const filtered = useMemo(
-    () => applyFilters(query.data ?? [], filters),
-    [query.data, filters.status, filters.updatedSince, filters.order]
+    () => applyFilters(combined, filters),
+    [combined, filters.status, filters.updatedSince, filters.order]
   );
 
   // Client-side pagination over the full, already-fetched list: the activity
