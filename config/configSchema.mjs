@@ -99,7 +99,19 @@ export const jsonChainConfigSchema = z
     iconUrl: urlString,
     networkId: z.number().int().min(0),
     isTestnet: z.boolean(),
-    eta: z.number().int().min(0),
+    // Per-chain override of the enclosing mode's `etaL1Minutes`/`etaL2Minutes`
+    // default (see jsonAppModeConfigSchema below) -- set either one only when
+    // this specific chain's estimated bridging time differs from the rest of
+    // the mode for that route direction; each is resolved independently, so
+    // overriding one and omitting the other (inheriting the mode's default
+    // for it) is fine. Estimated minutes for a bridge originating from this
+    // chain to become claimable, split by which layer the OTHER side of the
+    // route is on: etaL1Minutes applies when the destination is L1 (a
+    // withdrawal), etaL2Minutes when the destination is any L2 (a deposit, or
+    // an L2-to-L2 transfer). See app/utils/chains.ts's getEtaMinutes, which
+    // picks between the two using the destination's networkId (0 = L1).
+    etaL1Minutes: z.number().int().min(0).optional(),
+    etaL2Minutes: z.number().int().min(0).optional(),
     // Per-chain override of the enclosing mode's `bridgeAddress` -- set this
     // only when this specific chain's deployed bridge contract differs from
     // every other chain in the mode (most modes share one deterministic
@@ -126,6 +138,12 @@ export const jsonAppModeConfigSchema = z
   .object({
     label: nonEmptyString,
     bridgeAddress: addressString,
+    // Default estimated bridging time (minutes) applied to every chain in
+    // `chainKeys` that doesn't set its own chains.<key>.etaL1Minutes/etaL2Minutes
+    // override -- see the per-chain override comment on jsonChainConfigSchema
+    // above and app/config.ts's buildModeConfig, which resolves the two.
+    etaL1Minutes: z.number().int().min(0),
+    etaL2Minutes: z.number().int().min(0),
     // A single aggkit-proxy fronting every network in this mode, tracker
     // included. May be omitted for a mode with no aggkit backend configured
     // yet -- the documented "not yet configured" escape hatch (a disabled

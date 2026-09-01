@@ -146,16 +146,22 @@ const buildModeConfig = (
     return { label: modeKey, bridgeAddress: '', aggkitBridgeApis: {}, chains: [] };
   }
 
-  // Resolve each chain's effective bridgeAddress: its own config.json
-  // chains.<key>.bridgeAddress override when set, otherwise this mode's
-  // bridgeAddress default. chainRegistry.app.bridgeAddress is '' (the "no
-  // override" sentinel from createChainEntry) for the common case, so this
-  // only copies when a fallback is actually needed -- a chain shared by
-  // multiple modes never has its registry entry mutated with one mode's
-  // default (which could be wrong for another mode using the same chain key).
+  // Resolve each chain's effective bridgeAddress and etaL1Minutes/etaL2Minutes:
+  // its own config.json chains.<key> override when set, otherwise this
+  // mode's default. chainRegistry.app.bridgeAddress is '' and
+  // etaL1Minutes/etaL2Minutes are -1 (the "no override" sentinels from
+  // createChainEntry) for the common case -- a chain shared by multiple
+  // modes never has its registry entry itself mutated with one mode's
+  // defaults (which could be wrong for another mode using the same chain
+  // key); this always returns a new object per mode instead.
   const chains = modeConfigJson.chainKeys.map((chainKey) => {
     const chain = chainRegistry[chainKey].app;
-    return chain.bridgeAddress ? chain : { ...chain, bridgeAddress: modeConfigJson.bridgeAddress };
+    return {
+      ...chain,
+      bridgeAddress: chain.bridgeAddress || modeConfigJson.bridgeAddress,
+      etaL1Minutes: chain.etaL1Minutes >= 0 ? chain.etaL1Minutes : modeConfigJson.etaL1Minutes,
+      etaL2Minutes: chain.etaL2Minutes >= 0 ? chain.etaL2Minutes : modeConfigJson.etaL2Minutes
+    };
   });
   // L1 (networkId 0) never keys an aggkitBridgeApis entry (design.md §1.2) --
   // only non-L1 networks get fanned out from this mode's aggkitProxy.
@@ -226,7 +232,8 @@ export const buildAppConfig = (configJson: JsonConfig): ResolvedAppConfig => {
         icon: chainConfigJson.iconUrl,
         networkId: chainConfigJson.networkId,
         isTestnet: chainConfigJson.isTestnet,
-        eta: chainConfigJson.eta,
+        etaL1Minutes: chainConfigJson.etaL1Minutes,
+        etaL2Minutes: chainConfigJson.etaL2Minutes,
         bridgeAddress: chainConfigJson.bridgeAddress,
         nativeCurrencyAddress: chainConfigJson.currency.address,
         nativeCurrencyWethToken: chainConfigJson.currency.wethToken,

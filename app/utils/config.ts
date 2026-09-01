@@ -13,7 +13,12 @@ export const createChainEntry = (params: ChainEntryParams): ChainEntry => ({
     networkId: params.networkId,
     isTestnet: params.isTestnet,
     rpcUrl: params.rpcUrl ?? params.wagmi.rpcUrls.default.http[0] ?? '',
-    eta: params.eta,
+    // -1 is the "no per-chain override configured" sentinel -- never a valid
+    // eta (config/configSchema.mjs's schema enforces min(0)) -- so
+    // app/config.ts's buildModeConfig can safely treat it as "fall back to
+    // this mode's etaL1Minutes/etaL2Minutes default".
+    etaL1Minutes: params.etaL1Minutes ?? -1,
+    etaL2Minutes: params.etaL2Minutes ?? -1,
     // '' is the "no per-chain override configured" sentinel -- never a valid
     // address (config/configSchema.mjs's addressString rejects ''), so
     // app/config.ts's buildModeConfig can safely treat it as "fall back to

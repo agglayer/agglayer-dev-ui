@@ -53,7 +53,8 @@ const makeChain = (overrides: Record<string, unknown> = {}) => ({
   networkId: 1,
   isTestnet: true,
   rpcUrl: 'https://rpc.example',
-  eta: 1,
+  etaL1Minutes: 1,
+  etaL2Minutes: 1,
   bridgeAddress: mkAddress('bb'),
   nativeCurrency: {
     address: ZERO_ADDRESS,

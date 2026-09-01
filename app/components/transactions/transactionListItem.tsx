@@ -13,7 +13,7 @@ import { useTokens } from '@/app/context/token';
 import { useAutoclaimGate } from '@/app/hooks/useAutoclaimGate';
 import { useTokenMetadata } from '@/app/hooks/useTokenMetadata';
 import { shortenAddress } from '@/app/utils/address';
-import { getChainByNetworkId } from '@/app/utils/chains';
+import { getChainByNetworkId, getEtaMinutes } from '@/app/utils/chains';
 import { cn } from '@/app/utils/common';
 import { getTokenLogoBySymbol } from '@/app/utils/tokens';
 import { formatTransactionAmount, isNativeToken } from '@/app/utils/transaction';
@@ -166,8 +166,27 @@ export const TransactionListItem = ({
             </div>
           </div>
         </div>
-        {isPending && sourceChain?.eta && (
-          <TransactionETA timestamp={transaction.timestamp} etaMinutes={sourceChain.eta} />
+        {transaction.status === 'ERROR' && transaction.statusError && (
+          <details
+            className="w-full text-left text-sm"
+            data-test-id="transaction-status-error-details"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <summary className="cursor-pointer text-grey hover:text-foreground">
+              Technical details
+            </summary>
+            <div className="mt-2 space-y-1 rounded-lg bg-surface-muted p-3 text-xs text-grey">
+              <p className="break-words">
+                <span className="font-semibold">Error:</span> {transaction.statusError}
+              </p>
+            </div>
+          </details>
+        )}
+        {isPending && sourceChain && (
+          <TransactionETA
+            timestamp={transaction.timestamp}
+            etaMinutes={getEtaMinutes(sourceChain, transaction.destinationNetwork)}
+          />
         )}
         {isClaimable &&
           (autoclaimGate === 'waiting' ? (

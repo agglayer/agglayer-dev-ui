@@ -267,8 +267,7 @@ const upsertConfigJsonDevnet = async ({ l1RpcUrl, l1ChainId, l2Chains, aggkitBri
     iconUrl:
       'https://raw.githubusercontent.com/lifinance/types/main/src/assets/icons/chains/ethereum.svg',
     networkId: L1_NETWORK_ID,
-    isTestnet: true,
-    eta: 1
+    isTestnet: true
   };
 
   for (const l2 of l2Chains) {
@@ -281,14 +280,18 @@ const upsertConfigJsonDevnet = async ({ l1RpcUrl, l1ChainId, l2Chains, aggkitBri
       iconUrl:
         'https://raw.githubusercontent.com/lifinance/types/main/src/assets/icons/chains/katana.svg',
       networkId: l2.networkId,
-      isTestnet: true,
-      eta: 1
+      isTestnet: true
     };
   }
 
   configJson.appModes.configs.devnet = {
     label: 'Devnet',
     bridgeAddress: BRIDGE_ADDRESS,
+    // Mode-level default eta (minutes), applied to every chain in chainKeys
+    // below since none of them sets its own chains.<key>.etaL1Minutes/etaL2Minutes
+    // override -- see app/config.ts's buildModeConfig.
+    etaL1Minutes: 1,
+    etaL2Minutes: 1,
     // One multiplexing aggkit-proxy instance fronts every network,
     // distinguished by the `?network_id=` query param on each request, not by
     // host -- so it is a single URL (`aggkitProxy`). Also kept in sync here as
