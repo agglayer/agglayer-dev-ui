@@ -9,6 +9,7 @@ import { TransactionFilters } from '@/app/components/transactions/transactionFil
 import { TransactionList } from '@/app/components/transactions/transactionList';
 import { Button } from '@/app/components/ui/button';
 import { Card } from '@/app/components/ui/card';
+import { Modal } from '@/app/components/ui/modal';
 import { useAppMode } from '@/app/context/appMode';
 import { useRefetch } from '@/app/context/refetch';
 import { useWallet } from '@/app/context/walletContext';
@@ -38,6 +39,7 @@ export const TransactionsView = () => {
   // see useBridgeTracking.ts, which now reads tracking straight off
   // whatever Transaction object it's handed.
   const [selectedTransactionId, setSelectedTransactionId] = useState<string | null>(null);
+  const [warningsModalOpen, setWarningsModalOpen] = useState(false);
 
   const queryFilters = useMemo(
     () => ({
@@ -56,6 +58,7 @@ export const TransactionsView = () => {
   const {
     transactions: allTransactions,
     totalCount,
+    warnings,
     isLoading,
     isFetchingNextPage,
     hasNextPage,
@@ -182,19 +185,35 @@ export const TransactionsView = () => {
             }
             disabled={!isConnected}
           />
-          <button
-            type="button"
-            aria-label="Refresh activity"
-            data-test-id="transactions-refresh"
-            onClick={handleManualRefetch}
-            disabled={isRefetching || isLoading}
-            className={cn(
-              'bg-transparent text-black',
-              isRefetching ? 'cursor-not-allowed text-grey' : 'hover:text-grey cursor-pointer'
+          <div className="flex items-center gap-3">
+            {warnings.length > 0 && (
+              <button
+                type="button"
+                aria-label={`${warnings.length} network warning${warnings.length === 1 ? '' : 's'}`}
+                data-test-id="transactions-warnings"
+                onClick={() => setWarningsModalOpen(true)}
+                className="bg-transparent text-orange hover:text-orange/80 cursor-pointer"
+              >
+                <AlertTriangle aria-hidden="true" size={18} />
+              </button>
             )}
-          >
-            <RotateCw aria-hidden="true" className={cn('size-4', isRefetching && 'animate-spin')} />
-          </button>
+            <button
+              type="button"
+              aria-label="Refresh activity"
+              data-test-id="transactions-refresh"
+              onClick={handleManualRefetch}
+              disabled={isRefetching || isLoading}
+              className={cn(
+                'bg-transparent text-black',
+                isRefetching ? 'cursor-not-allowed text-grey' : 'hover:text-grey cursor-pointer'
+              )}
+            >
+              <RotateCw
+                aria-hidden="true"
+                className={cn('size-4', isRefetching && 'animate-spin')}
+              />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -265,6 +284,36 @@ export const TransactionsView = () => {
           isAnyClaiming={isAnyClaiming}
         />
       )}
+
+      <Modal
+        open={warningsModalOpen}
+        onClose={() => setWarningsModalOpen(false)}
+        title="Network warnings"
+        dataTestId="transactions-warnings-modal"
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-grey">
+            Some networks couldn&apos;t be checked -- your transaction history may be incomplete for
+            these networks.
+          </p>
+          <ul className="space-y-2">
+            {warnings.map((warning, index) => {
+              const chain = getChainByNetworkId(chains, warning.network_id);
+              return (
+                <li
+                  key={`${warning.network_id}-${index}`}
+                  className="rounded-lg bg-surface-muted p-3 text-sm"
+                >
+                  <p className="font-semibold text-black">
+                    {chain?.name ?? `Network ${warning.network_id}`}
+                  </p>
+                  <p className="mt-1 break-words text-xs text-grey">{warning.message}</p>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      </Modal>
 
       <TransactionDetailsModal
         open={Boolean(selectedTransaction)}

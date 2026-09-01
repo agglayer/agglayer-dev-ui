@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 
 import '@testing-library/jest-dom/vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // TransactionsView pulls in a wide dependency graph (wallet/app-mode/refetch
@@ -130,6 +130,7 @@ describe('TransactionsView', () => {
     vi.mocked(useTransactions).mockReturnValue({
       transactions: [makeTransaction('tx-1'), makeTransaction('tx-2')],
       totalCount: 2,
+      warnings: [],
       isLoading: false,
       isFetchingNextPage: false,
       hasNextPage: false,
@@ -149,6 +150,7 @@ describe('TransactionsView', () => {
     vi.mocked(useTransactions).mockReturnValue({
       transactions: [],
       totalCount: 0,
+      warnings: [],
       isLoading: false,
       isFetchingNextPage: false,
       hasNextPage: false,
@@ -168,6 +170,7 @@ describe('TransactionsView', () => {
     vi.mocked(useTransactions).mockReturnValue({
       transactions: [],
       totalCount: 0,
+      warnings: [],
       isLoading: false,
       isFetchingNextPage: false,
       hasNextPage: false,
@@ -181,5 +184,56 @@ describe('TransactionsView', () => {
 
     expect(screen.getByTestId('transaction-list')).toHaveTextContent('0 transaction(s)');
     expect(screen.queryByText(/Total transactions:/)).not.toBeInTheDocument();
+  });
+
+  it('shows a warning icon when warnings are present, and the messages on click', () => {
+    vi.mocked(useTransactions).mockReturnValue({
+      transactions: [],
+      totalCount: 0,
+      warnings: [
+        {
+          network_id: 137,
+          message: 'fetching bridges from 0x43...: dial tcp 34.147.196.6:5577: no route to host'
+        }
+      ],
+      isLoading: false,
+      isFetchingNextPage: false,
+      hasNextPage: false,
+      fetchNextPage: vi.fn(),
+      error: null,
+      refetch: vi.fn(),
+      isRefetching: false
+    } as unknown as ReturnType<typeof useTransactions>);
+
+    renderView();
+
+    const warningButton = screen.getByRole('button', { name: '1 network warning' });
+    expect(warningButton).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    fireEvent.click(warningButton);
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByText('Polygon zkEVM')).toBeInTheDocument();
+    expect(screen.getByText(/dial tcp 34.147.196.6:5577: no route to host/)).toBeInTheDocument();
+  });
+
+  it('does not show a warning icon when there are no warnings', () => {
+    vi.mocked(useTransactions).mockReturnValue({
+      transactions: [],
+      totalCount: 0,
+      warnings: [],
+      isLoading: false,
+      isFetchingNextPage: false,
+      hasNextPage: false,
+      fetchNextPage: vi.fn(),
+      error: null,
+      refetch: vi.fn(),
+      isRefetching: false
+    } as unknown as ReturnType<typeof useTransactions>);
+
+    renderView();
+
+    expect(screen.queryByRole('button', { name: /network warning/i })).not.toBeInTheDocument();
   });
 });

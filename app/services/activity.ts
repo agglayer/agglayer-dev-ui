@@ -16,10 +16,12 @@ import type { AggkitTrackingData } from '@agglayer/sdk';
 //  - No pagination: `bridges` is the address's entire history in one
 //    response. useTransactions now paginates client-side over the full,
 //    already-fetched array instead of requesting successive pages.
-//  - No per-network partial-failure reporting: the old `failedNetworks`
-//    notice has no equivalent here (the activity endpoint has no field for
-//    it), so it's gone -- a single bad upstream bridge service is invisible
-//    to the client, same as any other cause of a missing bridge.
+//  - Per-network partial-failure reporting is now a `warnings` array on the
+//    response (added after this module's initial port), one entry per
+//    upstream bridge service call that failed -- replaces the old
+//    `failedNetworks` notice with a similar per-network_id shape. See
+//    ActivityWarning below and TransactionsView, which renders it as a
+//    dismissible warning icon rather than blocking the rest of the list.
 //  - Status collapses from 4 values (BRIDGED/LEAF_INCLUDED/READY_TO_CLAIM/
 //    CLAIMED) to what this endpoint actually guarantees: a claimed tri-state
 //    (`claimed`) plus, when `includeTracking=true`, the same step-based
@@ -85,12 +87,23 @@ interface RawActivityItem {
   tracking?: AggkitTrackingData;
 }
 
+// One upstream bridge service the bridgetracker fanned out to failed to
+// respond for that network -- the rest of `bridges` may still be an
+// incomplete picture for network_id. Surfaced as a warning icon in the UI
+// (see TransactionsView) rather than an error, since the request as a whole
+// still succeeded.
+export interface ActivityWarning {
+  network_id: number;
+  message: string;
+}
+
 interface RawActivityResponse {
   bridges: RawActivityItem[];
   // Byte-array echo of the requested address (swagger: `type: array, items:
   // integer`) -- not the hex string we already have from the caller, so it's
   // never read here.
   from_address: number[];
+  warnings?: ActivityWarning[];
 }
 
 interface RawErrorData {
@@ -180,10 +193,15 @@ export const resolveAggkitProxyBaseUrl = (
   aggkitBridgeApis: Record<number, string>
 ): string | undefined => Object.values(aggkitBridgeApis)[0];
 
+export interface ActivityResult {
+  transactions: Transaction[];
+  warnings: ActivityWarning[];
+}
+
 export const fetchActivity = async (params: {
   baseUrl: string;
   fromAddress: string;
-}): Promise<Transaction[]> => {
+}): Promise<ActivityResult> => {
   const { baseUrl, fromAddress } = params;
   const url = new URL(`${baseUrl}/tracker/v1/activity/from/${fromAddress}`);
   // Always requested: tracking is what useBridgeTracking/TrackerProgressBar/
@@ -200,5 +218,8 @@ export const fetchActivity = async (params: {
   }
 
   const raw: RawActivityResponse = await response.json();
-  return raw.bridges.map(toTransaction);
+  return {
+    transactions: raw.bridges.map(toTransaction),
+    warnings: raw.warnings ?? []
+  };
 };

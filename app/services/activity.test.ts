@@ -212,11 +212,39 @@ describe('fetchActivity', () => {
 
     const result = await fetchActivity({ baseUrl: 'https://proxy.example', fromAddress: '0xabc' });
 
-    expect(result).toHaveLength(1);
-    expect(result[0].status).toBe('CLAIMED');
+    expect(result.transactions).toHaveLength(1);
+    expect(result.transactions[0].status).toBe('CLAIMED');
+    expect(result.warnings).toEqual([]);
     const requestedUrl = new URL(fetchMock.mock.calls[0][0] as string);
     expect(requestedUrl.pathname).toBe('/tracker/v1/activity/from/0xabc');
     expect(requestedUrl.searchParams.get('includeTracking')).toBe('true');
+  });
+
+  it('passes through the warnings array when present', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          from_address: [],
+          bridges: [],
+          warnings: [
+            {
+              network_id: 84,
+              message: 'fetching bridges from 0x43...: dial tcp 34.147.196.6:5577: no route to host'
+            }
+          ]
+        })
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await fetchActivity({ baseUrl: 'https://proxy.example', fromAddress: '0xabc' });
+
+    expect(result.warnings).toEqual([
+      {
+        network_id: 84,
+        message: 'fetching bridges from 0x43...: dial tcp 34.147.196.6:5577: no route to host'
+      }
+    ]);
   });
 
   it('throws with the server-provided message on a non-OK response', async () => {

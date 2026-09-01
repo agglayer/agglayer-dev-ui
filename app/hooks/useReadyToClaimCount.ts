@@ -24,7 +24,7 @@ export const useReadyToClaimCount = (params: {
       if (!address || !baseUrl) throw new Error('MISSING_PARAMS');
       return fetchActivity({ baseUrl, fromAddress: address });
     },
-    select: (transactions) => transactions.filter((tx) => tx.status === 'READY_TO_CLAIM').length,
+    select: (data) => data.transactions.filter((tx) => tx.status === 'READY_TO_CLAIM').length,
     staleTime: 30 * 1000,
     // Poll steadily so the badge reflects deposits becoming claimable even
     // when the Transactions page (and its own, faster poll) isn't mounted.

@@ -1,5 +1,6 @@
 'use client';
 
+import type { ActivityResult } from '@/app/services/activity';
 import type { Transaction, TransactionFilters } from '@/app/types/transaction';
 
 import { useAppMode } from '@/app/context/appMode';
@@ -62,7 +63,7 @@ export const useTransactions = (params: {
     prevAggressiveRef.current = aggressiveRefetch;
   }, [aggressiveRefetch]);
 
-  const query = useQuery<Transaction[], Error>({
+  const query = useQuery<ActivityResult, Error>({
     queryKey: ['activity', mode, chainId, fromAddress],
     enabled: enabled && Boolean(chainId) && Boolean(fromAddress) && Boolean(baseUrl),
     queryFn: async () => {
@@ -86,25 +87,28 @@ export const useTransactions = (params: {
       // non-terminal so its status advances, and poll at a slower idle
       // cadence otherwise so a newly-appearing deposit still shows up on
       // its own.
-      return hasNonTerminalTransaction(query.state.data)
+      return hasNonTerminalTransaction(query.state.data?.transactions)
         ? PENDING_POLL_INTERVAL
         : IDLE_POLL_INTERVAL;
     }
   });
+
+  const transactions = query.data?.transactions;
+  const warnings = query.data?.warnings ?? [];
 
   // Once the real activity feed reports a transactionHash, drop the matching
   // local placeholder (added by bridgeCard.tsx right after a bridge tx
   // confirms) -- the real row always wins, and it carries data (tracking,
   // deposit count, block info) the placeholder never had.
   useEffect(() => {
-    if (!query.data || pendingBridges.length === 0) return;
-    const realHashes = new Set(query.data.map((tx) => tx.transactionHash.toLowerCase()));
+    if (!transactions || pendingBridges.length === 0) return;
+    const realHashes = new Set(transactions.map((tx) => tx.transactionHash.toLowerCase()));
     pendingBridges.forEach((tx) => {
       if (realHashes.has(tx.transactionHash.toLowerCase())) {
         removePendingBridge(tx.transactionHash);
       }
     });
-  }, [query.data, pendingBridges, removePendingBridge]);
+  }, [transactions, pendingBridges, removePendingBridge]);
 
   // Fills the gap between "bridge tx confirmed" and "the activity endpoint's
   // next poll picks it up" (RefetchContext's aggressive-refetch burst still
@@ -115,14 +119,14 @@ export const useTransactions = (params: {
   // hasn't reported yet (see the dedup effect above, which is what clears
   // this out once the real row lands).
   const combined = useMemo(() => {
-    const realHashes = new Set((query.data ?? []).map((tx) => tx.transactionHash.toLowerCase()));
+    const realHashes = new Set((transactions ?? []).map((tx) => tx.transactionHash.toLowerCase()));
     const relevantPending = pendingBridges.filter(
       (tx) =>
         !realHashes.has(tx.transactionHash.toLowerCase()) &&
         (!fromAddress || tx.fromAddress.toLowerCase() === fromAddress.toLowerCase())
     );
-    return [...relevantPending, ...(query.data ?? [])];
-  }, [query.data, pendingBridges, fromAddress]);
+    return [...relevantPending, ...(transactions ?? [])];
+  }, [transactions, pendingBridges, fromAddress]);
 
   // filters is a fresh object every render (transactionsView.tsx recreates
   // queryFilters via its own useMemo), so this depends on its primitive
@@ -152,6 +156,7 @@ export const useTransactions = (params: {
   return {
     transactions: visibleTransactions,
     totalCount,
+    warnings,
     isLoading: query.isLoading,
     // No real "next page" request anymore (it's an in-memory slice), kept so
     // TransactionList's loading-more affordance still has a prop to read.
