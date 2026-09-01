@@ -19,7 +19,12 @@ export type ChainEntryParams = {
   icon: string;
   networkId: number;
   isTestnet: boolean;
-  eta: number;
+  // Both optional: config.json's chains.<key>.etaL1Minutes/etaL2Minutes, possibly
+  // unset -- app/config.ts's buildModeConfig resolves the enclosing mode's
+  // etaL1Minutes/etaL2Minutes fallback, this is not the final value AppChain
+  // consumers should read.
+  etaL1Minutes?: number;
+  etaL2Minutes?: number;
   rpcUrl?: string;
   explorer?: string;
   // Raw per-chain bridgeAddress override from config.json (chains.<key>.bridgeAddress),

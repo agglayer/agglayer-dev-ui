@@ -34,7 +34,8 @@
       "iconUrl": "https://raw.githubusercontent.com/lifinance/types/main/src/assets/icons/chains/ethereum.svg",
       "networkId": 0,
       "isTestnet": false,
-      "eta": 20
+      "etaL1Minutes": 20,
+      "etaL2Minutes": 20
     },
     "KATANA": {
       "id": 747474,
@@ -48,8 +49,7 @@
       },
       "iconUrl": "https://raw.githubusercontent.com/lifinance/types/main/src/assets/icons/chains/katana.svg",
       "networkId": 20,
-      "isTestnet": false,
-      "eta": 180
+      "isTestnet": false
     },
     "FORKNET": {
       "id": 8338,
@@ -63,8 +63,7 @@
       },
       "iconUrl": "https://explorer-forknet.t.conduit.xyz/assets/configs/network_icon_dark.svg",
       "networkId": 22,
-      "isTestnet": false,
-      "eta": 180
+      "isTestnet": false
     },
     "SEPOLIA": {
       "id": 11155111,
@@ -79,7 +78,8 @@
       "iconUrl": "https://raw.githubusercontent.com/lifinance/types/main/src/assets/icons/chains/ethereum.svg",
       "networkId": 0,
       "isTestnet": true,
-      "eta": 20
+      "etaL1Minutes": 20,
+      "etaL2Minutes": 20
     },
     "BOKUTO": {
       "id": 737373,
@@ -93,8 +93,7 @@
       },
       "iconUrl": "https://raw.githubusercontent.com/lifinance/types/main/src/assets/icons/chains/katana.svg",
       "networkId": 37,
-      "isTestnet": true,
-      "eta": 180
+      "isTestnet": true
     },
     "DEVNET_L1": {
       "id": 900101,
@@ -108,8 +107,7 @@
       },
       "iconUrl": "https://raw.githubusercontent.com/lifinance/types/main/src/assets/icons/chains/ethereum.svg",
       "networkId": 0,
-      "isTestnet": true,
-      "eta": 1
+      "isTestnet": true
     },
     "DEVNET_L2_001": {
       "id": 900102,
@@ -123,8 +121,7 @@
       },
       "iconUrl": "https://raw.githubusercontent.com/lifinance/types/main/src/assets/icons/chains/katana.svg",
       "networkId": 1,
-      "isTestnet": true,
-      "eta": 1
+      "isTestnet": true
     },
     "DEVNET_L2_002": {
       "id": 900103,
@@ -138,8 +135,7 @@
       },
       "iconUrl": "https://raw.githubusercontent.com/lifinance/types/main/src/assets/icons/chains/katana.svg",
       "networkId": 2,
-      "isTestnet": true,
-      "eta": 1
+      "isTestnet": true
     }
   },
   "appModes": {
@@ -148,6 +144,8 @@
       "mainnet": {
         "label": "Mainnet",
         "bridgeAddress": "0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe",
+        "etaL1Minutes": 180,
+        "etaL2Minutes": 180,
         "aggkitProxy": "https://PLACEHOLDER-mainnet-aggkit-proxy",
         "chainKeys": ["MAINNET", "KATANA", "FORKNET"],
         "defaultFromChainKey": "MAINNET",
@@ -156,6 +154,8 @@
       "testnet": {
         "label": "Testnet",
         "bridgeAddress": "0x528e26b25a34a4A5d0dbDa1d57D318153d2ED582",
+        "etaL1Minutes": 180,
+        "etaL2Minutes": 180,
         "aggkitProxy": "https://PLACEHOLDER-testnet-aggkit-proxy",
         "chainKeys": ["SEPOLIA", "BOKUTO"],
         "defaultFromChainKey": "SEPOLIA",
@@ -164,6 +164,8 @@
       "devnet": {
         "label": "Devnet",
         "bridgeAddress": "0xC8cbEBf950B9Df44d987c8619f092beA980fF038",
+        "etaL1Minutes": 1,
+        "etaL2Minutes": 1,
         "aggkitProxy": "/aggkitapi",
         "chainKeys": ["DEVNET_L1", "DEVNET_L2_001", "DEVNET_L2_002"],
         "defaultFromChainKey": "DEVNET_L1",

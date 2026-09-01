@@ -279,8 +279,7 @@ Chains are defined in the `chains` object, keyed by an uppercase identifier:
       "currency": { "name": "Ether", "symbol": "ETH", "decimals": 18 },
       "iconUrl": "https://example.com/icons/my-chain.svg",
       "networkId": 10,
-      "isTestnet": true,
-      "eta": 120
+      "isTestnet": true
     }
   }
 }
@@ -298,7 +297,8 @@ Chains are defined in the `chains` object, keyed by an uppercase identifier:
 | `iconUrl` | Yes | URL for the chain/native token icon shown in the UI |
 | `networkId` | Yes | AggLayer network ID |
 | `isTestnet` | Yes | Whether this is a test network |
-| `eta` | Yes | Estimated bridging time in minutes |
+| `etaL1Minutes` | No | Per-chain override (minutes) of the enclosing mode's `etaL1Minutes` default: estimated bridging time when this chain is the source and the destination is L1 (a withdrawal). Omit to inherit the mode's value (see [Per-chain `etaL1Minutes`/`etaL2Minutes` override](#per-chain-etal1minutesetal2minutes-override) below). |
+| `etaL2Minutes` | No | Per-chain override (minutes) of the enclosing mode's `etaL2Minutes` default: estimated bridging time when the destination is any L2 (a deposit, or an L2-to-L2 transfer). Omit to inherit the mode's value. |
 | `bridgeAddress` | No | Per-chain override of the enclosing mode's `bridgeAddress` (see below). Omit to inherit the mode's value. |
 | `nativeBridgeURL` | No | This chain's own native/canonical bridge UI (see below). Omit for no advisory. |
 
@@ -410,6 +410,33 @@ effective address and never needs to know whether it came from the chain or the 
 Because `chains` is a single global map (not nested per mode), a chain-level override
 applies in every mode that lists that chain key, not just one.
 
+#### Per-chain `etaL1Minutes`/`etaL2Minutes` override
+
+Every mode's `etaL1Minutes`/`etaL2Minutes` (see [App Modes](#app-modes) below) are the
+*default* estimated bridging times (minutes) applied to every chain in that mode's
+`chainKeys` — set them on a chain only when its own estimated time genuinely differs
+from the rest of its mode:
+
+```json
+{
+  "chains": {
+    "MY_CHAIN": {
+      "...": "...",
+      "etaL1Minutes": 180,
+      "etaL2Minutes": 20
+    }
+  }
+}
+```
+
+Each field is resolved independently, so overriding one and omitting the other
+(inheriting the mode's default for it) is fine. `etaL1Minutes` is the estimated time
+for a bridge FROM this chain TO L1 (a withdrawal); `etaL2Minutes` is the estimated time
+TO any L2 (a deposit, or an L2-to-L2 transfer) — see `app/utils/chains.ts`'s
+`getEtaMinutes`, which every UI consumer uses to pick between the two based on the
+transaction's actual destination. Like `bridgeAddress` above, both are resolved once
+per mode by `app/config.ts`'s `buildModeConfig` before the chain reaches any UI code.
+
 ## App Modes
 
 Supported modes are fixed: `mainnet`, `testnet`, `devnet`. Do not add new modes.
@@ -424,6 +451,8 @@ A mode is **enabled** only if `chainKeys` has at least two entries (bridging req
       "mainnet": {
         "label": "Mainnet",
         "bridgeAddress": "0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe",
+        "etaL1Minutes": 180,
+        "etaL2Minutes": 180,
         "aggkitProxy": "https://mainnet-aggkit-proxy.example.com",
         "chainKeys": ["MAINNET", "KATANA", "FORKNET"],
         "defaultFromChainKey": "MAINNET",
@@ -444,6 +473,8 @@ deployed for them yet. See [Aggkit Bridge APIs](#aggkit-bridge-apis-aggkitproxy)
 |-------|----------|-------------|
 | `label` | Yes | Display label in the mode switcher |
 | `bridgeAddress` | Yes | Default bridge contract address for every chain in `chainKeys`, unless a chain sets its own override (see [Per-chain `bridgeAddress` override](#per-chain-bridgeaddress-override)) |
+| `etaL1Minutes` | Yes | Default estimated bridging time (minutes) to L1, for every chain in `chainKeys`, unless a chain sets its own override (see [Per-chain `etaL1Minutes`/`etaL2Minutes` override](#per-chain-etal1minutesetal2minutes-override)) |
+| `etaL2Minutes` | Yes | Default estimated bridging time (minutes) to any L2, for every chain in `chainKeys`, unless a chain sets its own override (see above) |
 | `aggkitProxy` | Conditional | A single URL fronting every network in this mode via one multiplexing aggkit-proxy. May be omitted as the "not yet configured" escape hatch (see [Validation](#validation)). |
 | `chainKeys` | Yes | Array of chain keys from `chains` (need >= 2 to enable) |
 | `defaultFromChainKey` | No | Default source chain (defaults to first in `chainKeys`) |

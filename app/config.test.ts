@@ -28,7 +28,8 @@ const chain = (overrides: Partial<JsonConfig['chains'][string]> = {}) => ({
   iconUrl: 'https://icon.example/icon.svg',
   networkId: 0,
   isTestnet: true,
-  eta: 1,
+  etaL1Minutes: 1,
+  etaL2Minutes: 1,
   ...overrides
 });
 
@@ -57,6 +58,8 @@ const buildConfigJson = (
         devnet: {
           label: 'Devnet',
           bridgeAddress: '0xC8cbEBf950B9Df44d987c8619f092beA980fF038',
+          etaL1Minutes: 1,
+          etaL2Minutes: 1,
           ...(aggkitProxy === null ? {} : { aggkitProxy }),
           chainKeys: ['DEVNET_L1', 'DEVNET_L2_001', 'DEVNET_L2_002'],
           defaultFromChainKey: 'DEVNET_L1',
@@ -157,6 +160,8 @@ describe('buildAppConfig — per-chain bridgeAddress override', () => {
     configJson.appModes.configs.testnet = {
       label: 'Testnet',
       bridgeAddress: '0x1111111111111111111111111111111111111a',
+      etaL1Minutes: 1,
+      etaL2Minutes: 1,
       chainKeys: ['DEVNET_L1', 'DEVNET_L2_001']
     };
 
@@ -166,6 +171,64 @@ describe('buildAppConfig — per-chain bridgeAddress override', () => {
     const [testnetL1] = resolved.appModeConfig.testnet.chains as [AppChain, ...AppChain[]];
     expect(devnetL1.bridgeAddress).toBe('0xC8cbEBf950B9Df44d987c8619f092beA980fF038');
     expect(testnetL1.bridgeAddress).toBe('0x1111111111111111111111111111111111111a');
+  });
+});
+
+describe('buildAppConfig — per-chain etaL1Minutes/etaL2Minutes override', () => {
+  it("falls back to the mode's etaL1Minutes/etaL2Minutes when a chain has no override", () => {
+    const resolved = buildAppConfig(buildConfigJson());
+
+    const [devnetL1, devnetL2001] = resolved.appModeConfig.devnet.chains as [AppChain, AppChain];
+    expect(devnetL1.etaL1Minutes).toBe(1);
+    expect(devnetL1.etaL2Minutes).toBe(1);
+    expect(devnetL2001.etaL1Minutes).toBe(1);
+    expect(devnetL2001.etaL2Minutes).toBe(1);
+  });
+
+  it("a chain's own etaL1Minutes/etaL2Minutes wins over the mode's default, independently", () => {
+    const configJson = buildConfigJson();
+    configJson.chains.DEVNET_L2_001 = chain({
+      id: 20201,
+      name: 'Devnet L2-001',
+      networkId: 1,
+      // Only overrides etaL1Minutes -- etaL2Minutes should still fall back to the
+      // mode's default, since each field is resolved independently.
+      etaL1Minutes: 180
+    });
+    delete (configJson.chains.DEVNET_L2_001 as { etaL2Minutes?: number }).etaL2Minutes;
+
+    const resolved = buildAppConfig(configJson);
+
+    const [devnetL1, devnetL2001] = resolved.appModeConfig.devnet.chains as [AppChain, AppChain];
+    expect(devnetL1.etaL1Minutes).toBe(1);
+    expect(devnetL1.etaL2Minutes).toBe(1);
+    expect(devnetL2001.etaL1Minutes).toBe(180);
+    expect(devnetL2001.etaL2Minutes).toBe(1);
+  });
+
+  it("does not leak one mode's etaL1Minutes/etaL2Minutes default onto a chain shared by another mode", () => {
+    const configJson = buildConfigJson();
+    // DEVNET_L1 has no chain-level eta override (see `chain`'s defaults
+    // above) -- delete them here so this proves each mode's OWN default
+    // applies, rather than a chain-level override simply winning in both.
+    delete (configJson.chains.DEVNET_L1 as { etaL1Minutes?: number }).etaL1Minutes;
+    delete (configJson.chains.DEVNET_L1 as { etaL2Minutes?: number }).etaL2Minutes;
+    configJson.appModes.configs.testnet = {
+      label: 'Testnet',
+      bridgeAddress: '0x1111111111111111111111111111111111111a',
+      etaL1Minutes: 90,
+      etaL2Minutes: 90,
+      chainKeys: ['DEVNET_L1', 'DEVNET_L2_001']
+    };
+
+    const resolved = buildAppConfig(configJson);
+
+    const [devnetL1] = resolved.appModeConfig.devnet.chains as [AppChain, ...AppChain[]];
+    const [testnetL1] = resolved.appModeConfig.testnet.chains as [AppChain, ...AppChain[]];
+    expect(devnetL1.etaL1Minutes).toBe(1);
+    expect(devnetL1.etaL2Minutes).toBe(1);
+    expect(testnetL1.etaL1Minutes).toBe(90);
+    expect(testnetL1.etaL2Minutes).toBe(90);
   });
 });
 

@@ -58,7 +58,8 @@ const makeChain = (overrides: { wethToken?: string } = {}) => [
     networkId: 1,
     isTestnet: true,
     rpcUrl: 'https://rpc.example',
-    eta: 1,
+    etaL1Minutes: 1,
+    etaL2Minutes: 1,
     bridgeAddress: BRIDGE_ADDRESS,
     nativeCurrency: {
       address: ZERO_ADDRESS,
@@ -77,7 +78,8 @@ const makeChain = (overrides: { wethToken?: string } = {}) => [
     networkId: 2,
     isTestnet: true,
     rpcUrl: 'https://rpc.example',
-    eta: 1,
+    etaL1Minutes: 1,
+    etaL2Minutes: 1,
     bridgeAddress: BRIDGE_ADDRESS,
     nativeCurrency: {
       address: ZERO_ADDRESS,

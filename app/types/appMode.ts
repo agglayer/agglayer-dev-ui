@@ -10,7 +10,18 @@ export type AppChain = {
   networkId: number;
   isTestnet: boolean;
   rpcUrl: string;
-  eta: number;
+  // Estimated minutes for a bridge FROM this chain to become claimable, split
+  // by the destination's layer: etaL1Minutes when bridging to L1 (withdrawal),
+  // etaL2Minutes when bridging to any L2 (deposit or L2-to-L2 transfer). Use
+  // app/utils/chains.ts's getEtaMinutes to pick the right one for a given
+  // route -- never read either field directly. Always resolved by
+  // app/config.ts's buildModeConfig (chain-level override, else the enclosing
+  // mode's default) before an AppChain reaches this array -- -1 here (see
+  // app/utils/config.ts's createChainEntry) means "no chain-level override,
+  // use the mode's etaL1Minutes/etaL2Minutes" and should never surface past
+  // buildModeConfig.
+  etaL1Minutes: number;
+  etaL2Minutes: number;
   nativeCurrency: {
     address: string;
     decimals: number;

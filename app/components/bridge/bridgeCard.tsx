@@ -17,6 +17,7 @@ import { useBridgeExecution } from '@/app/hooks/useBridgeExecution';
 import { useEnforceCorrectChain } from '@/app/hooks/useEnforceCorrectChain';
 import { ZERO_ADDRESS } from '@/app/types/bridge';
 import { getBridgeCtaState } from '@/app/utils/bridge';
+import { getEtaMinutes } from '@/app/utils/chains';
 import { ArrowDownUp } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -233,9 +234,9 @@ const BridgeCardContent = () => {
         >
           {ctaState.label}
         </button>
-        {form.amount && derived.fromChain && form.selectedToken && (
+        {form.amount && derived.fromChain && derived.toChain && form.selectedToken && (
           <EstimationInfo
-            etaMinutes={derived.fromChain.eta}
+            etaMinutes={getEtaMinutes(derived.fromChain, derived.toChain.networkId)}
             fee={gasEstimate.feeFormatted}
             nativeSymbol={derived.fromChain.nativeCurrency.symbol}
             isLoading={gasEstimate.isLoading}

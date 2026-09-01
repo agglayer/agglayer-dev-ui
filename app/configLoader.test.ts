@@ -16,7 +16,8 @@ const chain = (overrides: Partial<JsonConfig['chains'][string]> = {}) => ({
   iconUrl: 'https://icon.example/icon.svg',
   networkId: 0,
   isTestnet: true,
-  eta: 1,
+  etaL1Minutes: 1,
+  etaL2Minutes: 1,
   ...overrides
 });
 
@@ -35,6 +36,8 @@ const buildConfig = (aggkitProxy?: string): JsonConfig =>
         devnet: {
           label: 'Devnet',
           bridgeAddress: '0xC8cbEBf950B9Df44d987c8619f092beA980fF038',
+          etaL1Minutes: 1,
+          etaL2Minutes: 1,
           ...(aggkitProxy === undefined ? {} : { aggkitProxy }),
           chainKeys: ['DEVNET_L1', 'DEVNET_L2_001', 'DEVNET_L2_002'],
           defaultFromChainKey: 'DEVNET_L1',

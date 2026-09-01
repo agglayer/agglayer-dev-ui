@@ -233,6 +233,21 @@ export const TransactionsView = () => {
               Retry
             </Button>
           </div>
+          {error.message && (
+            <details
+              className="mx-auto w-full max-w-md text-left text-sm"
+              data-test-id="activity-error-details"
+            >
+              <summary className="cursor-pointer text-grey hover:text-foreground">
+                Technical details
+              </summary>
+              <div className="mt-2 space-y-1 rounded-lg bg-surface-muted p-3 text-xs text-grey">
+                <p className="break-words">
+                  <span className="font-semibold">Error:</span> {error.message}
+                </p>
+              </div>
+            </details>
+          )}
         </div>
       )}
 
