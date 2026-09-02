@@ -15,7 +15,6 @@ export type AppModeContextValue = {
   enabledModes: AppMode[];
   config: EnabledAppModeConfig;
   chains: AppChain[];
-  bridgeAddress: string;
   defaultFromChainId: number;
   defaultToChainId: number;
 };
@@ -64,7 +63,6 @@ const createAppModeContextValue = ({
     enabledModes,
     config,
     chains: config.chains,
-    bridgeAddress: config.bridgeAddress,
     defaultFromChainId: config.defaultFromChainId ?? primaryChain.id,
     defaultToChainId: config.defaultToChainId ?? secondaryChain.id
   };
