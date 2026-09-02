@@ -23,6 +23,19 @@ import { getPublicClient } from '@wagmi/core';
 import { useCallback, useState } from 'react';
 import { useConfig, useSendTransaction } from 'wagmi';
 
+// Same substrings ClaimResultModal's isUserRejection checks for, so a
+// rejected wallet prompt is recognized consistently between where the
+// rejection happens (here) and where it's finally displayed (that modal).
+const isWalletRejection = (error: unknown): boolean => {
+  const message = error instanceof Error ? error.message : String(error);
+  const lowerMessage = message.toLowerCase();
+  return (
+    lowerMessage.includes('rejected') ||
+    lowerMessage.includes('denied') ||
+    lowerMessage.includes('user refused')
+  );
+};
+
 interface UseClaimExecutionParams {
   chains: AppChain[];
   onComplete?: (result: ClaimExecutionResult) => void;
@@ -234,18 +247,26 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
         // with a short backoff gives the read a chance to catch up with the
         // state the failed estimateGas call already observed, without
         // pretending a single fast re-check is authoritative.
-        const bridgeClient = native.bridge(bridgeAddress, destinationChainId);
-        const isClaimedParams = {
-          leafIndex: resolveLeafIndex(transaction),
-          sourceBridgeNetwork: transaction.sourceNetwork
-        };
+        //
+        // None of this applies when the user rejected the wallet prompt,
+        // though: we never signed or sent anything, so there's no on-chain
+        // claimAsset call that could have raced an external claimer -- skip
+        // straight to reporting the rejection instead of burning ~1.4s on
+        // isClaimed() polling that can only end up unused.
         let raceLostToAnotherClaimer = false;
-        for (const delayMs of [0, 400, 1000]) {
-          if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
-          raceLostToAnotherClaimer = await bridgeClient
-            .isClaimed(isClaimedParams)
-            .catch(() => false);
-          if (raceLostToAnotherClaimer) break;
+        if (!isWalletRejection(error)) {
+          const bridgeClient = native.bridge(bridgeAddress, destinationChainId);
+          const isClaimedParams = {
+            leafIndex: resolveLeafIndex(transaction),
+            sourceBridgeNetwork: transaction.sourceNetwork
+          };
+          for (const delayMs of [0, 400, 1000]) {
+            if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
+            raceLostToAnotherClaimer = await bridgeClient
+              .isClaimed(isClaimedParams)
+              .catch(() => false);
+            if (raceLostToAnotherClaimer) break;
+          }
         }
 
         const message = raceLostToAnotherClaimer
