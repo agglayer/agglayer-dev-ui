@@ -39,10 +39,23 @@ const STEP_LABELS: Record<AggkitBridgeStep, (params: TrackerStepLabelParams) => 
   Claimed: () => 'Claimed'
 };
 
+// step_name ships as a bare string over the wire (see the file-top deviation
+// note), so a value the SDK adds later -- or any wire payload outside the
+// AggkitBridgeStep union entirely -- reaches here as an unrecognized
+// `stepName` despite the type saying otherwise (comment 3862949155 / C12:
+// STEP_LABELS[stepName] used to be called unconditionally and threw
+// TypeError on exactly this, which made trackerDetail.tsx's handled
+// `UnrecognizedStepResult` fallback for an unrecognized step_name
+// unreachable -- the crash happened first, one line up in the same
+// component). A fallback label here, not a throw, is what lets that
+// fallback ever render.
 export const getTrackerStepLabel = (
   stepName: AggkitBridgeStep,
   params: TrackerStepLabelParams = {}
-): string => STEP_LABELS[stepName](params);
+): string => {
+  const labelFn = STEP_LABELS[stepName];
+  return labelFn ? labelFn(params) : 'Unrecognized step';
+};
 
 const STEP_STATUS_COPY: Record<AggkitStepStatus, string> = {
   pending: 'Pending',
