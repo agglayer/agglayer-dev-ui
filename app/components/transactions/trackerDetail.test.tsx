@@ -145,6 +145,33 @@ describe('TrackerDetail', () => {
     expect(container.querySelectorAll('[data-test-id^="tracker-detail-step-"]')).toHaveLength(6);
   });
 
+  // C12 follow-up (comment 3862949155, completing S5's work): before
+  // trackerSteps.ts's getTrackerStepLabel grew a fallback for an unrecognized
+  // step_name, this exact case crashed one line above the switch below --
+  // the UnrecognizedStepResult fallback in the `default:` case was unreachable.
+  it("renders the fallback (not a crash) for a step whose step_name isn't recognized at all", () => {
+    const malformed = {
+      ...l2l1FinishedFixture,
+      all_steps: l2l1FinishedFixture.all_steps!.map((step, index) =>
+        index === 1
+          ? { ...step, step_name: 'SomeFutureStep' as unknown as typeof step.step_name }
+          : step
+      )
+    };
+    mockTracking(malformed);
+    const { container } = render(<TrackerDetail transaction={makeTransaction()} />);
+
+    // The unrecognized step still gets a label (no crash reaching it)...
+    expect(screen.getByText('Unrecognized step')).toBeInTheDocument();
+    // PendingInclusion's own detail does not render...
+    expect(screen.queryByText('Certificate')).not.toBeInTheDocument();
+    // ...the handled fallback does, and the rest of the timeline is untouched.
+    expect(
+      container.querySelectorAll('[data-test-id="tracker-detail-unrecognized-step-result"]')
+    ).toHaveLength(1);
+    expect(container.querySelectorAll('[data-test-id^="tracker-detail-step-"]')).toHaveLength(6);
+  });
+
   // S10a regression (mirrors trackerProgressBar.test.tsx): a LIVE transition,
   // not a row that loads already-CLAIMED (the first test above covers that,
   // and it's also already gated by the caller -- transactionDetailsModal.tsx
