@@ -63,7 +63,7 @@ The `@sha256:<digest>` is what Docker actually resolves — immutable, and
 independently re-verifiable (`docker buildx imagetools inspect
 ghcr.io/0xpolygon/kurtosis-cdk-snapshot-<service>@sha256:<digest>`). The
 trailing `# <component-version>-<unix-ts>` comment (e.g.
-`0.11.0-rc5-1786700247`) is a human-readable tag carrying the same digest —
+`0.11.0-rc7-1788355200`) is a human-readable tag carrying the same digest —
 provenance for a reader, not something Docker resolves. Re-running
 kurtosis-cdk's publish workflow can never silently move what this file
 pulls, unlike the old `snapshot-<sha>` tag scheme (a tag containing a commit
@@ -125,7 +125,7 @@ under you and breaks the "pin exact versions in CI" contract).
    ```
 
    Then update this file's header-comment provenance line (the
-   `fc160450b55e64332436f11c091c61130c64030f` / publish-run-URL pair at the
+   `a228af067ef8a23deafaa9531b83306fe8e5ad13` / publish-run-URL pair at the
    top of `docker-compose.yml`) to match the new run, and re-confirm every
    `image:` line resolves to `ghcr.io/0xpolygon/kurtosis-cdk-snapshot-<service>@sha256:<digest>`:
 

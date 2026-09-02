@@ -1,9 +1,9 @@
 {
-  "snapshot_name": "cdk-20260814-093315",
+  "snapshot_name": "cdk-20260902-131537",
   "enclave": "cdk",
   "flavor": "anvil-aggkit",
-  "created_at": "2026-08-14T09:33:46Z",
-  "captured_at": "2026-08-14T09:33:24Z",
+  "created_at": "2026-09-02T13:16:14Z",
+  "captured_at": "2026-09-02T13:15:49Z",
   "settlement_free": true,
   "agglayer_certificates_at_capture": [
     {
@@ -113,7 +113,7 @@
       "service": "anvil-001",
       "chain_id": 271828,
       "network_id": 0,
-      "block_number_at_capture": 236,
+      "block_number_at_capture": 258,
       "rpc": {
         "internal": "http://anvil-001:8545",
         "external": "http://127.0.0.1:8545",
@@ -133,7 +133,7 @@
         "service": "l2-anvil-001",
         "chain_id": 20201,
         "network_id": 1,
-        "block_number_at_capture": 141,
+        "block_number_at_capture": 149,
         "rpc": {
           "internal": "http://l2-anvil-001:8545",
           "external": "http://127.0.0.1:11545",
@@ -164,7 +164,7 @@
         "service": "l2-anvil-002",
         "chain_id": 20202,
         "network_id": 2,
-        "block_number_at_capture": 29,
+        "block_number_at_capture": 31,
         "rpc": {
           "internal": "http://l2-anvil-002:8545",
           "external": "http://127.0.0.1:12545",
@@ -204,7 +204,7 @@
         "private_key": "0xbcdf20249abf0ed6d944c0288fad489e33f66b3960d9e6229c1cd214ed3bbe31",
         "mnemonic_index": 0,
         "funded_on": ["l1"],
-        "balance_at_capture": "0x334902bc112e08dadf81230"
+        "balance_at_capture": "0x334902bc112e344236b14c8"
       },
       {
         "address": "0xE25583099BA105D9ec0A67f5Ae86D90e50036425",
@@ -397,11 +397,11 @@
     }
   },
   "fixtures": {
-    "seeded_at": "2026-08-14T09:33:18Z",
+    "seeded_at": "2026-09-02T13:15:40Z",
     "l1_chain_id": 271828,
     "e2e_wallet": "0xE34aaF64b29273B7D567FCFc40544c014EEe9970",
     "e2e_private_key": "0x12d7de8621a77640c9241b2595ba78ce443d05e94090365ab3bb5e19df82c625",
-    "e2e_wallet_l1_native_balance_hex": "0x1a78435caa8f2b5974a02",
+    "e2e_wallet_l1_native_balance_hex": "0x1a78435a171baa93d1249",
     "erc20": {
       "address": "0xe293A6b8F558422813499bb5C89B60adD8c54636",
       "name": "Agglayer E2E Token",
@@ -415,74 +415,74 @@
     }
   },
   "images": {
-    "tag": "cdk-20260814-093324-fc160450b55e",
+    "tag": "cdk-20260902-131549-a228af067ef8",
     "image_prefix": "snapshot-",
     "busybox_image": "busybox:1.36-musl",
     "self_contained": true,
-    "built_at": "2026-08-14T09:33:37Z",
+    "built_at": "2026-09-02T13:16:00Z",
     "services": {
       "anvil-001": {
-        "name": "snapshot-anvil-001:cdk-20260814-093324-fc160450b55e",
+        "name": "snapshot-anvil-001:cdk-20260902-131549-a228af067ef8",
         "base_image": "ghcr.io/foundry-rs/foundry:v1.5.1",
-        "size": "475MB",
-        "tag": "v1.5.1-1786700247",
-        "digest": "sha256:006932fc49ce501c8d6f8c3f4ac3b5873ec14b59b101b4f4e9db02b169e6c0c9"
+        "size": "479MB",
+        "tag": "v1.5.1-1788355200",
+        "digest": "sha256:b1ea26ae9a4de60fc05fdf56fb970b95129ec6f9ca156bd1879f9f206b34d50c"
       },
       "l2-anvil-001": {
-        "name": "snapshot-l2-anvil-001:cdk-20260814-093324-fc160450b55e",
+        "name": "snapshot-l2-anvil-001:cdk-20260902-131549-a228af067ef8",
         "base_image": "ghcr.io/foundry-rs/foundry:v1.5.1",
-        "size": "440MB",
-        "tag": "v1.5.1-1786700247",
-        "digest": "sha256:e9bbeb7f9a76a4ea725f194059c6b23d49c65e89a8a00241d6df3b687c8ccbb8"
+        "size": "441MB",
+        "tag": "v1.5.1-1788355200",
+        "digest": "sha256:957e37c9a29da7f312560524814005f7bfa52551521aba2007c1267ea272dfab"
       },
       "l2-anvil-002": {
-        "name": "snapshot-l2-anvil-002:cdk-20260814-093324-fc160450b55e",
+        "name": "snapshot-l2-anvil-002:cdk-20260902-131549-a228af067ef8",
         "base_image": "ghcr.io/foundry-rs/foundry:v1.5.1",
         "size": "422MB",
-        "tag": "v1.5.1-1786700247",
-        "digest": "sha256:3555d50518f6f72d5811edd759293ba205ac192c04192695afc046c2cb595ef0"
+        "tag": "v1.5.1-1788355200",
+        "digest": "sha256:3121955dec9eff25e3e5ba20feed6e5ada7dbecfd07c4b12b9e3ebc74ff4e1ad"
       },
       "agglayer": {
-        "name": "snapshot-agglayer:cdk-20260814-093324-fc160450b55e",
+        "name": "snapshot-agglayer:cdk-20260902-131549-a228af067ef8",
         "base_image": "ghcr.io/agglayer/agglayer:0.6.0-rc.8",
         "size": "3.15GB",
-        "tag": "0.6.0-rc.8-1786700247",
-        "digest": "sha256:5a47d3778657ba618ff7dfc99dfd55a3863097d5fff4f960a0740d4d0ae80073"
+        "tag": "0.6.0-rc.8-1788355200",
+        "digest": "sha256:6cf0a5179f0f4ba0dbae141b851a80a7d8d038caab7deccab0872fa490bc229c"
       },
       "aggkit-001": {
-        "name": "snapshot-aggkit-001:cdk-20260814-093324-fc160450b55e",
-        "base_image": "ghcr.io/agglayer/aggkit:0.11.0-rc5",
-        "size": "365MB",
-        "tag": "0.11.0-rc5-1786700247",
-        "digest": "sha256:6497f44d1a81a8f5a00b2a8d719103b8c1b8200c5eb6e2ff5083d33e9431f982"
+        "name": "snapshot-aggkit-001:cdk-20260902-131549-a228af067ef8",
+        "base_image": "ghcr.io/agglayer/aggkit:0.11.0-rc7",
+        "size": "368MB",
+        "tag": "0.11.0-rc7-1788355200",
+        "digest": "sha256:2137679e8d8e01f24e7bb3feff7442ce7aa929fb748d6fbd4f96d8be852ec402"
       },
       "aggkit-002": {
-        "name": "snapshot-aggkit-002:cdk-20260814-093324-fc160450b55e",
-        "base_image": "ghcr.io/agglayer/aggkit:0.11.0-rc5",
-        "size": "365MB",
-        "tag": "0.11.0-rc5-1786700247",
-        "digest": "sha256:aa93b661b6fe8e26fe06633d6e00398090a7f1d4b455cc26f8f75ce4e301bb88"
+        "name": "snapshot-aggkit-002:cdk-20260902-131549-a228af067ef8",
+        "base_image": "ghcr.io/agglayer/aggkit:0.11.0-rc7",
+        "size": "368MB",
+        "tag": "0.11.0-rc7-1788355200",
+        "digest": "sha256:e741b720d18dd6ad181874ae057a5c883fc2878f6296c93a35efff522a99809f"
       },
       "aggkit-proxy-001": {
-        "name": "snapshot-aggkit-proxy-001:cdk-20260814-093324-fc160450b55e",
-        "base_image": "ghcr.io/agglayer/aggkit:0.11.0-rc5",
-        "size": "365MB",
-        "tag": "0.11.0-rc5-1786700247",
-        "digest": "sha256:cd5209a27d5bb2b03bca8fe8e1cf7923381e4eadaf00108162a0523d4fcefc8c"
+        "name": "snapshot-aggkit-proxy-001:cdk-20260902-131549-a228af067ef8",
+        "base_image": "ghcr.io/agglayer/aggkit:0.11.0-rc7",
+        "size": "368MB",
+        "tag": "0.11.0-rc7-1788355200",
+        "digest": "sha256:0b6ffdfa07ffb66d0209f24f1c5e3af6a98aa72d3aeaa93fad696624371851bd"
       },
       "agglayer-dev-ui-proxy-002": {
-        "name": "snapshot-agglayer-dev-ui-proxy-002:cdk-20260814-093324-fc160450b55e",
+        "name": "snapshot-agglayer-dev-ui-proxy-002:cdk-20260902-131549-a228af067ef8",
         "base_image": "europe-west2-docker.pkg.dev/prj-polygonlabs-devtools-dev/virtual/haproxy:3.2-bookworm",
         "size": "108MB",
-        "tag": "3.2-bookworm-1786700247",
-        "digest": "sha256:310e3b235599ac25687f9bf1a0b9458705472fd9ca993447663d647866a83332"
+        "tag": "3.2-bookworm-1788355200",
+        "digest": "sha256:6a540c7d2a341884d7318a97c426b5a3c0085f348e8b500d38c9974a77b3da0e"
       },
       "agglayer-dev-ui-002": {
-        "name": "snapshot-agglayer-dev-ui-002:cdk-20260814-093324-fc160450b55e",
+        "name": "snapshot-agglayer-dev-ui-002:cdk-20260902-131549-a228af067ef8",
         "base_image": "ghcr.io/agglayer/agglayer-dev-ui:dispatch-feat-aggkit-backend-8563dd4ba876-31732860787",
         "size": "72.2MB",
-        "tag": "dispatch-feat-aggkit-backend-8563dd4ba87-1786700247",
-        "digest": "sha256:3961d9fab267d64a6115464dc6513238fd705a8cc8fa826ca8ba31d65de7629e"
+        "tag": "dispatch-feat-aggkit-backend-8563dd4ba87-1788355200",
+        "digest": "sha256:e424fe4bbbe61cbb65f750da6cd2821cc5abedec67f97251318dcaa8b9e28eaf"
       }
     }
   },
