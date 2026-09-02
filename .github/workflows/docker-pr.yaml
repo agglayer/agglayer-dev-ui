@@ -32,15 +32,6 @@ permissions:
 
 env:
   IMAGE_TAG: agglayer-dev-ui:pr-smoke
-  # TEMPORARY -- remove per plans/dev-ui-docker-ghcr/d2-adr-dependency-strategy.md §5
-  # Pinned to a full 40-character commit SHA, never a branch name -- see
-  # docker-publish.yaml's identical env entry for the full rationale.
-  # Verified identical across local HEAD, `git ls-remote`, and
-  # `gh api repos/agglayer/sdk/pulls/28 --jq .head.sha` as of the D-2 ADR
-  # (2026-08-11). Keep in sync with docker-publish.yaml's SDK_REF; bump both
-  # together when sdk#28 moves, delete both entirely once the D-2 ADR §5
-  # migration trigger fires.
-  SDK_REF: 5680d837b168cd3b250110660332aa110eb88aae
 
 jobs:
   build-and-smoke-test:
@@ -52,46 +43,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           persist-credentials: false
-
-      # TEMPORARY -- remove per plans/dev-ui-docker-ghcr/d2-adr-dependency-strategy.md §5
-      # D-2 ADR §4.1: a second, SHA-pinned checkout of the public
-      # agglayer/sdk repo, staged at .sdk-src/ inside the dev-ui build
-      # context so the Dockerfile's sdk-builder stage can compile it in
-      # place of the `file:../sdk` sibling checkout this repo's
-      # pnpm-workspace.yaml override expects locally. agglayer/sdk is
-      # public (`gh repo view agglayer/sdk --json isPrivate` ->
-      # {"isPrivate":false}), so the default GITHUB_TOKEN suffices -- no
-      # PAT, no new secret. Must run AFTER the primary checkout above: it
-      # writes into .sdk-src/ under the dev-ui workspace root that checkout
-      # just populated.
-      - name: Checkout agglayer/sdk (pinned, TEMPORARY)
-        uses: actions/checkout@v4
-        with:
-          repository: agglayer/sdk
-          ref: ${{ env.SDK_REF }}
-          path: .sdk-src
-          persist-credentials: false
-
-      # SDK_REF is duplicated (not shared) between this workflow and
-      # docker-publish.yaml -- GitHub Actions has no cross-workflow env. Left
-      # unguarded, a one-sided bump would make this PR job build and smoke-test
-      # a different @agglayer/sdk revision than the one docker-publish.yaml
-      # actually ships, so a green PR would prove nothing about the published
-      # image. This turns that silent drift into a red PR instead.
-      # TEMPORARY -- remove per plans/dev-ui-docker-ghcr/d2-adr-dependency-strategy.md §5
-      - name: Assert SDK_REF matches docker-publish.yaml
-        run: |
-          set -euo pipefail
-          publish_ref="$(grep -oE '^  SDK_REF: [0-9a-f]{40}$' .github/workflows/docker-publish.yaml | awk '{print $2}')"
-          if [ -z "$publish_ref" ]; then
-            echo "::error::could not read a 40-char SDK_REF from .github/workflows/docker-publish.yaml -- keep both workflows' SDK_REF entries in the documented 'SDK_REF: <40 hex chars>' form" >&2
-            exit 1
-          fi
-          if [ "$publish_ref" != "$SDK_REF" ]; then
-            echo "::error::SDK_REF drift: docker-pr.yaml pins '$SDK_REF' but docker-publish.yaml pins '$publish_ref'. Bump both together (D-2 ADR §5.2 items 7 and 8)." >&2
-            exit 1
-          fi
-          echo "SDK_REF in sync across both workflows: $SDK_REF"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -110,15 +61,6 @@ jobs:
           platforms: linux/amd64
           push: false
           load: true
-          # TEMPORARY -- remove per plans/dev-ui-docker-ghcr/d2-adr-dependency-strategy.md §5
-          # Feeds the Dockerfile's ARG SDK_REF (both stages), which stamps
-          # the LABEL org.agglayer.sdk.revision onto the built image. Not
-          # load-bearing for a PR build (nothing publishes this image), kept
-          # only so the build-arg contract matches docker-publish.yaml
-          # exactly and the label is present if anyone inspects the image
-          # locally.
-          build-args: |
-            SDK_REF=${{ env.SDK_REF }}
           tags: ${{ env.IMAGE_TAG }}
           cache-from: type=gha,scope=docker-pr
           cache-to: type=gha,mode=max,scope=docker-pr
