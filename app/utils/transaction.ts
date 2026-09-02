@@ -45,15 +45,7 @@ export const mapTransactionRequest = (params: TransactionParams) => {
 // `AggkitBridgeAggregator.getClaimInputs`, never read off the row here.
 export const resolveLeafIndex = (tx: Transaction): number => tx.leafIndex;
 
-const GLOBAL_INDEX_MAINNET_FLAG = BigInt(2) ** BigInt(64);
-const GLOBAL_INDEX_NETWORK_OFFSET = BigInt(2) ** BigInt(32);
 const ZERO_HEX: Hex = '0x';
-
-// See https://github.com/agglayer/sdk/blob/main/src/native/bridge/util.ts
-export const computeGlobalIndex = (depositCount: number, sourceNetworkId: number): bigint =>
-  sourceNetworkId === 0
-    ? BigInt(depositCount) + GLOBAL_INDEX_MAINNET_FLAG
-    : BigInt(depositCount) + BigInt(sourceNetworkId - 1) * GLOBAL_INDEX_NETWORK_OFFSET;
 
 export const buildClaimAssetParams = (params: {
   transaction: Transaction;
@@ -62,10 +54,23 @@ export const buildClaimAssetParams = (params: {
   const { transaction, proof } = params;
   const metadata = isHex(transaction.metadata) ? transaction.metadata : ZERO_HEX;
 
+  // AggkitTransaction.globalIndex (see @agglayer/sdk) is the SDK's own,
+  // authoritative value -- aggkit computes it and ships it on the wire, so
+  // there's no need to re-derive it client-side from depositCount/
+  // sourceNetwork (that re-derivation duplicated the SDK's own formula --
+  // see https://github.com/agglayer/sdk/blob/main/src/native/bridge/util.ts
+  // -- and risked drifting from it). `Transaction.globalIndex` is only
+  // optional on the app's own type for older/synthetic rows; toTransaction
+  // (activity.ts) always sets it from the wire's bridge.global_index, so a
+  // real claim never reaches this without it.
+  if (transaction.globalIndex === undefined) {
+    throw new Error('Transaction is missing globalIndex');
+  }
+
   return {
     smtProofLocalExitRoot: proof.proof_local_exit_root,
     smtProofRollupExitRoot: proof.proof_rollup_exit_root,
-    globalIndex: computeGlobalIndex(transaction.depositCount, transaction.sourceNetwork),
+    globalIndex: BigInt(transaction.globalIndex),
     mainnetExitRoot: proof.l1_info_tree_leaf.mainnet_exit_root,
     rollupExitRoot: proof.l1_info_tree_leaf.rollup_exit_root,
     originNetwork: transaction.originTokenNetwork,

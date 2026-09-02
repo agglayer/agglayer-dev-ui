@@ -80,6 +80,11 @@ const makeTransaction = (overrides: Partial<Transaction> = {}): Transaction =>
     originTokenNetwork: 0,
     timestamp: 0,
     leafIndex: 1,
+    // buildClaimAssetParams now reads this straight off the SDK's own
+    // AggkitTransaction.globalIndex instead of re-deriving it -- an
+    // arbitrary numeric string is fine here, the flow below never asserts
+    // its value.
+    globalIndex: '1',
     ...overrides
   }) as Transaction;
 
