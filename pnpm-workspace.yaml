@@ -11,11 +11,15 @@ overrides:
   # feat/aggkit-backend: previously linked the local SDK build (branch
   # feat/aggkit-bridge-client in ../sdk) instead of a published version,
   # because CI needed the bridge tracker API (agglayer/sdk#28) before it was
-  # published. That API is now published as 1.0.0-snapshot-5680d83 (see
-  # package.json), so this override just re-states the same pin pnpm would
+  # published. That API is now published as 1.0.0-snapshot-ca6df75e (see
+  # package.json) -- bumped from 1.0.0-snapshot-5680d83 to pick up the
+  # ChainRegistry networkId-collision fix for reused default chainIds
+  # (agglayer/sdk#28, commit b9a990c), needed for testnet mode's L1 token
+  # metadata reads to resolve Sepolia instead of falling back to mainnet's
+  # eth.llamarpc.com. This override just re-states the same pin pnpm would
   # already resolve from the dependency specifier — kept explicit so a future
   # bump to package.json's version doesn't silently drift from this override.
-  '@agglayer/sdk': '1.0.0-snapshot-5680d83'
+  '@agglayer/sdk': '1.0.0-snapshot-ca6df75e'
 trustPolicy: no-downgrade
 trustPolicyExclude:
   - 'undici-types@6.21.0'
