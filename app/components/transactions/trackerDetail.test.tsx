@@ -118,6 +118,33 @@ describe('TrackerDetail', () => {
     expect(screen.getByText(shortenAddress(claimTx, 6))).toBeInTheDocument();
   });
 
+  // C12: a step's `result` shape depends on `step_name`, but the SDK's
+  // `AggkitBridgeStepResult` union isn't discriminated on that field at the
+  // type level -- trackerDetail.tsx's per-step type guards are the runtime
+  // check that catches a malformed payload instead of guessing at its shape.
+  it("renders the fallback (not a crash) when a step's result doesn't match its step_name's shape", () => {
+    const malformed = {
+      ...l2l1FinishedFixture,
+      all_steps: l2l1FinishedFixture.all_steps!.map((step, index) =>
+        // Swap PendingInclusion's result for a shape that matches none of
+        // the per-step guards.
+        index === 1
+          ? { ...step, result: { unexpected: 'shape' } as unknown as typeof step.result }
+          : step
+      )
+    };
+    mockTracking(malformed);
+    const { container } = render(<TrackerDetail transaction={makeTransaction()} />);
+
+    // PendingInclusion's own detail (certificate id) does not render...
+    expect(screen.queryByText('Certificate')).not.toBeInTheDocument();
+    // ...the handled fallback does, and the rest of the timeline is untouched.
+    expect(
+      container.querySelectorAll('[data-test-id="tracker-detail-unrecognized-step-result"]')
+    ).toHaveLength(1);
+    expect(container.querySelectorAll('[data-test-id^="tracker-detail-step-"]')).toHaveLength(6);
+  });
+
   // S10a regression (mirrors trackerProgressBar.test.tsx): a LIVE transition,
   // not a row that loads already-CLAIMED (the first test above covers that,
   // and it's also already gated by the caller -- transactionDetailsModal.tsx

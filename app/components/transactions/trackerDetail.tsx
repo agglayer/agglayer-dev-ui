@@ -16,6 +16,7 @@ import { Loader2 } from 'lucide-react';
 
 import type {
   AggkitBridgeStepPath,
+  AggkitBridgeStepResult,
   AggkitCertificateData,
   AggkitPendingInclusionResult,
   AggkitStepStatus,
@@ -70,16 +71,58 @@ const HashValue = ({ value, chars = 6 }: { value: string; chars?: number }) => (
   </span>
 );
 
+// `AggkitBridgeStepResult` is a flat union, not one discriminated by
+// `step_name` at the type level (no shared tag field ties a specific result
+// shape to a specific step -- see the SDK's AggkitBridgeStepPath doc
+// comment). Each guard below narrows on a field unique to that result shape
+// using the `in` operator, which both type-narrows safely (no cast needed)
+// and doubles as the runtime check for a malformed/unexpected payload --
+// `'ger'` alone would also match `AggkitWaitL1SettledGERResult` (it carries
+// a `ger` field too), hence the exclusion there.
+const isGERResult = (
+  result: AggkitBridgeStepResult
+): result is AggkitWaitingGERUpdateResult | AggkitWaitingGERInjectionResult =>
+  'ger' in result && !('tx_hash' in result);
+
+const isLERResult = (result: AggkitBridgeStepResult): result is AggkitWaitingLERUpdateResult =>
+  'ler' in result;
+
+const isPendingInclusionResult = (
+  result: AggkitBridgeStepResult
+): result is AggkitPendingInclusionResult => 'new_ler' in result;
+
+const isCertificateData = (result: AggkitBridgeStepResult): result is AggkitCertificateData =>
+  'status_string' in result;
+
+const isWaitL1SettledGERResult = (
+  result: AggkitBridgeStepResult
+): result is AggkitWaitL1SettledGERResult => 'tx_hash' in result;
+
+const isWaitingClaimResult = (result: AggkitBridgeStepResult): result is AggkitWaitingClaimResult =>
+  'claim_tx' in result;
+
+// Rendered instead of guessing at a shape: either the step's `result` failed
+// its guard above (malformed/unexpected wire payload for that `step_name`),
+// or `step_name` itself isn't one of the recognized values at all. Either
+// way this is a handled, visible branch -- never a silent `null` and never
+// an unchecked cast into whatever shape the switch below expected.
+const UnrecognizedStepResult = () => (
+  <div data-test-id="tracker-detail-unrecognized-step-result" className="text-xs text-grey italic">
+    Details unavailable
+  </div>
+);
+
 // Per-step `result` shape depends on `step_name` (AggkitBridgeStepResult
 // union) -- see useBridgeTracking.ts / the SDK's AggkitBridgeStepPath doc
 // comment for the full field-by-field breakdown this switches on.
 const StepResultDetail = ({ step }: { step: AggkitBridgeStepPath }) => {
   if (!step.result) return null;
+  const { result } = step;
 
   switch (step.step_name) {
     case 'WaitingGERUpdate':
     case 'WaitingGERInjection': {
-      const result = step.result as AggkitWaitingGERUpdateResult | AggkitWaitingGERInjectionResult;
+      if (!isGERResult(result)) return <UnrecognizedStepResult />;
       return (
         <div className="flex items-center gap-2 text-xs text-grey">
           <span>GER</span>
@@ -88,7 +131,7 @@ const StepResultDetail = ({ step }: { step: AggkitBridgeStepPath }) => {
       );
     }
     case 'WaitingLERUpdate': {
-      const result = step.result as AggkitWaitingLERUpdateResult;
+      if (!isLERResult(result)) return <UnrecognizedStepResult />;
       return (
         <div className="flex items-center gap-2 text-xs text-grey">
           <span>LER</span>
@@ -98,7 +141,7 @@ const StepResultDetail = ({ step }: { step: AggkitBridgeStepPath }) => {
       );
     }
     case 'PendingInclusion': {
-      const result = step.result as AggkitPendingInclusionResult;
+      if (!isPendingInclusionResult(result)) return <UnrecognizedStepResult />;
       return (
         <div className="flex items-center gap-2 text-xs text-grey">
           <span>Certificate</span>
@@ -107,7 +150,7 @@ const StepResultDetail = ({ step }: { step: AggkitBridgeStepPath }) => {
       );
     }
     case 'CertificatePending': {
-      const result = step.result as AggkitCertificateData;
+      if (!isCertificateData(result)) return <UnrecognizedStepResult />;
       return (
         <div className="flex flex-col gap-1 text-xs text-grey">
           <div className="flex items-center gap-2">
@@ -125,7 +168,7 @@ const StepResultDetail = ({ step }: { step: AggkitBridgeStepPath }) => {
       );
     }
     case 'WaitL1SettledGER': {
-      const result = step.result as AggkitWaitL1SettledGERResult;
+      if (!isWaitL1SettledGERResult(result)) return <UnrecognizedStepResult />;
       return (
         <div className="flex items-center gap-2 text-xs text-grey">
           <span>Settlement tx</span>
@@ -135,7 +178,7 @@ const StepResultDetail = ({ step }: { step: AggkitBridgeStepPath }) => {
       );
     }
     case 'WaitingClaim': {
-      const result = step.result as AggkitWaitingClaimResult;
+      if (!isWaitingClaimResult(result)) return <UnrecognizedStepResult />;
       return (
         <div className="flex items-center gap-2 text-xs text-grey">
           <span>Claim tx</span>
@@ -145,7 +188,7 @@ const StepResultDetail = ({ step }: { step: AggkitBridgeStepPath }) => {
       );
     }
     default:
-      return null;
+      return <UnrecognizedStepResult />;
   }
 };
 
