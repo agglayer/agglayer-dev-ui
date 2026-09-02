@@ -64,7 +64,12 @@ export const useTransactions = (params: {
   }, [aggressiveRefetch]);
 
   const query = useQuery<ActivityResult, Error>({
-    queryKey: ['activity', mode, chainId, fromAddress],
+    // chainId is NOT part of the key: fetchActivity's response doesn't vary
+    // by it (see queryFn below -- only baseUrl/fromAddress go into the
+    // request), so including it would just fragment the cache. It's still
+    // required below via `enabled` -- see useReadyToClaimCount, which reads
+    // the exact same key so the two dedupe into a single request.
+    queryKey: ['activity', mode, fromAddress],
     enabled: enabled && Boolean(chainId) && Boolean(fromAddress) && Boolean(baseUrl),
     queryFn: async () => {
       if (!fromAddress || !baseUrl) throw new Error('MISSING_ACTIVITY_PARAMS');
