@@ -15,6 +15,7 @@ vi.mock('@/app/context/appMode', () => ({
 import { useAppMode } from '@/app/context/appMode';
 import { PendingBridgesProvider, usePendingBridges } from '@/app/context/pendingBridges';
 
+import { useReadyToClaimCount } from './useReadyToClaimCount';
 import { useTransactions } from './useTransactions';
 
 const wrapper = ({ children }: { children: ReactNode }) => {
@@ -162,5 +163,49 @@ describe('useTransactions -- pending bridge placeholders', () => {
     });
 
     expect(result.current.transactions.transactions).toHaveLength(0);
+  });
+});
+
+describe('useTransactions -- activity queryKey parity with useReadyToClaimCount', () => {
+  beforeEach(() => {
+    vi.mocked(useAppMode).mockReturnValue({
+      mode: 'mainnet',
+      config: { aggkitBridgeApis: { 1: 'https://proxy.example', 2: 'https://proxy.example' } }
+    } as unknown as ReturnType<typeof useAppMode>);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  // chainId used to be part of both hooks' queryKey even though
+  // fetchActivity's request/response never varies by it -- see the comment
+  // on useTransactions' queryKey. That fragmented the cache: the header
+  // badge (a different chainId than the page it badges) and the
+  // Transactions page ended up as two separate cache entries firing two
+  // fetches instead of dedupe kicking in.
+  it('dedupes into a single fetch when mounted together with different chainIds but the same mode/address', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ from_address: [], bridges: [] })
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const { result } = renderHook(
+      () => ({
+        transactions: useTransactions({
+          chainId: 1,
+          filters: { fromAddress: '0xabc' },
+          enabled: true
+        }),
+        readyToClaimCount: useReadyToClaimCount({ chainId: 2, address: '0xabc' })
+      }),
+      { wrapper }
+    );
+
+    await waitFor(() => expect(result.current.transactions.isLoading).toBe(false));
+    await waitFor(() => expect(result.current.readyToClaimCount.isSuccess).toBe(true));
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 });

@@ -5,9 +5,10 @@ import { fetchActivity, resolveAggkitProxyBaseUrl } from '@/app/services/activit
 import { useQuery } from '@tanstack/react-query';
 
 // Same GET /tracker/v1/activity/from/{address} call useTransactions makes,
-// selected down to a count -- deliberately the SAME queryKey (mode, chainId,
-// address) so that when the header badge and the Transactions page are both
-// mounted, react-query dedupes them into a single request instead of two.
+// selected down to a count -- deliberately the SAME queryKey (mode, address;
+// chainId is deliberately excluded, see useTransactions) so that when the
+// header badge and the Transactions page are both mounted, react-query
+// dedupes them into a single request instead of two.
 export const useReadyToClaimCount = (params: {
   chainId?: number;
   address?: string;
@@ -18,7 +19,7 @@ export const useReadyToClaimCount = (params: {
   const baseUrl = resolveAggkitProxyBaseUrl(config.aggkitBridgeApis);
 
   return useQuery({
-    queryKey: ['activity', mode, chainId, address],
+    queryKey: ['activity', mode, address],
     enabled: enabled && Boolean(chainId && address && baseUrl),
     queryFn: async () => {
       if (!address || !baseUrl) throw new Error('MISSING_PARAMS');
