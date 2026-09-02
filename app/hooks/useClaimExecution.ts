@@ -120,12 +120,42 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
         }
 
         failedStep = 'fetching-claim-proof';
-        const { proof: rawProof } = await aggregator.getClaimInputs({
-          originNetworkId: transaction.sourceNetwork,
+        // recordingNetworkId is the network whose LOCAL EXIT TREE recorded
+        // this deposit -- transaction.sourceNetwork, never the asset's
+        // origin_network (see @agglayer/sdk's getClaimInputs JSDoc/README).
+        const claimInputs = await aggregator.getClaimInputs({
+          recordingNetworkId: transaction.sourceNetwork,
           destinationNetworkId: transaction.destinationNetwork,
           depositCount: transaction.depositCount
         });
-        const proof = toClaimProof(rawProof);
+
+        // "Not yet claimable" is a successful, well-formed result now (not a
+        // thrown AggkitApiError) -- a real race against READY_TO_CLAIM UX
+        // gating elsewhere, or an external claimer's deposit resolving
+        // mid-flight. Report it the same way as the alreadyClaimed check
+        // above rather than falling through to the generic catch block.
+        if (!claimInputs.claimable) {
+          const error = {
+            message: `Deposit is not yet claimable: ${claimInputs.detail}`,
+            step: failedStep
+          };
+          setState({
+            isExecuting: false,
+            currentStep: 'error',
+            transactionId: transaction.hubUID,
+            destinationChainId,
+            error
+          });
+          onComplete?.({
+            status: 'error',
+            transactionId: transaction.hubUID,
+            destinationChainId,
+            error
+          });
+          return;
+        }
+
+        const proof = toClaimProof(claimInputs.proof);
 
         failedStep = 'building-claim-transaction';
         const claimParams = buildClaimAssetParams({ transaction, proof });
