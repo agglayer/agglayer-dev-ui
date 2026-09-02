@@ -1,3 +1,5 @@
+import type { AppMode } from '@/app/types/appMode';
+
 // Intentionally retained across the aggkit rebrand for localStorage
 // backward-compatibility: this prefixes users' saved appMode/customTokens keys.
 // Renaming it would orphan existing users' stored data, so a rename requires a
@@ -17,8 +19,11 @@ export const STORAGE_KEYS = {
   APP_MODE: createStorageKey('appMode'),
   CUSTOM_TOKENS: createStorageKey('customTokens'),
   // Map of bridgeHash -> epoch ms when the deposit was first observed
-  // READY_TO_CLAIM, so the autoclaim grace period survives refreshes.
-  AUTOCLAIM_READY_AT: createStorageKey('autoclaimReadyAt')
+  // READY_TO_CLAIM, so the autoclaim grace period survives refreshes. Scoped
+  // per app mode: mainnet/testnet/devnet each have their own networkIds, so
+  // the same bridgeHash can otherwise collide across modes (the devnet
+  // stale-hash bug).
+  AUTOCLAIM_READY_AT: (mode: AppMode): string => createStorageKey(`autoclaimReadyAt:${mode}`)
 } as const;
 
 export const StorageUtils = {
