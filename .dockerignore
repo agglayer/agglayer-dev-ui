@@ -1,9 +1,4 @@
 # Docker build context excludes.
-#
-# NOTE: .sdk-src/ is deliberately NOT excluded here -- the sdk-builder stage
-# in the Dockerfile needs it in the build context (see
-# plans/dev-ui-docker-ghcr/d2-adr-dependency-strategy.md §4.4).
-# TEMPORARY (this note) -- remove per that ADR's §5 once .sdk-src/ itself goes away.
 
 node_modules
 .next
@@ -11,13 +6,9 @@ node_modules
 out
 # `**/.git` (not just `.git`): a .dockerignore pattern is matched against the
 # whole path relative to the context root, so a bare `.git` excludes ONLY the
-# top-level one. In CI the sdk is staged by `actions/checkout` (see
-# .github/workflows/docker-*.yaml), which writes a real `.sdk-src/.git` --
-# without this pattern the entire agglayer/sdk history would be uploaded into
-# the build context and baked into the sdk-builder layer (and, with
-# docker-pr.yaml's `cache-to: type=gha,mode=max`, into the Actions cache).
-# It also restores the parity that scripts/stage-sdk-src.sh documents: locally
-# `git archive` yields tracked source with no `.git`, so CI must match.
+# top-level one -- this form also keeps any nested checkout's history out of
+# the build context (and, with docker-pr.yaml's `cache-to:
+# type=gha,mode=max`, out of the Actions cache).
 **/.git
 test-results
 playwright-report

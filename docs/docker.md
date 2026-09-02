@@ -216,40 +216,11 @@ tag.
 
 ## Building the image locally
 
-### Prerequisite: `.sdk-src/`
-
-**Temporary, until `@agglayer/sdk`'s aggkit bridge APIs are published to npm** — tracked
-by `plans/dev-ui-docker-ghcr/d2-adr-dependency-strategy.md` §5. This repo currently
-depends on an unreleased `@agglayer/sdk` commit via a `file:../sdk` workspace override
-(`pnpm-workspace.yaml`), which only works if a source tree exists at `../sdk` relative to
-this repo, or — for Docker builds — staged into this repo's build context at
-`./.sdk-src/`. In CI, that staging happens automatically via a second `actions/checkout`
-of `agglayer/sdk` pinned to a commit SHA. Locally, you must populate it yourself before
-`docker build` will work:
+No prerequisites: `@agglayer/sdk` resolves from npm like every other dependency (pinned
+to a published snapshot version — see `package.json` and `pnpm-workspace.yaml`'s
+`overrides`), so the build needs nothing staged into the context beforehand.
 
 ```bash
-scripts/stage-sdk-src.sh [path-to-sdk-checkout]   # defaults to ../sdk
-```
-
-This copies only the **tracked** files from a sibling `agglayer/sdk` git checkout (via
-`git archive`, not `cp -r`) into `.sdk-src/`, gitignored and rebuilt inside the image by
-the Dockerfile's `sdk-builder` stage (`Dockerfile:29-37`). See `scripts/stage-sdk-src.sh`
-for the exact mechanics and `plans/dev-ui-docker-ghcr/d2-adr-dependency-strategy.md` §4
-for why this shape was chosen over the alternatives.
-
-**Removal trigger:** once a published `@agglayer/sdk` version above `1.0.0-beta.30`
-carries the aggkit APIs, this entire prerequisite goes away. The exact 9-row edit
-checklist — updating `package.json`, `pnpm-workspace.yaml`, `pnpm-lock.yaml`, deleting
-the `sdk-builder` Dockerfile stage, the `.gitignore`/`.dockerignore` entries, the CI
-checkout step, and the corresponding section of this document — is spelled out verbatim
-in `plans/dev-ui-docker-ghcr/d2-adr-dependency-strategy.md` §5.2. Every artifact this
-prerequisite touches carries an inline `# TEMPORARY` comment pointing back at that
-section, so `grep -rn "TEMPORARY -- remove per"` finds all of them.
-
-### Build
-
-```bash
-scripts/stage-sdk-src.sh
 docker build -t agglayer-dev-ui .
 ```
 

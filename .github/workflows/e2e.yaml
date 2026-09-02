@@ -13,18 +13,6 @@ concurrency:
 permissions:
   contents: read
 
-env:
-  # TEMPORARY -- remove per plans/dev-ui-docker-ghcr/d2-adr-dependency-strategy.md §5
-  # Same pin as docker-pr.yaml/docker-publish.yaml (SDK_REF drift across all
-  # three workflows would be silently misleading: a green e2e run would
-  # prove nothing about the @agglayer/sdk revision docker-pr.yaml/
-  # docker-publish.yaml actually build against). Verified identical across
-  # local HEAD, `git ls-remote`, and
-  # `gh api repos/agglayer/sdk/pulls/28 --jq .head.sha` as of the D-2 ADR
-  # (2026-08-11). Bump this alongside the other two workflows' SDK_REF
-  # entries; delete entirely once the D-2 ADR §5 migration trigger fires.
-  SDK_REF: 5680d837b168cd3b250110660332aa110eb88aae
-
 jobs:
   e2e:
     runs-on: ubuntu-latest
@@ -59,87 +47,15 @@ jobs:
       # bump alongside tests/devnet/docker-compose.yml (see its README).
       E2E_ERC20_ADDRESS: '0xe293A6b8F558422813499bb5C89B60adD8c54636'
     steps:
-      # Checked out into a subdirectory (not repo root) so a sibling
-      # agglayer/sdk checkout below can sit next to it at `../sdk` --
-      # exactly the relative shape pnpm-workspace.yaml's
-      # `'@agglayer/sdk': 'file:../sdk'` override expects locally. Every
-      # subsequent step below runs with `working-directory: dev-ui`.
+      # Checked out into a subdirectory (not repo root): every subsequent
+      # step below runs with `working-directory: dev-ui`, and the image
+      # build below passes `context: dev-ui`.
       - name: Checkout agglayer-dev-ui
         uses: actions/checkout@v4
         with:
           path: dev-ui
           fetch-depth: 0
           persist-credentials: false
-
-      # TEMPORARY -- remove per plans/dev-ui-docker-ghcr/d2-adr-dependency-strategy.md §5
-      # A second, SHA-pinned checkout of the public agglayer/sdk repo,
-      # staged as a TRUE sibling of dev-ui/ (path: sdk, not nested inside
-      # it) so pnpm-workspace.yaml's `file:../sdk` override resolves
-      # (dev-ui/../sdk == this checkout). This differs from
-      # docker-pr.yaml/docker-publish.yaml's `.sdk-src` staging: those stage
-      # sdk INSIDE the dev-ui Docker build context because a Docker build
-      # context can't reach outside itself, but a plain `pnpm install` has
-      # no such constraint, so this sibling layout matches what a local dev
-      # checkout actually looks like. agglayer/sdk is public
-      # (`gh repo view agglayer/sdk --json isPrivate` -> {"isPrivate":false}),
-      # so the default GITHUB_TOKEN suffices -- no PAT, no new secret.
-      - name: Checkout agglayer/sdk (pinned, TEMPORARY)
-        uses: actions/checkout@v4
-        with:
-          repository: agglayer/sdk
-          ref: ${{ env.SDK_REF }}
-          path: sdk
-          persist-credentials: false
-
-      # Mirrors docker-pr.yaml's parity check against docker-publish.yaml:
-      # left unguarded, a one-sided SDK_REF bump here would let this job
-      # install/test against a different @agglayer/sdk revision than the
-      # one actually published, so a green e2e run would prove nothing
-      # about the shipped image's SDK revision.
-      # TEMPORARY -- remove per plans/dev-ui-docker-ghcr/d2-adr-dependency-strategy.md §5
-      - name: Assert SDK_REF matches docker-publish.yaml
-        working-directory: dev-ui
-        run: |
-          set -euo pipefail
-          # `|| true` is load-bearing: under `set -e` a non-matching grep
-          # aborts the assignment and kills the step, making the friendly
-          # ::error:: branch below unreachable.
-          publish_ref="$(grep -oE '^  SDK_REF: [0-9a-f]{40}$' .github/workflows/docker-publish.yaml | awk '{print $2}' || true)"
-          if [ -z "$publish_ref" ]; then
-            echo "::error::could not read a 40-char SDK_REF from .github/workflows/docker-publish.yaml -- keep every workflow's SDK_REF entry in the documented 'SDK_REF: <40 hex chars>' form" >&2
-            exit 1
-          fi
-          if [ "$publish_ref" != "$SDK_REF" ]; then
-            echo "::error::SDK_REF drift: e2e.yaml pins '$SDK_REF' but docker-publish.yaml pins '$publish_ref'. Bump both together (see docker-pr.yaml's identical check)." >&2
-            exit 1
-          fi
-          echo "SDK_REF in sync with docker-publish.yaml: $SDK_REF"
-
-      # TEMPORARY -- remove per plans/dev-ui-docker-ghcr/d2-adr-dependency-strategy.md §5
-      # @agglayer/sdk ships no dist/ in git (bun.lock only -- dist/ is
-      # gitignored, built via `bun run build` / tsup), so a fresh checkout is
-      # unbuildable TypeScript source until this runs: the sibling sdk/
-      # `file:../sdk` override resolves the package.json entry (`main:
-      # ./dist/index.js`), not the source tree. Without this step Next's dev
-      # server fails every route with "Module not found: Can't resolve
-      # '@agglayer/sdk'" -- caught only by a genuine scratch-clone rehearsal
-      # (plans/dev-ui-ci-snapshot/s13-evidence/); a warm sibling sdk checkout
-      # on a dev box masks it because its dist/ is already built from earlier
-      # SDK development. Mirrors the Dockerfile's sdk-builder stage (`FROM
-      # oven/bun:1 ... RUN bun install --frozen-lockfile && bun run build`)
-      # bit-for-bit, just targeting this sibling checkout instead of a Docker
-      # build context.
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: '1'
-
-      - name: Build @agglayer/sdk (pinned, TEMPORARY)
-        working-directory: sdk
-        env:
-          HUSKY: '0'
-        run: |
-          bun install --frozen-lockfile
-          bun run build
 
       # Checkout lives at dev-ui/ (see the restructuring above), so the
       # default package_json_file: package.json (resolved against
@@ -157,10 +73,6 @@ jobs:
           cache: pnpm
           cache-dependency-path: dev-ui/pnpm-lock.yaml
 
-      # With the sibling sdk/ checkout above in place, pnpm-workspace.yaml's
-      # `file:../sdk` override resolves and this no longer fails with
-      # ENOENT scandir '<work>/dev-ui/../sdk' the way the pre-restructure
-      # single-directory checkout did.
       - name: Install dependencies
         working-directory: dev-ui
         run: pnpm install --frozen-lockfile
@@ -189,32 +101,13 @@ jobs:
       # assertions (config loading, static rendering, error-gate behavior)
       # are wired to run against it. See plans/snapshot-v2-aggkit-e2e/devui-under-test.md
       # for the full analysis.
-      #
-      # TEMPORARY -- remove per plans/dev-ui-docker-ghcr/d2-adr-dependency-strategy.md §5
-      # A THIRD, SHA-pinned checkout of agglayer/sdk, this time staged inside
-      # the Docker build context (dev-ui/.sdk-src, gitignored) so the
-      # Dockerfile's sdk-builder stage can compile it -- mirrors
-      # docker-pr.yaml's `.sdk-src` step exactly, except nested under dev-ui/
-      # because this job's primary checkout already lives at dev-ui/ (see the
-      # comment above the first checkout step). This is separate from and in
-      # addition to the sibling `sdk/` checkout above (that one feeds the
-      # local `pnpm-workspace.yaml` `file:../sdk` override for
-      # `pnpm install`/`next dev`; this one feeds the Docker build context,
-      # which cannot reach outside itself).
-      - name: Checkout agglayer/sdk (pinned, TEMPORARY, for image build)
-        uses: actions/checkout@v4
-        with:
-          repository: agglayer/sdk
-          ref: ${{ env.SDK_REF }}
-          path: dev-ui/.sdk-src
-          persist-credentials: false
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Reuses docker-pr.yaml's exact build-args/context/cache pattern
+      # Reuses docker-pr.yaml's exact context/cache pattern
       # (context: dev-ui because this job's checkout lives there), and its
-      # `docker-pr` GHA cache scope -- same Dockerfile + build-args, so this
+      # `docker-pr` GHA cache scope -- same Dockerfile, so this
       # maximizes cache hits from docker-pr.yaml's own runs on the same
       # branch/PR. `push: false` / `load: true`: never publish, just load the
       # image into this runner's local daemon for the container suite below.
@@ -225,8 +118,6 @@ jobs:
           platforms: linux/amd64
           push: false
           load: true
-          build-args: |
-            SDK_REF=${{ env.SDK_REF }}
           tags: agglayer-dev-ui:c1-test
           cache-from: type=gha,scope=docker-pr
           cache-to: type=gha,mode=max,scope=docker-pr
@@ -251,8 +142,7 @@ jobs:
       # programmatically -- so a bundle bump that updates the compose file and
       # summary.json but forgets the workflow would leave the suite silently
       # testing against stale values (a wrong ERC20 address makes globalSetup
-      # throw; a wrong chain id fails obscurely). Same drift class the SDK_REF
-      # check above already guards, so guard it the same way.
+      # throw; a wrong chain id fails obscurely), so guard against it here.
       - name: Assert workflow literals match tests/devnet/summary.json
         working-directory: dev-ui
         run: |

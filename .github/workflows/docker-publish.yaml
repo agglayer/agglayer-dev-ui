@@ -75,15 +75,6 @@ permissions:
 
 env:
   REGISTRY_IMAGE: ghcr.io/${{ github.repository }}
-  # TEMPORARY -- remove per plans/dev-ui-docker-ghcr/d2-adr-dependency-strategy.md §5
-  # Pinned to a full 40-character commit SHA, never a branch name --
-  # feat/aggkit-bridge-client is mutable and a branch ref would make
-  # published images irreproducible (D-2 ADR §3, "the reproducibility
-  # condition"). Verified identical across local HEAD, `git ls-remote`, and
-  # `gh api repos/agglayer/sdk/pulls/28 --jq .head.sha` as of the D-2 ADR
-  # (2026-08-11). Bump this one line when sdk#28 moves; delete it entirely
-  # once the D-2 ADR §5 migration trigger fires.
-  SDK_REF: 5680d837b168cd3b250110660332aa110eb88aae
 
 jobs:
   build-and-publish:
@@ -99,25 +90,6 @@ jobs:
           # so an arbitrary SHA passed as the `ref` input is resolvable.
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || '' }}
           fetch-depth: 0
-          persist-credentials: false
-
-      # TEMPORARY -- remove per plans/dev-ui-docker-ghcr/d2-adr-dependency-strategy.md §5
-      # D-2 ADR §4.1: a second, SHA-pinned checkout of the public
-      # agglayer/sdk repo, staged at .sdk-src/ inside the dev-ui build
-      # context so the Dockerfile's sdk-builder stage can compile it in
-      # place of the `file:../sdk` sibling checkout this repo's
-      # pnpm-workspace.yaml override expects locally. agglayer/sdk is
-      # public (`gh repo view agglayer/sdk --json isPrivate` ->
-      # {"isPrivate":false}), so the default GITHUB_TOKEN suffices -- no
-      # PAT, no new secret. Must run AFTER the primary checkout above: it
-      # writes into .sdk-src/ under the dev-ui workspace root that checkout
-      # just populated.
-      - name: Checkout agglayer/sdk (pinned, TEMPORARY)
-        uses: actions/checkout@v4
-        with:
-          repository: agglayer/sdk
-          ref: ${{ env.SDK_REF }}
-          path: .sdk-src
           persist-credentials: false
 
       - name: Resolve build metadata
@@ -224,11 +196,6 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          # TEMPORARY -- remove per plans/dev-ui-docker-ghcr/d2-adr-dependency-strategy.md §5
-          # Feeds the Dockerfile's ARG SDK_REF (both stages), which stamps
-          # the LABEL org.agglayer.sdk.revision onto the published image.
-          build-args: |
-            SDK_REF=${{ env.SDK_REF }}
           tags: ${{ steps.tags.outputs.tags }}
 
       - name: Verify published manifest
