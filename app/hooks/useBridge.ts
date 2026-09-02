@@ -28,7 +28,7 @@ const resolveInitialToChainId = (
 };
 
 export const useBridge = () => {
-  const { chains, bridgeAddress, defaultFromChainId, defaultToChainId } = useAppMode();
+  const { chains, defaultFromChainId, defaultToChainId } = useAppMode();
   const { listTokens } = useTokens();
   const { address, status } = useWallet();
 
@@ -109,6 +109,18 @@ export const useBridge = () => {
     (selectedToken.isNative || normalize(selectedToken.address) === normalize(ZERO_ADDRESS))
   );
 
+  // Advisory-only: when bridging native ETH FROM mainnet (networkId 0) TO a
+  // chain that declares its own native/canonical bridge (config.json's
+  // chains.<key>.nativeBridgeURL), the AggLayer bridge would only mint
+  // wrapped ETH there (never that chain's native currency) -- point the user
+  // at their native bridge instead if that's what they actually want. Never
+  // blocks or otherwise changes the AggLayer bridge flow -- see
+  // config/configSchema.mjs's nativeBridgeURL comment.
+  const nativeBridgeUrl = useMemo(() => {
+    if (!isNative || fromChain?.networkId !== 0) return undefined;
+    return toChain?.nativeBridgeURL;
+  }, [isNative, fromChain, toChain]);
+
   const amountWei = useMemo(() => {
     if (!selectedToken || !amount) return BigInt(0);
     return toWei(amount, selectedToken.decimals);
@@ -120,10 +132,15 @@ export const useBridge = () => {
     return ZERO_ADDRESS;
   }, [selectedToken]);
 
+  // ERC20 allowance approval always targets the source chain's bridge
+  // contract -- useCheckAllowance below is scoped to fromChainId, so the
+  // spender must be that specific chain's (possibly overridden) bridgeAddress,
+  // not the mode-level default.
   const spenderAddress = useMemo(() => {
-    if (!bridgeAddress || !isValidEthereumAddress(bridgeAddress)) return undefined;
-    return bridgeAddress;
-  }, [bridgeAddress]);
+    const address = fromChain?.bridgeAddress;
+    if (!address || !isValidEthereumAddress(address)) return undefined;
+    return address;
+  }, [fromChain]);
 
   const canCheckAllowance = Boolean(
     !isNative && selectedToken && spenderAddress && walletAddress && amountWei > BigInt(0)
@@ -198,7 +215,8 @@ export const useBridge = () => {
       fromTokens,
       isConnected,
       walletAddress,
-      isNative
+      isNative,
+      nativeBridgeUrl
     },
     actions: {
       selectFromChain,

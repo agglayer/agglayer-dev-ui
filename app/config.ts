@@ -1,59 +1,133 @@
 import type { AppChain, AppMode, AppModeConfig, EnabledAppModeConfig } from '@/app/types/appMode';
-import type { ChainEntry } from '@/app/types/config';
+import type {
+  AutoclaimConfig,
+  AutoclaimRouteConfig,
+  ChainEntry,
+  JsonAppModeConfig,
+  JsonConfig,
+  RouteType
+} from '@/app/types/config';
 import type { Chain } from 'wagmi/chains';
 
-import {
-  buildWagmiChain,
-  createChainEntry,
-  toNonEmptyChainArray,
-  toProofApiUrl
-} from '@/app/utils/config';
-import rawJsonConfig from '@/config.json';
+import { buildWagmiChain, createChainEntry, toNonEmptyChainArray } from '@/app/utils/config';
 import { APP_MODES } from '@/config/appModes.mjs';
-import { parseConfigOrThrow } from '@/config/configValidator.mjs';
+import { resolveAggkitProxyUrl } from '@/config/configLoader.mjs';
+import { aggkitProxySchema } from '@/config/configSchema.mjs';
 
-const configJson = parseConfigOrThrow(rawJsonConfig, { sourceName: 'config.json' });
-
-const resolveBridgeHubApiBaseUrl = (): string => {
-  const envOverride = process.env.NEXT_PUBLIC_BRIDGE_HUB_API?.trim();
-  const configuredBaseUrl =
-    envOverride && envOverride.length > 0 ? envOverride : configJson.bridgeHubApiBaseUrl;
-
-  try {
-    return new URL(configuredBaseUrl).toString().replace(/\/+$/, '');
-  } catch {
-    throw new Error('APP_CONFIG_INVALID: NEXT_PUBLIC_BRIDGE_HUB_API must be a valid URL');
-  }
+// Per-route autoclaim UX defaults. config.json's optional `autoclaim` block
+// overrides these per route; any omitted route (or omitted waitForAutoclaimMs)
+// falls back here. Wait periods are measured from when a deposit first becomes
+// READY_TO_CLAIM (see useAutoclaimGate). Config-independent, so this stays a
+// module-scope constant.
+export const DEFAULT_AUTOCLAIM_CONFIG: AutoclaimConfig = {
+  l1_to_l2: { expectedAutoclaim: true, waitForAutoclaimMs: 60_000 },
+  l2_to_l1: { expectedAutoclaim: false, waitForAutoclaimMs: 0 },
+  l2_to_l2: { expectedAutoclaim: true, waitForAutoclaimMs: 120_000 }
 };
 
-const bridgeHubApiBaseUrl = resolveBridgeHubApiBaseUrl();
-
-// Add custom RPC URLs on a per-chain basis as needed.
+// Add custom RPC URLs on a per-chain basis as needed. Config-independent, so
+// this stays a module-scope constant.
 export const customRpcUrls: Record<string, { url: string }[]> = {
   // Example:
   // 'eip155:1234': [{ url: 'https://rpc.example.org' }],
 };
 
-export const EXTERNAL_LINKS = Object.freeze({
-  PRIVACY_POLICY: configJson.externalLinks.privacyPolicy,
-  TERMS_OF_USE: configJson.externalLinks.termsOfUse,
-  CONTACT_SUPPORT: configJson.externalLinks.contactSupport
-});
+export type ResolvedAppConfig = {
+  autoclaim: AutoclaimConfig;
+  externalLinks: Readonly<{
+    PRIVACY_POLICY: string;
+    TERMS_OF_USE: string;
+    CONTACT_SUPPORT: string;
+  }>;
+  chainRegistry: Record<string, ChainEntry>;
+  defaultAppMode: AppMode;
+  appModeConfig: Record<AppMode, AppModeConfig>;
+  allWagmiChains: readonly [Chain, ...Chain[]];
+  defaultWagmiChain: Chain;
+  walletConnect: Readonly<{ projectId: string }>;
+};
 
-const CHAIN_REGISTRY: Record<string, ChainEntry> = Object.fromEntries(
-  Object.entries(configJson.chains).map(([chainKey, chainConfigJson]) => [
-    chainKey,
-    createChainEntry({
-      wagmi: buildWagmiChain(chainConfigJson),
-      icon: chainConfigJson.iconUrl,
-      networkId: chainConfigJson.networkId,
-      isTestnet: chainConfigJson.isTestnet,
-      eta: chainConfigJson.eta
-    })
-  ])
-);
+// NEXT_PUBLIC_AGGKIT_PROXY is inlined by Next at build time, so it can only
+// ever carry a build-environment value (dev / Cloudflare) -- it is
+// structurally absent from a published image (design.md §6). window is only
+// available once this runs in the browser (AppConfigGate's effect, or a
+// Playwright-driven page); the Node bootstrap (tests/e2e/appConfig.ts) has no
+// window, so a relative override value there resolves to `undefined` and
+// resolveAggkitProxyUrl throws loudly rather than silently misresolving.
+const resolveEnvOrigin = (): string | undefined =>
+  typeof window === 'undefined' ? undefined : window.location.origin;
 
-export const DEFAULT_APP_MODE: AppMode = configJson.appModes.default;
+// Devnet's aggkit REST port is ephemeral per enclave recreate (kurtosis assigns
+// it at runtime); this env var lets a bring-up script inject the live proxy
+// URL without editing config.json -- e.g. a devnet bring-up script overriding
+// config.json's baked-in proxy URL with the live enclave's ephemeral port.
+const resolveAggkitProxyOverride = (): string | undefined => {
+  const envOverride = process.env.NEXT_PUBLIC_AGGKIT_PROXY?.trim();
+  if (!envOverride) return undefined;
+
+  const parsed = aggkitProxySchema.safeParse(envOverride);
+  if (!parsed.success) {
+    throw new Error(
+      'APP_CONFIG_INVALID: NEXT_PUBLIC_AGGKIT_PROXY must be an absolute http(s) URL or a ' +
+        'single origin-relative path'
+    );
+  }
+
+  const origin = resolveEnvOrigin();
+  return resolveAggkitProxyUrl(parsed.data, origin, false);
+};
+
+// WalletConnect/Reown project id: config.json's walletConnect.projectId (a
+// runtime value, settable per-container-instance -- see entrypoint.sh and
+// docs/docker.md) is authoritative. NEXT_PUBLIC_PROJECT_ID, when non-empty,
+// overrides it -- exactly the same precedence rule as
+// resolveAggkitProxyOverride above (design.md §6.2's "build-time env
+// overrides the served config" pattern), kept ONLY as a local-dev/Playwright
+// convenience. build:production's .env.production deliberately does not set
+// this var, so a published container image never has an override to fall
+// back to and always reads config.json's value.
+const resolveProjectIdOverride = (): string | undefined => {
+  const envOverride = process.env.NEXT_PUBLIC_PROJECT_ID?.trim();
+  return envOverride ? envOverride : undefined;
+};
+
+/**
+ * Builds the resolved, per-networkId aggkitBridgeApis map every downstream
+ * consumer (AggkitBridgeAggregator, app/utils/appMode.ts, ...) expects. This
+ * stays a Record<number, string> at runtime -- fanned out from the mode's
+ * single `aggkitProxy` value across every non-L1 networkId its chains use --
+ * even though config.json itself only ever declares one URL per mode; every
+ * downstream consumer keeps addressing aggkit per-network, it just never has
+ * to know the whole mode is actually behind one proxy.
+ */
+const buildAggkitBridgeApisMap = (
+  modeConfigJson: JsonAppModeConfig,
+  nonL1NetworkIds: number[],
+  aggkitProxyOverride: string | undefined
+): Record<number, string> => {
+  const effectiveProxy = aggkitProxyOverride ?? modeConfigJson.aggkitProxy;
+  if (effectiveProxy === undefined) return {};
+
+  return Object.fromEntries(nonL1NetworkIds.map((networkId) => [networkId, effectiveProxy]));
+};
+
+const resolveAutoclaimConfig = (overrides: JsonConfig['autoclaim']): AutoclaimConfig => {
+  const safeOverrides = overrides ?? {};
+  const resolveRoute = (route: RouteType): AutoclaimRouteConfig => {
+    const override = safeOverrides[route];
+    if (!override) return DEFAULT_AUTOCLAIM_CONFIG[route];
+    return {
+      expectedAutoclaim: override.expectedAutoclaim,
+      waitForAutoclaimMs:
+        override.waitForAutoclaimMs ?? DEFAULT_AUTOCLAIM_CONFIG[route].waitForAutoclaimMs
+    };
+  };
+  return {
+    l1_to_l2: resolveRoute('l1_to_l2'),
+    l2_to_l1: resolveRoute('l2_to_l1'),
+    l2_to_l2: resolveRoute('l2_to_l2')
+  };
+};
 
 const toEnabledChains = (chains: AppChain[]): EnabledAppModeConfig['chains'] | undefined => {
   const [first, second, ...rest] = chains;
@@ -61,18 +135,44 @@ const toEnabledChains = (chains: AppChain[]): EnabledAppModeConfig['chains'] | u
   return [first, second, ...rest];
 };
 
-const buildModeConfig = (modeKey: string): AppModeConfig => {
+const buildModeConfig = (
+  modeKey: string,
+  configJson: JsonConfig,
+  chainRegistry: Record<string, ChainEntry>,
+  aggkitProxyOverride: string | undefined
+): AppModeConfig => {
   const modeConfigJson = configJson.appModes.configs[modeKey];
   if (!modeConfigJson) {
-    return { label: modeKey, bridgeAddress: '', proofApiUrl: '', chains: [] };
+    return { label: modeKey, bridgeAddress: '', aggkitBridgeApis: {}, chains: [] };
   }
 
-  const chains = modeConfigJson.chainKeys.map((chainKey) => CHAIN_REGISTRY[chainKey].app);
+  // Resolve each chain's effective bridgeAddress and etaL1Minutes/etaL2Minutes:
+  // its own config.json chains.<key> override when set, otherwise this
+  // mode's default. chainRegistry.app.bridgeAddress is '' and
+  // etaL1Minutes/etaL2Minutes are -1 (the "no override" sentinels from
+  // createChainEntry) for the common case -- a chain shared by multiple
+  // modes never has its registry entry itself mutated with one mode's
+  // defaults (which could be wrong for another mode using the same chain
+  // key); this always returns a new object per mode instead.
+  const chains = modeConfigJson.chainKeys.map((chainKey) => {
+    const chain = chainRegistry[chainKey].app;
+    return {
+      ...chain,
+      bridgeAddress: chain.bridgeAddress || modeConfigJson.bridgeAddress,
+      etaL1Minutes: chain.etaL1Minutes >= 0 ? chain.etaL1Minutes : modeConfigJson.etaL1Minutes,
+      etaL2Minutes: chain.etaL2Minutes >= 0 ? chain.etaL2Minutes : modeConfigJson.etaL2Minutes
+    };
+  });
+  // L1 (networkId 0) never keys an aggkitBridgeApis entry (design.md §1.2) --
+  // only non-L1 networks get fanned out from this mode's aggkitProxy.
+  const nonL1NetworkIds = chains
+    .filter((chain) => chain.networkId !== 0)
+    .map((chain) => chain.networkId);
 
   const base = {
     label: modeConfigJson.label,
     bridgeAddress: modeConfigJson.bridgeAddress,
-    proofApiUrl: toProofApiUrl(bridgeHubApiBaseUrl, modeConfigJson.proofApiSuffix)
+    aggkitBridgeApis: buildAggkitBridgeApisMap(modeConfigJson, nonL1NetworkIds, aggkitProxyOverride)
   };
 
   const enabledChains = toEnabledChains(chains);
@@ -82,10 +182,10 @@ const buildModeConfig = (modeKey: string): AppModeConfig => {
 
   const [primaryChain, secondaryChain] = enabledChains;
   const defaultFromChainId = modeConfigJson.defaultFromChainKey
-    ? CHAIN_REGISTRY[modeConfigJson.defaultFromChainKey].app.id
+    ? chainRegistry[modeConfigJson.defaultFromChainKey].app.id
     : primaryChain.id;
   const defaultToChainId = modeConfigJson.defaultToChainKey
-    ? CHAIN_REGISTRY[modeConfigJson.defaultToChainKey].app.id
+    ? chainRegistry[modeConfigJson.defaultToChainKey].app.id
     : secondaryChain.id;
 
   return {
@@ -96,25 +196,121 @@ const buildModeConfig = (modeKey: string): AppModeConfig => {
   };
 };
 
-export const APP_MODE_CONFIG: Record<AppMode, AppModeConfig> = Object.fromEntries(
-  APP_MODES.map((mode) => [mode, buildModeConfig(mode)])
-) as Record<AppMode, AppModeConfig>;
-
-export const ALL_WAGMI_CHAINS: readonly [Chain, ...Chain[]] = toNonEmptyChainArray(
-  Object.values(CHAIN_REGISTRY).map((entry) => entry.wagmi)
-);
-
-const getDefaultWagmiChain = (): Chain => {
-  const defaultModeConfig = APP_MODE_CONFIG[DEFAULT_APP_MODE];
+const resolveDefaultWagmiChain = (
+  defaultAppMode: AppMode,
+  appModeConfig: Record<AppMode, AppModeConfig>,
+  allWagmiChains: readonly [Chain, ...Chain[]]
+): Chain => {
+  const defaultModeConfig = appModeConfig[defaultAppMode];
   const defaultFromChainId =
     'defaultFromChainId' in defaultModeConfig ? defaultModeConfig.defaultFromChainId : undefined;
   const defaultChainId = defaultFromChainId ?? defaultModeConfig.chains[0]?.id;
 
   if (defaultChainId === undefined) {
-    return ALL_WAGMI_CHAINS[0];
+    return allWagmiChains[0];
   }
 
-  return ALL_WAGMI_CHAINS.find((chain) => chain.id === defaultChainId) ?? ALL_WAGMI_CHAINS[0];
+  return allWagmiChains.find((chain) => chain.id === defaultChainId) ?? allWagmiChains[0];
 };
 
-export const DEFAULT_WAGMI_CHAIN: Chain = getDefaultWagmiChain();
+/**
+ * Pure function of a schema-valid, URL-normalized JsonConfig (see
+ * config/configLoader.mjs) plus process.env.NEXT_PUBLIC_AGGKIT_PROXY
+ * (unchanged precedence: build-time env overrides the served config, applied
+ * identically to every mode -- design.md §6.2). Exported separately from
+ * `initAppConfig` so tests can exercise the derivations and the precedence
+ * rule without touching the module store.
+ */
+export const buildAppConfig = (configJson: JsonConfig): ResolvedAppConfig => {
+  const aggkitProxyOverride = resolveAggkitProxyOverride();
+
+  const chainRegistry: Record<string, ChainEntry> = Object.fromEntries(
+    Object.entries(configJson.chains).map(([chainKey, chainConfigJson]) => [
+      chainKey,
+      createChainEntry({
+        wagmi: buildWagmiChain(chainConfigJson),
+        icon: chainConfigJson.iconUrl,
+        networkId: chainConfigJson.networkId,
+        isTestnet: chainConfigJson.isTestnet,
+        etaL1Minutes: chainConfigJson.etaL1Minutes,
+        etaL2Minutes: chainConfigJson.etaL2Minutes,
+        bridgeAddress: chainConfigJson.bridgeAddress,
+        nativeCurrencyAddress: chainConfigJson.currency.address,
+        nativeCurrencyWethToken: chainConfigJson.currency.wethToken,
+        nativeBridgeURL: chainConfigJson.nativeBridgeURL
+      })
+    ])
+  );
+
+  const defaultAppMode: AppMode = configJson.appModes.default;
+
+  const appModeConfig: Record<AppMode, AppModeConfig> = Object.fromEntries(
+    APP_MODES.map((mode) => [
+      mode,
+      buildModeConfig(mode, configJson, chainRegistry, aggkitProxyOverride)
+    ])
+  ) as Record<AppMode, AppModeConfig>;
+
+  const allWagmiChains: readonly [Chain, ...Chain[]] = toNonEmptyChainArray(
+    Object.values(chainRegistry).map((entry) => entry.wagmi)
+  );
+
+  const defaultWagmiChain = resolveDefaultWagmiChain(defaultAppMode, appModeConfig, allWagmiChains);
+
+  const projectId = resolveProjectIdOverride() ?? configJson.walletConnect.projectId;
+
+  return {
+    autoclaim: resolveAutoclaimConfig(configJson.autoclaim),
+    externalLinks: Object.freeze({
+      PRIVACY_POLICY: configJson.externalLinks.privacyPolicy,
+      TERMS_OF_USE: configJson.externalLinks.termsOfUse,
+      CONTACT_SUPPORT: configJson.externalLinks.contactSupport
+    }),
+    chainRegistry,
+    defaultAppMode,
+    appModeConfig,
+    allWagmiChains,
+    defaultWagmiChain,
+    walletConnect: Object.freeze({ projectId })
+  };
+};
+
+// ---- store ----
+// Populated once by AppConfigGate (browser) or tests/e2e/appConfig.ts (Node),
+// before any consumer render/call can observe it. See design.md §7.1: a
+// module store, not a React context -- app/utils/appMode.ts is a non-React
+// pure module, and the same accessors must serve Node callers too. Config is
+// immutable for the lifetime of the page (design.md §8): no re-fetch, no live
+// reconfiguration.
+let appConfig: ResolvedAppConfig | undefined;
+
+/** Builds, stores, and returns the resolved config. */
+export const initAppConfig = (configJson: JsonConfig): ResolvedAppConfig => {
+  appConfig = buildAppConfig(configJson);
+  return appConfig;
+};
+
+/** Tests only: clears the store so a fresh initAppConfig call can be asserted. */
+export const resetAppConfig = (): void => {
+  appConfig = undefined;
+};
+
+export const isAppConfigReady = (): boolean => appConfig !== undefined;
+
+export const getAppConfig = (): ResolvedAppConfig => {
+  if (!appConfig) {
+    throw new Error('APP_CONFIG_NOT_LOADED: app config was read before AppConfigGate resolved it');
+  }
+  return appConfig;
+};
+
+// ---- narrow accessors: one per pre-refactor export, so call sites are
+// one-token edits (identifier -> accessor call) ----
+export const getAutoclaimConfig = (): AutoclaimConfig => getAppConfig().autoclaim;
+export const getExternalLinks = (): ResolvedAppConfig['externalLinks'] =>
+  getAppConfig().externalLinks;
+export const getAppModeConfig = (): Record<AppMode, AppModeConfig> => getAppConfig().appModeConfig;
+export const getDefaultAppMode = (): AppMode => getAppConfig().defaultAppMode;
+export const getAllWagmiChains = (): readonly [Chain, ...Chain[]] => getAppConfig().allWagmiChains;
+export const getDefaultWagmiChain = (): Chain => getAppConfig().defaultWagmiChain;
+export const getWalletConnectProjectId = (): string => getAppConfig().walletConnect.projectId;

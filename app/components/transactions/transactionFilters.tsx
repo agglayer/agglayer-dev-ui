@@ -26,7 +26,7 @@ const STATUS_OPTIONS: Array<{ label: string; value: TransactionStatus | null }> 
   { label: 'All transactions', value: null },
   { label: 'Ready to claim', value: 'READY_TO_CLAIM' },
   { label: 'Claimed', value: 'CLAIMED' },
-  { label: 'Pending', value: 'BRIDGED' }
+  { label: 'Pending', value: 'PENDING' }
 ];
 
 export const TransactionFilters = ({
@@ -77,7 +77,9 @@ export const TransactionFilters = ({
           clearable
           disabled={disabled}
           onClear={clearStatus}
-          onSelect={(option) => handleStatusChange((option.value as TransactionStatus) || null)}
+          onSelect={(option) =>
+            handleStatusChange(option.value === 'all' ? null : (option.value as TransactionStatus))
+          }
           className="min-w-35"
         />
       </div>

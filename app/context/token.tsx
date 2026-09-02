@@ -67,7 +67,8 @@ export const TokenProvider = ({ children }: { children: ReactNode }) => {
         symbol: chain.nativeCurrency.symbol,
         name: chain.nativeCurrency.name,
         logoURI: chain.nativeCurrency.logoURI || chain.icon,
-        isNative: true
+        isNative: true,
+        wethToken: chain.nativeCurrency.wethToken
       };
       map.set(generateTokenKey(token.chainId, token.address), token);
     }

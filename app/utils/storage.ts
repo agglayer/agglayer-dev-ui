@@ -1,3 +1,7 @@
+// Intentionally retained across the aggkit rebrand for localStorage
+// backward-compatibility: this prefixes users' saved appMode/customTokens keys.
+// Renaming it would orphan existing users' stored data, so a rename requires a
+// one-time migration.
 const APP_PREFIX = 'bridge-hub-ui';
 
 const getBrowserStorage = (): Storage | null => {
@@ -12,6 +16,9 @@ const createStorageKey = (key: string): string => `${APP_PREFIX}:${key}`;
 export const STORAGE_KEYS = {
   APP_MODE: createStorageKey('appMode'),
   CUSTOM_TOKENS: createStorageKey('customTokens'),
+  // Map of bridgeHash -> epoch ms when the deposit was first observed
+  // READY_TO_CLAIM, so the autoclaim grace period survives refreshes.
+  AUTOCLAIM_READY_AT: createStorageKey('autoclaimReadyAt')
 } as const;
 
 export const StorageUtils = {
@@ -44,5 +51,5 @@ export const StorageUtils = {
     } catch {
       return false;
     }
-  },
+  }
 };

@@ -1,4 +1,4 @@
-name = "bridge-hub-ui"
+name = "agglayer-dev-ui"
 compatibility_date = "2024-07-04"
 placement = { mode = "smart" }
 workers_dev = false

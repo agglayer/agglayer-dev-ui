@@ -1,8 +1,10 @@
-import type { AppMode } from '@/app/types/appMode';
+import type { AggkitBridgeAggregator } from '@agglayer/sdk';
 
-import { getProofApiBaseUrl } from '@/app/utils/appMode';
-import { normalize } from '@/app/utils/format';
-
+// Thin wrapper over AggkitBridgeAggregator.getTokenMetadata.
+// aggkit has no token-metadata endpoint; the aggregator composes it from
+// /token-mappings (address resolution) + on-chain ERC20 reads, or the native
+// currency for the zero address. Output shape matches this pre-existing
+// TokenMetadata contract, which useTokenMetadata.ts consumes unchanged.
 export interface TokenMetadata {
   name: string;
   symbol: string;
@@ -17,46 +19,16 @@ export interface TokenMetadata {
   wrappedTokenAddressV2?: string;
 }
 
-interface TokenMetadataResponse {
-  status: string;
-  data?: TokenMetadata;
-  error?: string;
-}
-
-export const fetchTokenMetadata = async (
-  mode: AppMode,
-  tokenAddress: string
-): Promise<TokenMetadata> => {
-  const url = `${getProofApiBaseUrl(mode)}/token-metadata/${normalize(tokenAddress)}`;
-  const res = await fetch(url, { headers: { accept: 'application/json' } });
-
-  if (!res.ok) {
-    const msg = await res.text().catch(() => '');
-    throw new Error(`TOKEN_METADATA_${res.status}: ${msg || 'Request failed'}`);
-  }
-
-  const json: TokenMetadataResponse = await res.json();
-
-  if (json.status !== 'success' || !json.data) {
-    throw new Error(json.error || 'TOKEN_METADATA_INVALID_RESPONSE');
-  }
-
-  const { data } = json;
-  const requestedAddress = normalize(tokenAddress);
-  const matchedAddress = [
-    data.tokenAddress,
-    data.originTokenAddress,
-    data.wrappedTokenAddressV1,
-    data.wrappedTokenAddressV2
-  ].find((addr) => addr && normalize(addr) === requestedAddress);
-
-  if (!matchedAddress) {
-    throw new Error('TOKEN_METADATA_MISSING_ADDRESS');
-  }
+export const fetchTokenMetadata = async (params: {
+  aggregator: AggkitBridgeAggregator;
+  networkId: number;
+  tokenAddress: string;
+}): Promise<TokenMetadata> => {
+  const { aggregator, networkId, tokenAddress } = params;
+  const metadata = await aggregator.getTokenMetadata(tokenAddress, networkId);
 
   return {
-    ...data,
-    tokenAddress: matchedAddress,
-    decimals: Number(data.decimals)
+    ...metadata,
+    decimals: Number(metadata.decimals)
   };
 };

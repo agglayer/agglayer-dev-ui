@@ -1,0 +1,202 @@
+# PR-time image build + smoke test for agglayer-dev-ui.
+#
+# Closes plan gap P4 (plans/dev-ui-docker-ghcr-plan.md): before this
+# workflow, nothing in CI built or smoke-tested the Docker image, so a
+# broken Dockerfile or config contract only surfaced at deploy time. This
+# workflow builds the image on every pull request (single arch, never
+# pushed) and smoke-tests it, so a regression turns the PR red instead.
+#
+# Deliberately separate from docker-publish.yaml (the release/dispatch
+# workflow): that workflow publishes multi-arch images to GHCR and must
+# never run on untrusted PR heads with push credentials in scope. This
+# workflow never logs in to a registry and never sets `push: true`.
+#
+# Per plans/dev-ui-docker-ghcr/d2-adr-dependency-strategy.md §6.3, the
+# "skip if blocked by sdk#28" escape hatch that the plan originally allowed
+# for this step is WITHDRAWN: D-2 proved the image builds today without
+# waiting on sdk#28 (§3, verified build EXIT=0), so this job always builds
+# and smoke-tests -- no skip condition, no continue-on-error, no `if:`
+# guard tied to sdk#28.
+name: Docker PR Build and Smoke Test
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  IMAGE_TAG: agglayer-dev-ui:pr-smoke
+  # TEMPORARY -- remove per plans/dev-ui-docker-ghcr/d2-adr-dependency-strategy.md §5
+  # Pinned to a full 40-character commit SHA, never a branch name -- see
+  # docker-publish.yaml's identical env entry for the full rationale.
+  # Verified identical across local HEAD, `git ls-remote`, and
+  # `gh api repos/agglayer/sdk/pulls/28 --jq .head.sha` as of the D-2 ADR
+  # (2026-08-11). Keep in sync with docker-publish.yaml's SDK_REF; bump both
+  # together when sdk#28 moves, delete both entirely once the D-2 ADR §5
+  # migration trigger fires.
+  SDK_REF: 5680d837b168cd3b250110660332aa110eb88aae
+
+jobs:
+  build-and-smoke-test:
+    name: Build (single-arch, no push) and smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout agglayer-dev-ui
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # TEMPORARY -- remove per plans/dev-ui-docker-ghcr/d2-adr-dependency-strategy.md §5
+      # D-2 ADR §4.1: a second, SHA-pinned checkout of the public
+      # agglayer/sdk repo, staged at .sdk-src/ inside the dev-ui build
+      # context so the Dockerfile's sdk-builder stage can compile it in
+      # place of the `file:../sdk` sibling checkout this repo's
+      # pnpm-workspace.yaml override expects locally. agglayer/sdk is
+      # public (`gh repo view agglayer/sdk --json isPrivate` ->
+      # {"isPrivate":false}), so the default GITHUB_TOKEN suffices -- no
+      # PAT, no new secret. Must run AFTER the primary checkout above: it
+      # writes into .sdk-src/ under the dev-ui workspace root that checkout
+      # just populated.
+      - name: Checkout agglayer/sdk (pinned, TEMPORARY)
+        uses: actions/checkout@v4
+        with:
+          repository: agglayer/sdk
+          ref: ${{ env.SDK_REF }}
+          path: .sdk-src
+          persist-credentials: false
+
+      # SDK_REF is duplicated (not shared) between this workflow and
+      # docker-publish.yaml -- GitHub Actions has no cross-workflow env. Left
+      # unguarded, a one-sided bump would make this PR job build and smoke-test
+      # a different @agglayer/sdk revision than the one docker-publish.yaml
+      # actually ships, so a green PR would prove nothing about the published
+      # image. This turns that silent drift into a red PR instead.
+      # TEMPORARY -- remove per plans/dev-ui-docker-ghcr/d2-adr-dependency-strategy.md §5
+      - name: Assert SDK_REF matches docker-publish.yaml
+        run: |
+          set -euo pipefail
+          publish_ref="$(grep -oE '^  SDK_REF: [0-9a-f]{40}$' .github/workflows/docker-publish.yaml | awk '{print $2}')"
+          if [ -z "$publish_ref" ]; then
+            echo "::error::could not read a 40-char SDK_REF from .github/workflows/docker-publish.yaml -- keep both workflows' SDK_REF entries in the documented 'SDK_REF: <40 hex chars>' form" >&2
+            exit 1
+          fi
+          if [ "$publish_ref" != "$SDK_REF" ]; then
+            echo "::error::SDK_REF drift: docker-pr.yaml pins '$SDK_REF' but docker-publish.yaml pins '$publish_ref'. Bump both together (D-2 ADR §5.2 items 7 and 8)." >&2
+            exit 1
+          fi
+          echo "SDK_REF in sync across both workflows: $SDK_REF"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # No push, no registry login: this is the deliberate boundary between
+      # this workflow and docker-publish.yaml. `load: true` pulls the built
+      # image into the local Docker daemon so the smoke-test steps below can
+      # `docker run` it. Single-arch (the runner's native linux/amd64) per
+      # the plan's acceptance criterion -- multi-arch + `load` is not
+      # supported by the default docker driver anyway.
+      - name: 'Build image (single-arch, push: false)'
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          load: true
+          # TEMPORARY -- remove per plans/dev-ui-docker-ghcr/d2-adr-dependency-strategy.md §5
+          # Feeds the Dockerfile's ARG SDK_REF (both stages), which stamps
+          # the LABEL org.agglayer.sdk.revision onto the built image. Not
+          # load-bearing for a PR build (nothing publishes this image), kept
+          # only so the build-arg contract matches docker-publish.yaml
+          # exactly and the label is present if anyone inspects the image
+          # locally.
+          build-args: |
+            SDK_REF=${{ env.SDK_REF }}
+          tags: ${{ env.IMAGE_TAG }}
+          cache-from: type=gha,scope=docker-pr
+          cache-to: type=gha,mode=max,scope=docker-pr
+
+      - name: Smoke test image (HTTP 200, valid /config.json)
+        run: |
+          set -euo pipefail
+
+          docker run -d --name devui-smoke -p 8080:80 "${{ env.IMAGE_TAG }}"
+
+          ready=""
+          for _ in $(seq 1 30); do
+            if curl -fsS -o /dev/null http://localhost:8080/; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [ -z "$ready" ]; then
+            echo "::error::container never became ready on http://localhost:8080/ -- likely a broken Dockerfile, build, or entrypoint" >&2
+            docker logs devui-smoke >&2 || true
+            exit 1
+          fi
+
+          root_status="$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/)"
+          if [ "$root_status" != "200" ]; then
+            echo "::error::expected HTTP 200 from /, got $root_status" >&2
+            docker logs devui-smoke >&2 || true
+            exit 1
+          fi
+
+          config_status="$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/config.json)"
+          if [ "$config_status" != "200" ]; then
+            echo "::error::expected HTTP 200 from /config.json, got $config_status" >&2
+            docker logs devui-smoke >&2 || true
+            exit 1
+          fi
+
+          config_body="$(curl -fsS http://localhost:8080/config.json)"
+          if ! echo "$config_body" | jq empty 2>/dev/null; then
+            echo "::error::config.json served by the container is not valid JSON -- config contract is broken" >&2
+            echo "$config_body" >&2
+            docker logs devui-smoke >&2 || true
+            exit 1
+          fi
+
+          echo "Smoke test passed: / -> $root_status, /config.json -> $config_status (valid JSON)"
+          docker logs devui-smoke
+          docker rm -f devui-smoke
+
+      # Per C-2 (plans/dev-ui-docker-ghcr-plan.md line ~469): assert the
+      # app-config-error path too, not only "the container starts". This is
+      # the container-level analog of the browser-rendered
+      # data-test-id="app-config-error" screen (that gate lives in
+      # app/components/appConfigGate.tsx and is T-1's concern, requiring a
+      # browser) -- entrypoint.sh's own structural jq validation is the
+      # equivalent contract at the container boundary: a deliberately
+      # invalid mounted config.json must make the container refuse to start
+      # (exit non-zero), not silently serve a blank or broken page. Fast
+      # (a few seconds, no port, no polling loop) and legible (its own
+      # ::error on failure).
+      - name: Smoke test invalid mounted config (container must exit non-zero)
+        run: |
+          set -euo pipefail
+
+          invalid_config="$RUNNER_TEMP/invalid-config.json"
+          echo '{"not":"a valid agglayer-dev-ui config"}' > "$invalid_config"
+
+          set +e
+          docker run --rm \
+            -v "$invalid_config:/etc/agglayer-dev-ui/config.json:ro" \
+            "${{ env.IMAGE_TAG }}"
+          exit_code=$?
+          set -e
+
+          if [ "$exit_code" -eq 0 ]; then
+            echo "::error::container exited 0 for a deliberately invalid mounted config.json -- entrypoint.sh's structural validation regressed (config contract broken)" >&2
+            exit 1
+          fi
+
+          echo "Invalid-config smoke test passed: container correctly exited non-zero ($exit_code) instead of starting with a broken config"

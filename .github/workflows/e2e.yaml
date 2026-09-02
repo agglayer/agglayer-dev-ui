@@ -13,45 +13,354 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  # TEMPORARY -- remove per plans/dev-ui-docker-ghcr/d2-adr-dependency-strategy.md §5
+  # Same pin as docker-pr.yaml/docker-publish.yaml (SDK_REF drift across all
+  # three workflows would be silently misleading: a green e2e run would
+  # prove nothing about the @agglayer/sdk revision docker-pr.yaml/
+  # docker-publish.yaml actually build against). Verified identical across
+  # local HEAD, `git ls-remote`, and
+  # `gh api repos/agglayer/sdk/pulls/28 --jq .head.sha` as of the D-2 ADR
+  # (2026-08-11). Bump this alongside the other two workflows' SDK_REF
+  # entries; delete entirely once the D-2 ADR §5 migration trigger fires.
+  SDK_REF: 5680d837b168cd3b250110660332aa110eb88aae
+
 jobs:
   e2e:
     runs-on: ubuntu-latest
-    environment: production
-    timeout-minutes: 15
+    # Budget: devnet compose boot-to-ready ~24s with images already local
+    # (kurtosis-cdk S10/S11), ~65s on a cold CI runner including the image
+    # pull; install+browsers a few minutes, preflight seconds, then the full
+    # bridge suite -- L2->L1 certificate settlement is the slow, variable
+    # leg (~3.5min typical per kurtosis-cdk plan measurements, retry counts
+    # vary run-to-run). 75 minutes pads generously over the observed happy
+    # path for a loaded runner.
+    timeout-minutes: 75
     env:
       CI: true
-      E2E_PRIVATE_KEY: ${{ secrets.E2E_PRIVATE_KEY }}
-      NEXT_PUBLIC_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_PROJECT_ID }}
-      NEXT_PUBLIC_BRIDGE_HUB_API: ${{ secrets.NEXT_PUBLIC_BRIDGE_HUB_API }}
+      # Devnet is hermetic and vendored (tests/devnet/, see its README) --
+      # every value below is either a well-known public devnet fixture (the
+      # E2E signer key is a public Kurtosis/Foundry devnet key, funded only
+      # on the ephemeral compose bundle this job brings up itself) or a
+      # literal computed from that same bundle's tests/devnet/summary.json.
+      # None of these are repository secrets: nothing here grants access to
+      # anything outside this job's own throwaway containers.
+      E2E_PRIVATE_KEY: '0x12d7de8621a77640c9241b2595ba78ce443d05e94090365ab3bb5e19df82c625'
+      NEXT_PUBLIC_PROJECT_ID: ci-e2e
+      # Single-proxy form (see playwright.config.ts and app/config.ts): every
+      # non-L1 network in the mode fans out from this ONE URL, fetch()
+      # differentiating networks via a `network_id` query param -- there is
+      # no more per-network map to set here.
+      NEXT_PUBLIC_AGGKIT_PROXY: 'http://127.0.0.1:8555/aggkitapi'
+      E2E_FROM_CHAIN_ID: '271828'
+      E2E_TO_CHAIN_ID: '20201'
+      E2E_L2_CHAIN_IDS: '20201,20202'
+      # From tests/devnet/summary.json's .erc20_address -- nonce-dependent,
+      # bump alongside tests/devnet/docker-compose.yml (see its README).
+      E2E_ERC20_ADDRESS: '0xe293A6b8F558422813499bb5C89B60adD8c54636'
     steps:
-      - uses: actions/checkout@v4
+      # Checked out into a subdirectory (not repo root) so a sibling
+      # agglayer/sdk checkout below can sit next to it at `../sdk` --
+      # exactly the relative shape pnpm-workspace.yaml's
+      # `'@agglayer/sdk': 'file:../sdk'` override expects locally. Every
+      # subsequent step below runs with `working-directory: dev-ui`.
+      - name: Checkout agglayer-dev-ui
+        uses: actions/checkout@v4
         with:
+          path: dev-ui
           fetch-depth: 0
           persist-credentials: false
 
+      # TEMPORARY -- remove per plans/dev-ui-docker-ghcr/d2-adr-dependency-strategy.md §5
+      # A second, SHA-pinned checkout of the public agglayer/sdk repo,
+      # staged as a TRUE sibling of dev-ui/ (path: sdk, not nested inside
+      # it) so pnpm-workspace.yaml's `file:../sdk` override resolves
+      # (dev-ui/../sdk == this checkout). This differs from
+      # docker-pr.yaml/docker-publish.yaml's `.sdk-src` staging: those stage
+      # sdk INSIDE the dev-ui Docker build context because a Docker build
+      # context can't reach outside itself, but a plain `pnpm install` has
+      # no such constraint, so this sibling layout matches what a local dev
+      # checkout actually looks like. agglayer/sdk is public
+      # (`gh repo view agglayer/sdk --json isPrivate` -> {"isPrivate":false}),
+      # so the default GITHUB_TOKEN suffices -- no PAT, no new secret.
+      - name: Checkout agglayer/sdk (pinned, TEMPORARY)
+        uses: actions/checkout@v4
+        with:
+          repository: agglayer/sdk
+          ref: ${{ env.SDK_REF }}
+          path: sdk
+          persist-credentials: false
+
+      # Mirrors docker-pr.yaml's parity check against docker-publish.yaml:
+      # left unguarded, a one-sided SDK_REF bump here would let this job
+      # install/test against a different @agglayer/sdk revision than the
+      # one actually published, so a green e2e run would prove nothing
+      # about the shipped image's SDK revision.
+      # TEMPORARY -- remove per plans/dev-ui-docker-ghcr/d2-adr-dependency-strategy.md §5
+      - name: Assert SDK_REF matches docker-publish.yaml
+        working-directory: dev-ui
+        run: |
+          set -euo pipefail
+          # `|| true` is load-bearing: under `set -e` a non-matching grep
+          # aborts the assignment and kills the step, making the friendly
+          # ::error:: branch below unreachable.
+          publish_ref="$(grep -oE '^  SDK_REF: [0-9a-f]{40}$' .github/workflows/docker-publish.yaml | awk '{print $2}' || true)"
+          if [ -z "$publish_ref" ]; then
+            echo "::error::could not read a 40-char SDK_REF from .github/workflows/docker-publish.yaml -- keep every workflow's SDK_REF entry in the documented 'SDK_REF: <40 hex chars>' form" >&2
+            exit 1
+          fi
+          if [ "$publish_ref" != "$SDK_REF" ]; then
+            echo "::error::SDK_REF drift: e2e.yaml pins '$SDK_REF' but docker-publish.yaml pins '$publish_ref'. Bump both together (see docker-pr.yaml's identical check)." >&2
+            exit 1
+          fi
+          echo "SDK_REF in sync with docker-publish.yaml: $SDK_REF"
+
+      # TEMPORARY -- remove per plans/dev-ui-docker-ghcr/d2-adr-dependency-strategy.md §5
+      # @agglayer/sdk ships no dist/ in git (bun.lock only -- dist/ is
+      # gitignored, built via `bun run build` / tsup), so a fresh checkout is
+      # unbuildable TypeScript source until this runs: the sibling sdk/
+      # `file:../sdk` override resolves the package.json entry (`main:
+      # ./dist/index.js`), not the source tree. Without this step Next's dev
+      # server fails every route with "Module not found: Can't resolve
+      # '@agglayer/sdk'" -- caught only by a genuine scratch-clone rehearsal
+      # (plans/dev-ui-ci-snapshot/s13-evidence/); a warm sibling sdk checkout
+      # on a dev box masks it because its dist/ is already built from earlier
+      # SDK development. Mirrors the Dockerfile's sdk-builder stage (`FROM
+      # oven/bun:1 ... RUN bun install --frozen-lockfile && bun run build`)
+      # bit-for-bit, just targeting this sibling checkout instead of a Docker
+      # build context.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1'
+
+      - name: Build @agglayer/sdk (pinned, TEMPORARY)
+        working-directory: sdk
+        env:
+          HUSKY: '0'
+        run: |
+          bun install --frozen-lockfile
+          bun run build
+
+      # Checkout lives at dev-ui/ (see the restructuring above), so the
+      # default package_json_file: package.json (resolved against
+      # $GITHUB_WORKSPACE) doesn't exist -- point it at the checkout's own
+      # package.json (packageManager: pnpm@10.30.3) so version detection
+      # works. Same subdir pattern as actions/setup-node's
+      # node-version-file: dev-ui/.nvmrc below.
       - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: dev-ui/package.json
 
       - uses: actions/setup-node@v4
         with:
-          node-version-file: .nvmrc
+          node-version-file: dev-ui/.nvmrc
           cache: pnpm
+          cache-dependency-path: dev-ui/pnpm-lock.yaml
 
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium
+      # With the sibling sdk/ checkout above in place, pnpm-workspace.yaml's
+      # `file:../sdk` override resolves and this no longer fails with
+      # ENOENT scandir '<work>/dev-ui/../sdk' the way the pre-restructure
+      # single-directory checkout did.
+      - name: Install dependencies
+        working-directory: dev-ui
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        working-directory: dev-ui
+        run: pnpm exec playwright install --with-deps chromium
+
+      # --- Built-image path (T4/D1) -----------------------------------------
+      # Everything above/below this block tests PR source served by
+      # `pnpm run dev` (see playwright.config.ts) -- it never builds or runs
+      # the actual shipped Docker image. These four steps close that gap by
+      # building the real image from this PR's checkout and running
+      # tests/container/ (playwright.container.config.ts) against it, before
+      # paying for devnet bring-up, so a broken image/container regression
+      # fails fast.
+      #
+      # tests/bridge/* CANNOT run against this built image and are not
+      # attempted here: `pnpm run build:production` (package.json:14, what
+      # the Dockerfile's app-builder stage runs) never sets
+      # NEXT_PUBLIC_E2E_ENABLED, so `IS_E2E_ENABLED` (app/constants/e2e.ts:6)
+      # is permanently baked to `false` in any image built this way, and
+      # `app/context/e2eAccount.ts:4-6`'s auto-injected E2E signer -- the
+      # mechanism every wallet-signing spec in tests/bridge/ relies on --
+      # never exists in a built image. Only tests/container/'s wallet-free
+      # assertions (config loading, static rendering, error-gate behavior)
+      # are wired to run against it. See plans/snapshot-v2-aggkit-e2e/devui-under-test.md
+      # for the full analysis.
+      #
+      # TEMPORARY -- remove per plans/dev-ui-docker-ghcr/d2-adr-dependency-strategy.md §5
+      # A THIRD, SHA-pinned checkout of agglayer/sdk, this time staged inside
+      # the Docker build context (dev-ui/.sdk-src, gitignored) so the
+      # Dockerfile's sdk-builder stage can compile it -- mirrors
+      # docker-pr.yaml's `.sdk-src` step exactly, except nested under dev-ui/
+      # because this job's primary checkout already lives at dev-ui/ (see the
+      # comment above the first checkout step). This is separate from and in
+      # addition to the sibling `sdk/` checkout above (that one feeds the
+      # local `pnpm-workspace.yaml` `file:../sdk` override for
+      # `pnpm install`/`next dev`; this one feeds the Docker build context,
+      # which cannot reach outside itself).
+      - name: Checkout agglayer/sdk (pinned, TEMPORARY, for image build)
+        uses: actions/checkout@v4
+        with:
+          repository: agglayer/sdk
+          ref: ${{ env.SDK_REF }}
+          path: dev-ui/.sdk-src
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Reuses docker-pr.yaml's exact build-args/context/cache pattern
+      # (context: dev-ui because this job's checkout lives there), and its
+      # `docker-pr` GHA cache scope -- same Dockerfile + build-args, so this
+      # maximizes cache hits from docker-pr.yaml's own runs on the same
+      # branch/PR. `push: false` / `load: true`: never publish, just load the
+      # image into this runner's local daemon for the container suite below.
+      - name: Build image for container suite (single-arch, push false)
+        uses: docker/build-push-action@v6
+        with:
+          context: dev-ui
+          platforms: linux/amd64
+          push: false
+          load: true
+          build-args: |
+            SDK_REF=${{ env.SDK_REF }}
+          tags: agglayer-dev-ui:c1-test
+          cache-from: type=gha,scope=docker-pr
+          cache-to: type=gha,mode=max,scope=docker-pr
+
+      - name: Run container suite (tests/container, against the built image)
+        working-directory: dev-ui
+        run: pnpm exec playwright test --config=playwright.container.config.ts
+      # --- end built-image path -----------------------------------------
+
+      # Vendored self-contained bundle -- tests/devnet/docker-compose.yml,
+      # see tests/devnet/README.md. No bind mounts/volumes, no kurtosis CLI,
+      # 9 public GHCR images (the aggkit bridge is a component of the main
+      # aggkit-00X process now, not a separate `aggkit-00X-bridge` service).
+      # Every image is pinned by DIGEST (immutable) -- re-publishing
+      # kurtosis-cdk's snapshot workflow can never silently change what this
+      # job tests against without a diff here. `agglayer-dev-ui-002` (the
+      # baked dev-ui, manual use only) sits behind the `devui` compose
+      # profile, so this plain `up -d --wait` never starts it.
+      # `--wait` blocks until every service's own healthcheck passes.
+      # Every E2E_* literal in this job's `env:` is hand-copied from
+      # tests/devnet/summary.json, and nothing in the repo reads that file
+      # programmatically -- so a bundle bump that updates the compose file and
+      # summary.json but forgets the workflow would leave the suite silently
+      # testing against stale values (a wrong ERC20 address makes globalSetup
+      # throw; a wrong chain id fails obscurely). Same drift class the SDK_REF
+      # check above already guards, so guard it the same way.
+      - name: Assert workflow literals match tests/devnet/summary.json
+        working-directory: dev-ui
+        run: |
+          set -euo pipefail
+          fail=0
+          check() {
+            local label="$1" expected="$2" actual="$3"
+            if [ "$expected" != "$actual" ]; then
+              echo "::error::$label drift: e2e.yaml has '$actual', tests/devnet/summary.json has '$expected'. Bump them together (see tests/devnet/README.md)." >&2
+              fail=1
+            else
+              echo "ok: $label = $actual"
+            fi
+          }
+          s=tests/devnet/summary.json
+          check E2E_ERC20_ADDRESS   "$(jq -er '.erc20_address' "$s")"        "$E2E_ERC20_ADDRESS"
+          check E2E_FROM_CHAIN_ID   "$(jq -er '.chain_ids.l1|tostring' "$s")"     "$E2E_FROM_CHAIN_ID"
+          check E2E_TO_CHAIN_ID     "$(jq -er '.chain_ids.l2_001|tostring' "$s")" "$E2E_TO_CHAIN_ID"
+          check E2E_L2_CHAIN_IDS    "$(jq -er '[.chain_ids.l2_001,.chain_ids.l2_002]|map(tostring)|join(",")' "$s")" "$E2E_L2_CHAIN_IDS"
+          check E2E_PRIVATE_KEY     "$(jq -er '.accounts.e2e_wallet.private_key' "$s")" "$E2E_PRIVATE_KEY"
+          check proxy_host_port     "$(jq -er '.proxy.host_port|tostring' "$s")" "8555"
+          check NEXT_PUBLIC_AGGKIT_PROXY "$(jq -er '.aggkit_proxy.rest_url_via_proxy' "$s")" "$NEXT_PUBLIC_AGGKIT_PROXY"
+          # The vendored compose must pin the exact same 9 images the summary
+          # describes: every compose `image:` line is `<ref>@sha256:<digest>`
+          # (digest-pinned, see tests/devnet/README.md's "Tag scheme"), so
+          # comparing the full SORTED SET of digests in each file catches a
+          # missing/extra/swapped image, not just a drifted single value.
+          compose_digests=$(grep -oE 'sha256:[0-9a-f]{64}' tests/devnet/docker-compose.yml | sort -u)
+          summary_digests=$(jq -er '[.images.services[].digest] | sort | .[]' "$s")
+          compose_count=$(printf '%s\n' "$compose_digests" | grep -c .)
+          summary_count=$(printf '%s\n' "$summary_digests" | grep -c .)
+          if [ "$compose_count" -ne 9 ] || [ "$summary_count" -ne 9 ]; then
+            echo "::error::expected 9 image digests each side, got $compose_count in docker-compose.yml and $summary_count in summary.json" >&2
+            fail=1
+          elif [ "$compose_digests" != "$summary_digests" ]; then
+            echo "::error::tests/devnet/docker-compose.yml's pinned image digests do not match tests/devnet/summary.json's images.services[].digest set. Bump them together (see tests/devnet/README.md)." >&2
+            diff <(echo "$compose_digests") <(echo "$summary_digests") >&2 || true
+            fail=1
+          else
+            echo "ok: all 9 compose image digests match summary.json"
+          fi
+          [ "$fail" -eq 0 ]
+
+      - name: Start vendored devnet
+        working-directory: dev-ui
+        run: docker compose -f tests/devnet/docker-compose.yml up -d --wait
+
+      # Replicates kurtosisDevnetEnv.mjs's live-enclave probes against the
+      # fixed compose ports (no kurtosis CLI dependency) -- see
+      # scripts/devnetReady.mjs for the exact checks.
+      #
+      # Its sync-status checks do overlap the aggkit-proxy image's own baked
+      # healthcheck (which already asserts is_synced && is_active for network
+      # 0/1/2), so `up -d --wait` cannot return before those hold. The
+      # genuinely additive part is the six chainId / bridge-bytecode probes
+      # THROUGH haproxy: haproxy's own healthcheck only touches /aggkitapi,
+      # never /l1rpc, /l2rpc-001 or /l2rpc-002, so a misrouted proxy would
+      # otherwise not surface until a Playwright test failed obscurely.
+      #
+      # Timeout: boot-to-ready is ~24s once images are local, but the CI job
+      # measured ~65s including the ~2.9GB pull -- 300s pads for a loaded
+      # runner and a cold registry.
+      - name: Wait for devnet readiness
+        working-directory: dev-ui
+        run: node scripts/devnetReady.mjs --timeout-ms 300000 --interval-ms 3000
+
+      # config.json ships committed in testnet mode (see README.md#testing);
+      # this CI fixture flips appModes.default to devnet with the vendored
+      # bundle's fixed 127.0.0.1:8555 URLs already baked in.
+      - name: Configure devnet fixture
+        working-directory: dev-ui
+        run: |
+          cp config/config.ci.devnet.json config.json
+          pnpm run validate:config
 
       - name: Run Playwright preflight
+        working-directory: dev-ui
         run: pnpm exec playwright test tests/e2e/preflight.spec.ts
 
       - name: Run Playwright bridge tests
+        working-directory: dev-ui
         run: pnpm exec playwright test tests/bridge
 
+      # if: always() (not !cancelled()/on-failure) -- a hung devnet that
+      # causes the job to be cancelled on timeout is exactly the case where
+      # these logs matter most.
+      - name: Dump devnet logs
+        if: always()
+        working-directory: dev-ui
+        run: docker compose -f tests/devnet/docker-compose.yml logs --no-color > devnet-compose.log || true
+
+      - name: Tear down devnet
+        if: always()
+        working-directory: dev-ui
+        run: docker compose -f tests/devnet/docker-compose.yml down -v || true
+
+      # if: always(), matching the log dump above: a 75-minute timeout
+      # CANCELS the job, and `!cancelled()` would then skip this upload --
+      # throwing away the devnet logs collected precisely for that case.
       - name: Upload Playwright artifacts
         uses: actions/upload-artifact@v4
-        if: ${{ !cancelled() }}
+        if: always()
         with:
           name: playwright-report-${{ github.run_id }}
           path: |
-            playwright-report
-            test-results
+            dev-ui/playwright-report
+            dev-ui/playwright-report-container
+            dev-ui/test-results
+            dev-ui/devnet-compose.log
           retention-days: 30
           if-no-files-found: ignore

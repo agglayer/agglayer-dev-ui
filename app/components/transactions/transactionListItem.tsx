@@ -3,15 +3,17 @@
 import type { ClaimStep, Transaction } from '@/app/types/transaction';
 
 import { CopyText } from '@/app/components/copyText';
+import { TrackerProgressBar } from '@/app/components/transactions/trackerProgressBar';
 import { TransactionETA } from '@/app/components/transactions/transactionEta';
 import { TransactionStatusBadge } from '@/app/components/transactions/transactionStatusBadge';
 import { BadgeImageFallback } from '@/app/components/ui/badgeImageFallback';
 import { Button } from '@/app/components/ui/button';
 import { useAppMode } from '@/app/context/appMode';
 import { useTokens } from '@/app/context/token';
+import { useAutoclaimGate } from '@/app/hooks/useAutoclaimGate';
 import { useTokenMetadata } from '@/app/hooks/useTokenMetadata';
 import { shortenAddress } from '@/app/utils/address';
-import { getChainByNetworkId } from '@/app/utils/chains';
+import { getChainByNetworkId, getEtaMinutes } from '@/app/utils/chains';
 import { cn } from '@/app/utils/common';
 import { getTokenLogoBySymbol } from '@/app/utils/tokens';
 import { formatTransactionAmount, isNativeToken } from '@/app/utils/transaction';
@@ -36,7 +38,11 @@ export const TransactionListItem = ({
   const sourceChain = getChainByNetworkId(chains, transaction.sourceNetwork);
   const destChain = getChainByNetworkId(chains, transaction.destinationNetwork);
   const isClaimable = transaction.status === 'READY_TO_CLAIM';
-  const isPending = transaction.status === 'BRIDGED' || transaction.status === 'LEAF_INCLUDED';
+  const isPending = transaction.status === 'PENDING';
+  // Per-route autoclaim grace period: 'no-autoclaim' shows the button now,
+  // 'waiting' shows a "claim manually now" hint while autoclaim is expected,
+  // 'overdue' shows the button plus a "taking longer than expected" note.
+  const autoclaimGate = useAutoclaimGate(transaction);
 
   const isNative = isNativeToken(transaction.originTokenAddress);
 
@@ -72,6 +78,7 @@ export const TransactionListItem = ({
   return (
     <div
       onClick={() => onSelect?.(transaction)}
+      data-test-id={`transaction-row-${transaction.transactionHash}`}
       className={cn(
         'rounded-2xl border border-border bg-surface shadow-sm transition hover:border-blue hover:shadow-md cursor-pointer'
       )}
@@ -159,29 +166,74 @@ export const TransactionListItem = ({
             </div>
           </div>
         </div>
-        {isPending && sourceChain?.eta && (
-          <TransactionETA timestamp={transaction.timestamp} etaMinutes={sourceChain.eta} />
-        )}
-        {isClaimable && (
-          <Button
-            onClick={(event) => {
-              event.stopPropagation();
-              onClaim?.(transaction);
-            }}
-            size="md"
-            className="w-full"
-            disabled={isAnyClaiming}
+        {transaction.status === 'ERROR' && transaction.statusError && (
+          <details
+            className="w-full text-left text-sm"
+            data-test-id="transaction-status-error-details"
+            onClick={(event) => event.stopPropagation()}
           >
-            {claimStep === 'claiming' ? (
-              <>
-                <Loader2 className="animate-spin size-4 mr-2" />
-                Claiming...
-              </>
-            ) : (
-              'Claim tokens'
-            )}
-          </Button>
+            <summary className="cursor-pointer text-grey hover:text-foreground">
+              Technical details
+            </summary>
+            <div className="mt-2 space-y-1 rounded-lg bg-surface-muted p-3 text-xs text-grey">
+              <p className="break-words">
+                <span className="font-semibold">Error:</span> {transaction.statusError}
+              </p>
+            </div>
+          </details>
         )}
+        {isPending && sourceChain && (
+          <TransactionETA
+            timestamp={transaction.timestamp}
+            etaMinutes={getEtaMinutes(sourceChain, transaction.destinationNetwork)}
+          />
+        )}
+        {isClaimable &&
+          (autoclaimGate === 'waiting' ? (
+            <p className="text-sm text-grey text-center" data-test-id="autoclaim-waiting-note">
+              Waiting for auto claim,{' '}
+              <button
+                type="button"
+                data-test-id="claim-manually-now-button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onClaim?.(transaction);
+                }}
+                disabled={isAnyClaiming}
+                className="text-blue underline hover:no-underline cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {claimStep === 'claiming' ? 'claiming…' : 'claim manually now'}
+              </button>
+            </p>
+          ) : (
+            <div className="space-y-1">
+              <Button
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onClaim?.(transaction);
+                }}
+                size="md"
+                className="w-full"
+                disabled={isAnyClaiming}
+                data-test-id="claim-tokens-button"
+              >
+                {claimStep === 'claiming' ? (
+                  <>
+                    <Loader2 className="animate-spin size-4 mr-2" />
+                    Claiming...
+                  </>
+                ) : (
+                  'Claim tokens'
+                )}
+              </Button>
+              {autoclaimGate === 'overdue' && (
+                <p className="text-xs text-grey text-center" data-test-id="autoclaim-overdue-note">
+                  Auto claim is taking more time than expected, you can claim manually instead
+                </p>
+              )}
+            </div>
+          ))}
+        <TrackerProgressBar transaction={transaction} />
       </div>
     </div>
   );

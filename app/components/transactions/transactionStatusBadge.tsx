@@ -1,7 +1,7 @@
 import type { TransactionStatus } from '@/app/types/transaction';
 
 import { cn } from '@/app/utils/common';
-import { CheckCircle, Loader2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
 
 interface TransactionStatusBadgeProps {
   status: TransactionStatus;
@@ -22,14 +22,14 @@ const STATUS_CONFIG: Record<
     icon: <CheckCircle size={16} />,
     variant: 'info'
   },
-  LEAF_INCLUDED: {
+  PENDING: {
     label: 'Pending',
     icon: <Loader2 size={16} className="animate-spin" />,
     variant: 'warning'
   },
-  BRIDGED: {
-    label: 'Pending',
-    icon: <Loader2 size={16} className="animate-spin" />,
+  ERROR: {
+    label: 'Needs attention',
+    icon: <AlertTriangle size={16} />,
     variant: 'warning'
   }
 };
@@ -47,6 +47,7 @@ export const TransactionStatusBadge = ({ status, className }: TransactionStatusB
 
   return (
     <div
+      data-test-id="transaction-status"
       className={cn(
         'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-semibold',
         variantStyle,

@@ -2,7 +2,7 @@
 
 import type { AppMode } from '@/app/types/appMode';
 
-import { APP_MODE_CONFIG } from '@/app/config';
+import { getAppModeConfig } from '@/app/config';
 import { useAppMode } from '@/app/context/appMode';
 import { Code } from 'lucide-react';
 import { useMemo } from 'react';
@@ -21,7 +21,7 @@ export const ModeSwitch = () => {
         .filter((value) => value !== mode)
         .map((value) => ({
           value,
-          label: APP_MODE_CONFIG[value].label
+          label: getAppModeConfig()[value].label
         })),
     [enabledModes, mode]
   );

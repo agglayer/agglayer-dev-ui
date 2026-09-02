@@ -1,0 +1,245 @@
+# Self-contained devnet snapshot -- flavor: anvil-aggkit
+#
+# Vendored from 0xPolygon/kurtosis-cdk (branch feat/aggkit-bridge-ui-backend)
+# @ fc160450b55e64332436f11c091c61130c64030f. See ./README.md for the full
+# regenerate-and-bump procedure -- do not hand-edit an image reference below
+# without following it (E2E_ERC20_ADDRESS in .github/workflows/e2e.yaml is
+# nonce-dependent per snapshot and MUST be bumped in lockstep if it changes).
+#
+# Publish run this bundle came from:
+# https://github.com/0xPolygon/kurtosis-cdk/actions/runs/31787941750
+#
+# Enclave: cdk
+#
+# v2 bundle (this file): 9 services, not 11 -- the aggkit bridge is now a
+# component of the main aggkit-00X process (rpc 5576 + bridge REST 5577 +
+# pprof 6060 on one container) instead of a separate `aggkit-00X-bridge`
+# service. Every image below is pinned by DIGEST (immutable); the
+# human-readable `<component-version>-<unix-ts>` tag is kept only as a
+# trailing comment for provenance. Unlike the v1 bundle, there is no more
+# SNAPSHOT_IMAGE_PREFIX/SNAPSHOT_IMAGE_TAG override -- re-running the
+# kurtosis-cdk publish workflow can never silently move what this file
+# resolves to; bumping requires editing this file (see ./README.md).
+#
+# This file is the ENTIRE bundle: every service's state, config and keystores
+# are baked into its image, so `docker compose up -d --wait` works in an
+# otherwise empty directory (all 9 images are public and pull anonymously).
+# There are deliberately no bind mounts and no volumes -- restarting from
+# scratch always replays the captured state.
+#
+# The only endpoint dev-ui CI needs is the haproxy CORS origin on
+# ${DEVNET_PROXY_PORT:-8555}, serving /l1rpc, /l2rpc-00X and /aggkitapi.
+# Everything else is published for debugging and can be overridden or
+# removed. `agglayer-dev-ui-002` (the baked dev-ui itself, :8557) is behind
+# the `devui` compose profile and is NOT started by a plain `up`/`up -d
+# --wait` -- CI never uses it (see ./README.md); bring it up with
+# `docker compose --profile devui up -d` for manual/local debugging.
+
+services:
+  anvil-001:
+    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-anvil-001@sha256:006932fc49ce501c8d6f8c3f4ac3b5873ec14b59b101b4f4e9db02b169e6c0c9 # v1.5.1-1786700247
+    hostname: anvil-001
+    ports:
+      - '${L1_RPC_PORT:-8545}:8545' # L1 JSON-RPC (debug)
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', '/bin/sh', '/snapshot/healthcheck.sh']
+      interval: 3s
+      timeout: 10s
+      retries: 40
+      start_period: 5s
+
+  l2-anvil-001:
+    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-l2-anvil-001@sha256:e9bbeb7f9a76a4ea725f194059c6b23d49c65e89a8a00241d6df3b687c8ccbb8 # v1.5.1-1786700247
+    hostname: l2-anvil-001
+    ports:
+      - '${L2_001_HTTP_PORT:-11545}:8545' # L2 chain 20201 JSON-RPC (debug)
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', '/bin/sh', '/snapshot/healthcheck.sh']
+      interval: 3s
+      timeout: 10s
+      retries: 40
+      start_period: 5s
+
+  l2-anvil-002:
+    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-l2-anvil-002@sha256:3555d50518f6f72d5811edd759293ba205ac192c04192695afc046c2cb595ef0 # v1.5.1-1786700247
+    hostname: l2-anvil-002
+    ports:
+      - '${L2_002_HTTP_PORT:-12545}:8545' # L2 chain 20202 JSON-RPC (debug)
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', '/bin/sh', '/snapshot/healthcheck.sh']
+      interval: 3s
+      timeout: 10s
+      retries: 40
+      start_period: 5s
+
+  agglayer:
+    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-agglayer@sha256:5a47d3778657ba618ff7dfc99dfd55a3863097d5fff4f960a0740d4d0ae80073 # 0.6.0-rc.8-1786700247
+    hostname: agglayer
+    entrypoint: ['/usr/local/bin/agglayer']
+    command: ['run', '--cfg', '/etc/agglayer/config.toml']
+    environment:
+      - RUST_BACKTRACE=1
+    ports:
+      - '${AGGLAYER_GRPC_PORT:-4443}:4443' # gRPC
+      - '${AGGLAYER_READRPC_PORT:-4444}:4444' # read RPC
+      - '${AGGLAYER_ADMIN_PORT:-4446}:4446' # admin API
+      - '${AGGLAYER_METRICS_PORT:-9092}:9092' # prometheus
+    depends_on:
+      anvil-001:
+        condition: service_healthy
+      l2-anvil-001:
+        condition: service_healthy
+      l2-anvil-002:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      # kurtosis-cdk K7b: was `/bin/sh /snapshot/healthcheck.sh` (a busybox
+      # wget against agglayer's OWN prometheus metrics endpoint, :9092). That
+      # endpoint can start answering before agglayer's gRPC listener (:4443)
+      # actually binds -- a Rust async multi-service binary has no obligation
+      # to bring both up in lockstep -- so `service_healthy` could fire
+      # early. aggkit-00X's aggsender races that gRPC bind against its own
+      # claim-syncer autostart on startup; losing the race does not error
+      # transiently, it WEDGES claim-syncer initialization permanently
+      # ("cannot set next required block to 0, it must be >= the first block
+      # in DB" retries forever, so the aggsender's certificate loop for that
+      # network never starts). This probe is a genuine TCP-connect against
+      # the gRPC port itself -- bash's builtin /dev/tcp (no curl/wget/nc
+      # needed), confirmed present in this same upstream agglayer image.
+      test: ['CMD', 'bash', '-c', 'exec 3<>/dev/tcp/127.0.0.1/4443']
+      interval: 2s
+      timeout: 3s
+      retries: 60
+      start_period: 10s
+
+  aggkit-001:
+    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-aggkit-001@sha256:6497f44d1a81a8f5a00b2a8d719103b8c1b8200c5eb6e2ff5083d33e9431f982 # 0.11.0-rc5-1786700247
+    hostname: aggkit-001
+    entrypoint: ['/usr/local/bin/aggkit']
+    command:
+      ['run', '--cfg=/etc/aggkit/config.toml', '--components=aggsender,aggoracle,autoclaim,bridge']
+    ports:
+      - '${L2_001_AGGKIT_RPC_PORT:-11576}:5576' # JSON-RPC (debug)
+      - '${L2_001_AGGKIT_REST_PORT:-11577}:5577' # bridge REST API
+    depends_on:
+      anvil-001:
+        condition: service_healthy
+      l2-anvil-001:
+        condition: service_healthy
+      agglayer:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', '/snapshot/busybox', 'sh', '/snapshot/healthcheck.sh']
+      interval: 3s
+      timeout: 10s
+      retries: 60
+      start_period: 10s
+
+  aggkit-002:
+    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-aggkit-002@sha256:aa93b661b6fe8e26fe06633d6e00398090a7f1d4b455cc26f8f75ce4e301bb88 # 0.11.0-rc5-1786700247
+    hostname: aggkit-002
+    entrypoint: ['/usr/local/bin/aggkit']
+    command:
+      ['run', '--cfg=/etc/aggkit/config.toml', '--components=aggsender,aggoracle,autoclaim,bridge']
+    ports:
+      - '${L2_002_AGGKIT_RPC_PORT:-12576}:5576' # JSON-RPC (debug)
+      - '${L2_002_AGGKIT_REST_PORT:-12577}:5577' # bridge REST API
+    depends_on:
+      anvil-001:
+        condition: service_healthy
+      l2-anvil-002:
+        condition: service_healthy
+      agglayer:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', '/snapshot/busybox', 'sh', '/snapshot/healthcheck.sh']
+      interval: 3s
+      timeout: 10s
+      retries: 60
+      start_period: 10s
+
+  aggkit-proxy-001:
+    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-aggkit-proxy-001@sha256:cd5209a27d5bb2b03bca8fe8e1cf7923381e4eadaf00108162a0523d4fcefc8c # 0.11.0-rc5-1786700247
+    hostname: aggkit-proxy-001
+    entrypoint: ['/usr/local/bin/aggkit-proxy']
+    command: ['run', '--cfg=/etc/aggkit-proxy/config.toml', '--components=proxy,tracker']
+    ports:
+      - '${AGGKIT_PROXY_PORT:-8556}:8080' # bridge + tracker REST
+    depends_on:
+      agglayer:
+        condition: service_healthy
+      aggkit-001:
+        condition: service_healthy
+      aggkit-002:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', '/snapshot/busybox', 'sh', '/snapshot/healthcheck.sh']
+      interval: 3s
+      timeout: 10s
+      retries: 60
+      start_period: 10s
+
+  agglayer-dev-ui-002:
+    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-agglayer-dev-ui-002@sha256:3961d9fab267d64a6115464dc6513238fd705a8cc8fa826ca8ba31d65de7629e # dispatch-feat-aggkit-backend-8563dd4ba87-1786700247
+    hostname: agglayer-dev-ui-002
+    # NOT started by a plain `docker compose up` / `up -d --wait` -- CI never
+    # uses this container (only bare `/` through haproxy's default_backend
+    # does, and nothing CI-relevant hits bare `/`). Bring it up for
+    # manual/local debugging with `docker compose --profile devui up -d`.
+    profiles: ['devui']
+    ports:
+      - '${DEVUI_PORT:-8557}:80' # dev-ui (manual use, --profile devui)
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', '/bin/sh', '/snapshot/healthcheck.sh']
+      interval: 3s
+      timeout: 10s
+      retries: 40
+      start_period: 5s
+
+  agglayer-dev-ui-proxy-002:
+    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-agglayer-dev-ui-proxy-002@sha256:310e3b235599ac25687f9bf1a0b9458705472fd9ca993447663d647866a83332 # 3.2-bookworm-1786700247
+    hostname: agglayer-dev-ui-proxy-002
+    ports:
+      - '${DEVNET_PROXY_PORT:-8555}:80' # THE dev-ui CI origin
+    depends_on:
+      aggkit-proxy-001:
+        condition: service_healthy
+      anvil-001:
+        condition: service_healthy
+      l2-anvil-001:
+        condition: service_healthy
+      l2-anvil-002:
+        condition: service_healthy
+    restart: unless-stopped
+    # The image's baked /snapshot/healthcheck.sh probes BOTH
+    # /aggkitapi/bridge/v1/sync-status AND bare / (routed to
+    # agglayer-dev-ui-002 by haproxy.cfg's default_backend). Since
+    # agglayer-dev-ui-002 is profile-gated off by default, bare / has no live
+    # backend and that baked script would fail forever, hanging
+    # `docker compose up -d --wait`. This compose-level override fully
+    # replaces the image's HEALTHCHECK and probes only the route CI actually
+    # needs, reusing the busybox binary already baked into this image.
+    healthcheck:
+      test:
+        [
+          'CMD',
+          '/snapshot/busybox',
+          'wget',
+          '-q',
+          '-O',
+          '/dev/null',
+          'http://127.0.0.1:80/aggkitapi/bridge/v1/sync-status?network_id=1'
+        ]
+      interval: 3s
+      timeout: 10s
+      retries: 60
+      start_period: 10s
+
+# No volumes and no bind mounts: all state and config is baked into the images.
