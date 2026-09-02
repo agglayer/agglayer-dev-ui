@@ -64,6 +64,13 @@ Two deployment paths exist. Pick one:
 
 ### Cloudflare Workers path
 
+**First time pointing this worker at an existing live domain?** See
+[`docs/deploy-cutover.md`](./deploy-cutover.md) first — migrating
+`dev-ui.agglayer.dev` from an older worker onto this repo's `agglayer-dev-ui` worker
+needs SPEC coordination (the old worker's teardown and the custom-domain handoff) that
+this generic guide doesn't cover. Skip straight to the steps below for a routine
+deploy of an already-cut-over environment.
+
 1. Build/run: see [README §Quickstart](https://github.com/agglayer/agglayer-dev-ui/blob/feat/aggkit-backend/README.md#quickstart) (standard Next.js: `pnpm install && pnpm build && pnpm start`, Node 24).
 2. Configure `config.json` — full schema: [docs/config.md](https://github.com/agglayer/agglayer-dev-ui/blob/feat/aggkit-backend/docs/config.md). The essentials per environment: chain list (RPC URLs, bridge contract addresses) and the mode's `aggkitProxy` set to your reverse proxy's `/aggkitapi` origin (this guide's whole component picture is one `aggkit-proxy` per environment — that is exactly what the single-URL `aggkitProxy` field models).
 3. What the tracker UI does and how it polls (5s per pending row, stops on terminal states — relevant for capacity planning): [README §Bridge Tracking](https://github.com/agglayer/agglayer-dev-ui/blob/feat/aggkit-backend/README.md#bridge-tracking).
