@@ -33,12 +33,6 @@
 /build
 /dist
 
-# Docker build context staging for @agglayer/sdk (TEMPORARY -- remove per
-# plans/dev-ui-docker-ghcr/d2-adr-dependency-strategy.md §5). Populated by
-# scripts/stage-sdk-src.sh locally, or a second actions/checkout in CI; must
-# never be committed.
-/.sdk-src/
-
 # orchestration/evidence scratch (kept outside the repo at
 # /home/brolygon/repos/plans/<plan>/<step-id>-evidence/ -- never commit here)
 /plans/

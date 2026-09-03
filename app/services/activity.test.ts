@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { deriveStatus, fetchActivity, resolveAggkitProxyBaseUrl, toTransaction } from './activity';
+import {
+  deriveStatus,
+  fetchActivity,
+  quotePrecisionUnsafeIntegers,
+  resolveAggkitProxyBaseUrl,
+  toTransaction
+} from './activity';
 
 const baseBridge = {
   tx_hash: '0xabc',
@@ -128,7 +134,8 @@ describe('toTransaction', () => {
     });
 
     expect(tx.status).toBe('CLAIMED');
-    expect(tx.hubUID).toBe('0xhash');
+    // hubUID is tx_hash + deposit_count, NOT bridge_hash -- see toHubUID.
+    expect(tx.hubUID).toBe('0xabc:5');
     expect(tx.bridgeHash).toBe('0xhash');
     // sourceNetwork is the RECORDING network (bridge_network_id), not the
     // token's origin_network -- see getRouteType/autoclaim consumers.
@@ -186,6 +193,11 @@ describe('resolveAggkitProxyBaseUrl', () => {
   });
 });
 
+// The OK-path mocks below stub `text()`, not `json()`: fetchActivity reads the
+// body as text and runs it through parseActivityResponse, because
+// `response.json()` would round `global_index` past repair (see that
+// function's comment). The non-OK path still uses json() -- an error body is
+// only {code, message}.
 describe('fetchActivity', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -194,19 +206,21 @@ describe('fetchActivity', () => {
   it('requests includeTracking=true and maps the returned bridges', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: () =>
-        Promise.resolve({
-          from_address: [],
-          bridges: [
-            {
-              bridge: baseBridge,
-              bridge_network_id: 0,
-              claimed: 'true',
-              creation_timestamp: 0,
-              last_updated_timestamp: 0
-            }
-          ]
-        })
+      text: () =>
+        Promise.resolve(
+          JSON.stringify({
+            from_address: [],
+            bridges: [
+              {
+                bridge: baseBridge,
+                bridge_network_id: 0,
+                claimed: 'true',
+                creation_timestamp: 0,
+                last_updated_timestamp: 0
+              }
+            ]
+          })
+        )
     });
     vi.stubGlobal('fetch', fetchMock);
 
@@ -223,17 +237,20 @@ describe('fetchActivity', () => {
   it('passes through the warnings array when present', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: () =>
-        Promise.resolve({
-          from_address: [],
-          bridges: [],
-          warnings: [
-            {
-              network_id: 84,
-              message: 'fetching bridges from 0x43...: dial tcp 34.147.196.6:5577: no route to host'
-            }
-          ]
-        })
+      text: () =>
+        Promise.resolve(
+          JSON.stringify({
+            from_address: [],
+            bridges: [],
+            warnings: [
+              {
+                network_id: 84,
+                message:
+                  'fetching bridges from 0x43...: dial tcp 34.147.196.6:5577: no route to host'
+              }
+            ]
+          })
+        )
     });
     vi.stubGlobal('fetch', fetchMock);
 
@@ -244,6 +261,129 @@ describe('fetchActivity', () => {
         network_id: 84,
         message: 'fetching bridges from 0x43...: dial tcp 34.147.196.6:5577: no route to host'
       }
+    ]);
+  });
+
+  it('keeps every distinct deposit that shares one bridge_hash, with a unique hubUID each', async () => {
+    // Live shape from the aggkit rc8 devnet: bridge_hash is a CONTENT hash
+    // (origin/destination network + address, amount, metadata), so five
+    // separate native-ETH bridges of the identical amount to the identical
+    // receiver all reported the same bridge_hash -- same bridge_network_id,
+    // but genuinely different tx_hash / deposit_count / block_num. An
+    // earlier bridge_hash dedupe here silently dropped four real
+    // transactions; nothing may be dropped, and each row still needs its own
+    // React key (transactionList.tsx keys on tx.hubUID).
+    const sharedBridgeHash = '0xae7da905f5e09ee99f9e0c4b8f9b255ff42a1522dbe61f8066c53c8c49a5377f';
+    const deposits = [
+      { tx_hash: '0xtx3', deposit_count: 3, block_num: 309 },
+      { tx_hash: '0xtx4', deposit_count: 4, block_num: 324 },
+      { tx_hash: '0xtx5', deposit_count: 5, block_num: 593 },
+      { tx_hash: '0xtx6', deposit_count: 6, block_num: 835 },
+      { tx_hash: '0xtx7', deposit_count: 7, block_num: 883 }
+    ];
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      text: () =>
+        Promise.resolve(
+          JSON.stringify({
+            from_address: [],
+            bridges: deposits.map((deposit) => ({
+              bridge: { ...baseBridge, ...deposit, bridge_hash: sharedBridgeHash },
+              bridge_network_id: 0,
+              claimed: 'false',
+              creation_timestamp: 0,
+              last_updated_timestamp: 0
+            }))
+          })
+        )
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await fetchActivity({ baseUrl: 'https://proxy.example', fromAddress: '0xabc' });
+
+    expect(result.transactions).toHaveLength(5);
+    expect(result.transactions.map((tx) => tx.transactionHash)).toEqual([
+      '0xtx3',
+      '0xtx4',
+      '0xtx5',
+      '0xtx6',
+      '0xtx7'
+    ]);
+    expect(result.transactions.map((tx) => tx.hubUID)).toEqual([
+      '0xtx3:3',
+      '0xtx4:4',
+      '0xtx5:5',
+      '0xtx6:6',
+      '0xtx7:7'
+    ]);
+    expect(new Set(result.transactions.map((tx) => tx.hubUID)).size).toBe(5);
+  });
+
+  it('gives distinct hubUIDs to two deposits batched into one transaction', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      text: () =>
+        Promise.resolve(
+          JSON.stringify({
+            from_address: [],
+            bridges: [0, 1].map((depositCount) => ({
+              bridge: { ...baseBridge, tx_hash: '0xbatched', deposit_count: depositCount },
+              bridge_network_id: 0,
+              claimed: 'false',
+              creation_timestamp: 0,
+              last_updated_timestamp: 0
+            }))
+          })
+        )
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await fetchActivity({ baseUrl: 'https://proxy.example', fromAddress: '0xabc' });
+
+    expect(result.transactions.map((tx) => tx.hubUID)).toEqual(['0xbatched:0', '0xbatched:1']);
+  });
+
+  it('keeps each L1-origin global_index exact when the wire sends it as a bare 2^64+ number', async () => {
+    // Two consecutive L1 deposits as the rc8 devnet actually reports them:
+    // global_index is an unquoted JSON number, 2^64 + deposit_count. A plain
+    // response.json() rounds both onto the identical 18446744073709551616 --
+    // which is what silently mis-built manual claims (see C13 /
+    // parseActivityResponse).
+    const wire = `{
+      "from_address": [],
+      "bridges": [
+        {
+          "bridge": { "tx_hash": "0xtx0", "amount": "1000", "block_num": 82, "block_pos": 0,
+            "block_timestamp": 0, "bridge_hash": "0xhash", "deposit_count": 0,
+            "destination_address": "0xdest", "destination_network": 1,
+            "global_index": 18446744073709551616, "leaf_type": 0, "metadata": "0x",
+            "origin_address": "0xorigin", "origin_network": 0, "to_address": "0xdest",
+            "txn_sender": "0xsender" },
+          "bridge_network_id": 0, "claimed": "false",
+          "creation_timestamp": 0, "last_updated_timestamp": 0
+        },
+        {
+          "bridge": { "tx_hash": "0xtx1", "amount": "1000", "block_num": 199, "block_pos": 0,
+            "block_timestamp": 0, "bridge_hash": "0xhash", "deposit_count": 1,
+            "destination_address": "0xdest", "destination_network": 1,
+            "global_index": 18446744073709551617, "leaf_type": 0, "metadata": "0x",
+            "origin_address": "0xorigin", "origin_network": 0, "to_address": "0xdest",
+            "txn_sender": "0xsender" },
+          "bridge_network_id": 0, "claimed": "false",
+          "creation_timestamp": 0, "last_updated_timestamp": 0
+        }
+      ]
+    }`;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, text: () => Promise.resolve(wire) })
+    );
+
+    const result = await fetchActivity({ baseUrl: 'https://proxy.example', fromAddress: '0xabc' });
+
+    expect(result.transactions.map((tx) => tx.globalIndex)).toEqual([
+      '18446744073709551616',
+      '18446744073709551617'
     ]);
   });
 
@@ -260,5 +400,50 @@ describe('fetchActivity', () => {
     await expect(
       fetchActivity({ baseUrl: 'https://proxy.example', fromAddress: 'not-an-address' })
     ).rejects.toThrow('invalid from_address');
+  });
+});
+
+describe('quotePrecisionUnsafeIntegers', () => {
+  it('quotes an integer no double can hold exactly, so its digits survive JSON.parse', () => {
+    // The live rc8 devnet value for an L1-origin deposit with deposit_count 1.
+    const wire = '{"global_index":18446744073709551617}';
+
+    expect(quotePrecisionUnsafeIntegers(wire)).toBe('{"global_index":"18446744073709551617"}');
+    expect(JSON.parse(quotePrecisionUnsafeIntegers(wire)).global_index).toBe(
+      '18446744073709551617'
+    );
+    // ...which a plain parse cannot do: it lands on 2^64, losing exactly the
+    // deposit_count that distinguishes consecutive L1 deposits.
+    expect(BigInt(JSON.parse(wire).global_index)).toBe(BigInt(2) ** BigInt(64));
+  });
+
+  it('leaves safely representable numbers, floats, exponents and negatives as sent', () => {
+    const wire = '{"a":0,"b":-12,"c":9007199254740991,"d":1.5,"e":-2.5e-3,"f":[1,2,3]}';
+
+    expect(quotePrecisionUnsafeIntegers(wire)).toBe(wire);
+  });
+
+  it('does not touch digits inside string values', () => {
+    // A real `warnings[].message`: a naive `": <digits>"` regex would rewrite
+    // the port here, corrupting the message.
+    const wire =
+      '{"warnings":[{"network_id":84,"message":"dial tcp 34.147.196.6:5577 12345678901234567890: no route"}]}';
+
+    expect(quotePrecisionUnsafeIntegers(wire)).toBe(wire);
+  });
+
+  it('passes an already-quoted large value straight through', () => {
+    const wire = '{"global_index":"18446744073709551617"}';
+
+    expect(quotePrecisionUnsafeIntegers(wire)).toBe(wire);
+  });
+
+  it('is not fooled by an escaped quote inside a string', () => {
+    const wire =
+      '{"message":"he said \\"12345678901234567890\\"","global_index":18446744073709551617}';
+
+    expect(quotePrecisionUnsafeIntegers(wire)).toBe(
+      '{"message":"he said \\"12345678901234567890\\"","global_index":"18446744073709551617"}'
+    );
   });
 });

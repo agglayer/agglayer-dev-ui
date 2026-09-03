@@ -3,6 +3,7 @@ import type { ConsoleMessage, Page, Request, Response } from '@playwright/test';
 import {
   E2E_BACKEND_MODE,
   E2E_BRIDGE_SUCCESS_TIMEOUT_MS,
+  E2E_CLAIM_TIMEOUT_MS,
   E2E_FROM_CHAIN_ID,
   E2E_NATIVE_BRIDGE_AMOUNT,
   E2E_TO_CHAIN_ID
@@ -216,7 +217,12 @@ const formatUnexpected = (issues: CapturedIssue[]): string =>
 test('core journey produces no console errors/warnings outside the documented allowlist', async ({
   page
 }) => {
-  test.setTimeout(E2E_BRIDGE_SUCCESS_TIMEOUT_MS + 60_000);
+  // Budget covers the bridge send itself (E2E_BRIDGE_SUCCESS_TIMEOUT_MS) plus
+  // the tracker-bar wait below (up to E2E_CLAIM_TIMEOUT_MS -- the tracker needs
+  // its own poll cycle(s) to resolve all_steps, same budget tracker.spec.ts
+  // uses for the equivalent wait), plus headroom for everything else in the
+  // journey (connect, fill, submit, navigate, the modal open/close).
+  test.setTimeout(E2E_BRIDGE_SUCCESS_TIMEOUT_MS + E2E_CLAIM_TIMEOUT_MS + 60_000);
 
   const { consoleIssues, networkIssues, detach } = attachCollectors(page);
   const bridgePage = new BridgePage({ page });
@@ -225,10 +231,14 @@ test('core journey produces no console errors/warnings outside the documented al
     // load -> connect -> transactions page -> open/close details modal.
     // A quick native bridge guarantees a transaction row exists (rather than
     // depending on whatever history the shared E2E wallet happens to already
-    // have on the live enclave), and its still-pending status keeps
-    // TrackerDetail mounted when the modal opens (transactionDetailsModal.tsx
-    // only mounts it while status !== 'CLAIMED') -- exercising that
-    // component's console behavior too, not just the row list's.
+    // have on the live enclave). transactionDetailsModal.tsx only mounts
+    // TrackerDetail directly while status !== 'CLAIMED'; with rc8's activity
+    // endpoint live and autoclaim actually running, this deposit can reach
+    // CLAIMED before the modal is opened, in which case the modal shows a
+    // "Show bridge steps" button instead and only mounts TrackerDetail
+    // (onDemand) once that's clicked. BridgePage.revealTrackerDetail handles
+    // both branches -- either way this exercises TrackerDetail's console
+    // behavior too, not just the row list's.
     await bridgePage.navigate();
     await bridgePage.connectWallet();
     await bridgePage.selectChainPair(E2E_FROM_CHAIN_ID, E2E_TO_CHAIN_ID);
@@ -248,7 +258,54 @@ test('core journey produces no console errors/warnings outside the documented al
     await bridgePage.bridgeSuccessCta.click();
     await expect(bridgePage.getTransactionRow(transactionHash)).toBeVisible();
 
+    // trackerDetail.tsx's LIVE path renders nothing at all until
+    // useBridgeTracking's first poll resolves `all_steps` for this
+    // freshly-submitted deposit (see its own top comment: "the brief window
+    // before the tracker has registered a freshly-sent bridge"). Opening the
+    // modal immediately after the row appears can race that first poll and
+    // find no tracker-detail node -- tracker.spec.ts avoids this by waiting
+    // for the row's own tracker-progress bar (backed by the same
+    // useBridgeTracking query/cache key) first. Mirror that wait here rather
+    // than opening the modal blind.
+    //
+    // The predicate also accepts the row already reading "Completed"
+    // (CLAIMED): with rc8's autoclaim actually running, a deposit can settle
+    // fast enough that the bar (which never renders for a CLAIMED row) has
+    // no window to appear in at all between 5s polls. That's fine -- once
+    // CLAIMED, BridgePage.revealTrackerDetail reaches TrackerDetail through
+    // the "Show bridge steps" on-demand path instead, which doesn't depend
+    // on this wait's cache-warming rationale.
+    await expect
+      .poll(
+        async () => {
+          await bridgePage.refreshActivity();
+          const [barVisible, isCompleted] = await Promise.all([
+            bridgePage
+              .getTrackerBar(transactionHash)
+              .isVisible()
+              .catch(() => false),
+            bridgePage
+              .getTransactionRow(transactionHash)
+              .getByText('Completed')
+              .isVisible()
+              .catch(() => false)
+          ]);
+          return barVisible || isCompleted;
+        },
+        {
+          message:
+            'Waiting for the tracker bar to render (or the row to reach Completed) before opening transaction details',
+          timeout: E2E_CLAIM_TIMEOUT_MS,
+          intervals: [5_000]
+        }
+      )
+      .toBe(true);
+
     await bridgePage.openTransactionDetails(transactionHash);
+    // See BridgePage.revealTrackerDetail: reaches TrackerDetail whether the
+    // modal mounted it directly (still-pending) or via the CLAIMED-only
+    // "Show bridge steps" button.
+    await bridgePage.revealTrackerDetail();
     await expect(bridgePage.trackerDetail).toBeVisible();
 
     await bridgePage.closeTransactionDetailsModal();

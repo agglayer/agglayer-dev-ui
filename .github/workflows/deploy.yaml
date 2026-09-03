@@ -32,6 +32,25 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm run validate:config
+
+      # A missing/empty NEXT_PUBLIC_AGGKIT_PROXY does not fail the build:
+      # app/config.ts's resolveAggkitProxyOverride() treats an empty value as
+      # "no override" and silently falls back to config.json's baked-in
+      # aggkitProxy for the default app mode, which is a literal
+      # "https://PLACEHOLDER-<mode>-aggkit-proxy" URL for mainnet/testnet.
+      # Left unguarded, `wrangler deploy` below would exit 0 and ship a live
+      # build that talks to a placeholder host -- a "successful" deploy that
+      # is actually broken. Fail loudly here, before the deploy step runs.
+      - name: Assert NEXT_PUBLIC_AGGKIT_PROXY secret is set
+        env:
+          NEXT_PUBLIC_AGGKIT_PROXY: ${{ secrets.NEXT_PUBLIC_AGGKIT_PROXY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${NEXT_PUBLIC_AGGKIT_PROXY:-}" ]; then
+            echo "::error::NEXT_PUBLIC_AGGKIT_PROXY secret is empty -- refusing to deploy. This build-time env var overrides config.json's aggkitProxy (see app/config.ts's resolveAggkitProxyOverride); left unset, the deployed build would silently fall back to config.json's placeholder aggkitProxy URL instead of a real endpoint. Set the NEXT_PUBLIC_AGGKIT_PROXY secret for the production environment before re-running this workflow." >&2
+            exit 1
+          fi
+
       - run: pnpm exec wrangler deploy --env production
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_WORKER_ACCOUNT_ID }}

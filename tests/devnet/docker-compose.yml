@@ -1,13 +1,13 @@
 # Self-contained devnet snapshot -- flavor: anvil-aggkit
 #
 # Vendored from 0xPolygon/kurtosis-cdk (branch feat/aggkit-bridge-ui-backend)
-# @ fc160450b55e64332436f11c091c61130c64030f. See ./README.md for the full
+# @ b119c76e56bd53f73f2d0da1647ff7b148b74183. See ./README.md for the full
 # regenerate-and-bump procedure -- do not hand-edit an image reference below
 # without following it (E2E_ERC20_ADDRESS in .github/workflows/e2e.yaml is
 # nonce-dependent per snapshot and MUST be bumped in lockstep if it changes).
 #
 # Publish run this bundle came from:
-# https://github.com/0xPolygon/kurtosis-cdk/actions/runs/31787941750
+# https://github.com/0xPolygon/kurtosis-cdk/actions/runs/33641646153
 #
 # Enclave: cdk
 #
@@ -37,7 +37,7 @@
 
 services:
   anvil-001:
-    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-anvil-001@sha256:006932fc49ce501c8d6f8c3f4ac3b5873ec14b59b101b4f4e9db02b169e6c0c9 # v1.5.1-1786700247
+    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-anvil-001@sha256:cfbba3fcb53185f6c6fa9f15289bae267b74e639821262cd0626fc9d3c6cfe40 # v1.5.1-1788360503
     hostname: anvil-001
     ports:
       - '${L1_RPC_PORT:-8545}:8545' # L1 JSON-RPC (debug)
@@ -50,7 +50,7 @@ services:
       start_period: 5s
 
   l2-anvil-001:
-    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-l2-anvil-001@sha256:e9bbeb7f9a76a4ea725f194059c6b23d49c65e89a8a00241d6df3b687c8ccbb8 # v1.5.1-1786700247
+    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-l2-anvil-001@sha256:08a6a589f96f5a72e0a05170f730f49facd3e9a6aaf413a0d50900d4f1a887da # v1.5.1-1788360503
     hostname: l2-anvil-001
     ports:
       - '${L2_001_HTTP_PORT:-11545}:8545' # L2 chain 20201 JSON-RPC (debug)
@@ -63,7 +63,7 @@ services:
       start_period: 5s
 
   l2-anvil-002:
-    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-l2-anvil-002@sha256:3555d50518f6f72d5811edd759293ba205ac192c04192695afc046c2cb595ef0 # v1.5.1-1786700247
+    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-l2-anvil-002@sha256:731e672f4900a2f2f3fbced47b32972e2af89899a4070279d7cd463e7b4aac66 # v1.5.1-1788360503
     hostname: l2-anvil-002
     ports:
       - '${L2_002_HTTP_PORT:-12545}:8545' # L2 chain 20202 JSON-RPC (debug)
@@ -76,7 +76,7 @@ services:
       start_period: 5s
 
   agglayer:
-    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-agglayer@sha256:5a47d3778657ba618ff7dfc99dfd55a3863097d5fff4f960a0740d4d0ae80073 # 0.6.0-rc.8-1786700247
+    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-agglayer@sha256:ceb548438d50f022475ed35056c9ccda0c58ec0242035a12cb5ff1354e843279 # 0.6.0-rc.8-1788360503
     hostname: agglayer
     entrypoint: ['/usr/local/bin/agglayer']
     command: ['run', '--cfg', '/etc/agglayer/config.toml']
@@ -116,7 +116,7 @@ services:
       start_period: 10s
 
   aggkit-001:
-    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-aggkit-001@sha256:6497f44d1a81a8f5a00b2a8d719103b8c1b8200c5eb6e2ff5083d33e9431f982 # 0.11.0-rc5-1786700247
+    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-aggkit-001@sha256:4a981cc5fca3a2d281ed6c9ff4aef9c5ccf48f509086c06c422ce810808a8a44 # 0.11.0-rc8-1788360503
     hostname: aggkit-001
     entrypoint: ['/usr/local/bin/aggkit']
     command:
@@ -140,7 +140,7 @@ services:
       start_period: 10s
 
   aggkit-002:
-    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-aggkit-002@sha256:aa93b661b6fe8e26fe06633d6e00398090a7f1d4b455cc26f8f75ce4e301bb88 # 0.11.0-rc5-1786700247
+    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-aggkit-002@sha256:9b002f96acebfbe46e95b98283be54a10dc67fd5bfdfffd2eff58df3ae5dc348 # 0.11.0-rc8-1788360503
     hostname: aggkit-002
     entrypoint: ['/usr/local/bin/aggkit']
     command:
@@ -164,7 +164,7 @@ services:
       start_period: 10s
 
   aggkit-proxy-001:
-    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-aggkit-proxy-001@sha256:cd5209a27d5bb2b03bca8fe8e1cf7923381e4eadaf00108162a0523d4fcefc8c # 0.11.0-rc5-1786700247
+    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-aggkit-proxy-001@sha256:dfc9019cda81f86e3996984b8f030610db13484d1401371100b1a1efb04b9775 # 0.11.0-rc8-1788360503
     hostname: aggkit-proxy-001
     entrypoint: ['/usr/local/bin/aggkit-proxy']
     command: ['run', '--cfg=/etc/aggkit-proxy/config.toml', '--components=proxy,tracker']
@@ -186,7 +186,7 @@ services:
       start_period: 10s
 
   agglayer-dev-ui-002:
-    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-agglayer-dev-ui-002@sha256:3961d9fab267d64a6115464dc6513238fd705a8cc8fa826ca8ba31d65de7629e # dispatch-feat-aggkit-backend-8563dd4ba87-1786700247
+    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-agglayer-dev-ui-002@sha256:233cb48d67fc6d9760bd059cd221100315a092b9ee75f7e91f183b67769e0f77 # dispatch-feat-aggkit-backend-8563dd4ba87-1788360503
     hostname: agglayer-dev-ui-002
     # NOT started by a plain `docker compose up` / `up -d --wait` -- CI never
     # uses this container (only bare `/` through haproxy's default_backend
@@ -204,7 +204,7 @@ services:
       start_period: 5s
 
   agglayer-dev-ui-proxy-002:
-    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-agglayer-dev-ui-proxy-002@sha256:310e3b235599ac25687f9bf1a0b9458705472fd9ca993447663d647866a83332 # 3.2-bookworm-1786700247
+    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-agglayer-dev-ui-proxy-002@sha256:215f07b29e3da1cf9a4838eeadbd855932ab524bc665b4c1f3470c30da8ab639 # 3.2-bookworm-1788360503
     hostname: agglayer-dev-ui-proxy-002
     ports:
       - '${DEVNET_PROXY_PORT:-8555}:80' # THE dev-ui CI origin

@@ -7,34 +7,6 @@
 #
 # Build from the repo root, identically locally and in CI:
 #   docker build -t agglayer-dev-ui .
-#
-# Locally, .sdk-src/ must be populated first (see scripts/stage-sdk-src.sh
-# and plans/dev-ui-docker-ghcr/d2-adr-dependency-strategy.md §4.1):
-#   scripts/stage-sdk-src.sh
-#   docker build -t agglayer-dev-ui .
-
-# =============================================================================
-# Stage: sdk-builder
-# TEMPORARY -- remove per plans/dev-ui-docker-ghcr/d2-adr-dependency-strategy.md §5
-#
-# @agglayer/sdk's aggkit bridge APIs are not published yet (dev-ui's
-# pnpm-workspace.yaml overrides '@agglayer/sdk' to 'file:../sdk'). This stage
-# builds the sdk from tracked source staged at .sdk-src/ (git-archive'd from a
-# sibling checkout locally, or a second actions/checkout in CI -- see the ADR)
-# so that `pnpm install --frozen-lockfile` in the app-builder stage below can
-# resolve that file: override without any sibling directory existing on the
-# host/runner. Retire this stage entirely once a published @agglayer/sdk
-# version above 1.0.0-beta.30 carries the aggkit APIs (ADR §5).
-# =============================================================================
-FROM oven/bun:1 AS sdk-builder
-
-WORKDIR /sdk
-COPY .sdk-src/ ./
-# Same reason as the app-builder stage below: agglayer/sdk also declares a
-# husky `prepare` script. Set here too so this stage behaves identically
-# whether or not a .git happened to reach the context.
-ENV HUSKY=0
-RUN bun install --frozen-lockfile && bun run build
 
 # =============================================================================
 # Stage: app-builder
@@ -45,12 +17,6 @@ FROM node:24-slim AS app-builder
 # .nvmrc / package.json engines.node -- do not mirror whatever Node version
 # happens to run the local shell.
 RUN corepack enable && corepack prepare pnpm@10.30.3 --activate
-
-# TEMPORARY -- remove per plans/dev-ui-docker-ghcr/d2-adr-dependency-strategy.md §5
-# Container-side path /sdk is the load-bearing invariant: pnpm resolves the
-# pnpm-workspace.yaml `'@agglayer/sdk': 'file:../sdk'` override relative to
-# WORKDIR (/app below), so the built sdk must land one level up, at /sdk.
-COPY --from=sdk-builder /sdk /sdk
 
 WORKDIR /app
 
@@ -65,17 +31,6 @@ ENV HUSKY=0
 RUN pnpm install --frozen-lockfile
 
 COPY . .
-
-# TEMPORARY -- remove per plans/dev-ui-docker-ghcr/d2-adr-dependency-strategy.md §5
-# Records which unreleased @agglayer/sdk commit is embedded in this image, so
-# a published digest is self-describing. Fed via --build-arg SDK_REF=<sha>:
-# in CI (W-1), the pinned SDK_REF workflow env; locally, the SHA printed by
-# scripts/stage-sdk-src.sh. Declared here (not just in the runtime stage)
-# purely for documentation proximity to the sdk-builder stage; the LABEL
-# instruction that actually stamps the final image lives in the runtime
-# stage below, since labels on intermediate build stages are not carried
-# into the final image.
-ARG SDK_REF=unknown
 
 # A-1 §6.3(a) binding constraint: the builder must NOT set or forward
 # NEXT_PUBLIC_AGGKIT_PROXY. It is a build-time-only affordance for local dev /
@@ -97,10 +52,6 @@ RUN pnpm run build:production
 # Stage: runtime
 # =============================================================================
 FROM nginx:alpine AS runtime
-
-# TEMPORARY -- remove per plans/dev-ui-docker-ghcr/d2-adr-dependency-strategy.md §5
-ARG SDK_REF=unknown
-LABEL org.agglayer.sdk.revision="${SDK_REF}"
 
 # jq is used by entrypoint.sh for a structural (non-schema) validation check
 # of a mounted config.json. This runtime image has no Node, so the app's own

@@ -75,9 +75,27 @@ export const TransactionListItem = ({
 
   const formattedAmount = formatTransactionAmount(transaction.amount, decimals);
 
+  // The row itself is keyboard-activatable (role="button" + tabIndex), but it
+  // also contains real <button>s (Copy / Claim / explorer links) -- nesting a
+  // <button> inside a <button> is invalid HTML, so this stays a div. Enter and
+  // Space on a native button both dispatch a click, which bubbles here and
+  // would double-fire onSelect; the nested buttons already stopPropagation()
+  // on click to prevent that, and the target check below skips onKeyDown
+  // whenever the keydown bubbled up from one of those descendants rather than
+  // the row div itself.
+  const handleRowKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.target !== event.currentTarget) return;
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    onSelect?.(transaction);
+  };
+
   return (
     <div
       onClick={() => onSelect?.(transaction)}
+      onKeyDown={handleRowKeyDown}
+      role="button"
+      tabIndex={0}
       data-test-id={`transaction-row-${transaction.transactionHash}`}
       className={cn(
         'rounded-2xl border border-border bg-surface shadow-sm transition hover:border-blue hover:shadow-md cursor-pointer'

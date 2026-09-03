@@ -5,6 +5,7 @@ import type { ClaimFailedStep } from '@/app/types/transaction';
 import { Button } from '@/app/components/ui/button';
 import { Modal } from '@/app/components/ui/modal';
 import { getExternalLinks } from '@/app/config';
+import { isUserRejectionMessage } from '@/app/utils/walletErrors';
 import { CircleCheck, CircleX, ExternalLink, Info } from 'lucide-react';
 import Link from 'next/link';
 
@@ -34,16 +35,6 @@ const CLAIM_FAILED_STEP_LABELS: Record<ClaimFailedStep, string> = {
   'confirming-transaction': 'Confirming the claim transaction'
 };
 
-const isUserRejection = (message?: string): boolean => {
-  if (!message) return false;
-  const lowerMessage = message.toLowerCase();
-  return (
-    lowerMessage.includes('rejected') ||
-    lowerMessage.includes('denied') ||
-    lowerMessage.includes('user refused')
-  );
-};
-
 // useClaimExecution sets this exact message when its own pre-flight
 // `bridge.isClaimed()` check (not a thrown exception) finds the deposit
 // already settled -- e.g. raced by an external autoclaimer between the row
@@ -67,7 +58,7 @@ export const ClaimResultModal = ({
   if (!status) return null;
 
   const txExplorerUrl = explorerUrl && claimTxHash ? `${explorerUrl}/tx/${claimTxHash}` : undefined;
-  const userRejected = isUserRejection(errorMessage);
+  const userRejected = isUserRejectionMessage(errorMessage);
   const alreadyClaimed = isAlreadyClaimed(errorMessage);
   const supportUrl = getExternalLinks().CONTACT_SUPPORT;
   const hasSupportUrl = !!supportUrl?.trim();

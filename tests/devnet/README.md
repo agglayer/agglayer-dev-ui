@@ -13,10 +13,28 @@ at `anvil-devui-snapshot.md`; a stub remains at the old path redirecting
 here.)
 
 This directory contains two files taken from that workflow's published
-artifact (plus this README). Both are **byte-identical** to what the
-publish run produced -- unlike the v1 bundle, `docker-compose.yml` needs no
-local edit, because the artifact itself is already pinned at the published
-GHCR digests (see "Tag scheme" below).
+artifact (plus this README). They are **semantically verbatim, not literally
+byte-identical**: step 4 of "Regenerating the bundle" below is the
+authoritative method (copy the artifact over, then adjust only what follows),
+and the three adaptations it leaves behind are all non-semantic.
+
+- **A vendoring provenance header** prepended to `docker-compose.yml`: the
+  kurtosis-cdk branch and commit it came from, the publish-run URL, and a
+  pointer back at this README. Comments only -- nothing Docker resolves.
+- **Prettier formatting.** `tests/devnet/*.{yml,json}` are not in
+  `.prettierignore`, so the repo's pre-commit hook (`.lintstagedrc.js` runs
+  `prettier --write` over `*.{json,yaml,yml}`) normalizes whitespace and
+  quoting on the way in. It is idempotent, so this never drifts.
+- **Kurtosis-internal ticket references normalized out** of the copied
+  comments -- they point at trackers a reader of this repo cannot open.
+
+Everything that carries meaning IS verbatim: every `image:` digest, every
+service definition, port, environment variable and healthcheck, and every
+`summary.json` field. Unlike the v1 bundle there is also no "repoint the
+compose defaults at the published tag" edit, because the artifact itself is
+already pinned at the published GHCR digests (see "Tag scheme" below). A
+`git diff` against a freshly downloaded artifact should show only the three
+categories above -- anything else is a hand-edit, and a bug.
 
 - `docker-compose.yml` — self-contained (no bind mounts, no volumes); every
   service's chain state, config and keystores are baked into its image.
@@ -63,7 +81,7 @@ The `@sha256:<digest>` is what Docker actually resolves — immutable, and
 independently re-verifiable (`docker buildx imagetools inspect
 ghcr.io/0xpolygon/kurtosis-cdk-snapshot-<service>@sha256:<digest>`). The
 trailing `# <component-version>-<unix-ts>` comment (e.g.
-`0.11.0-rc5-1786700247`) is a human-readable tag carrying the same digest —
+`0.11.0-rc8-1788360503`) is a human-readable tag carrying the same digest —
 provenance for a reader, not something Docker resolves. Re-running
 kurtosis-cdk's publish workflow can never silently move what this file
 pulls, unlike the old `snapshot-<sha>` tag scheme (a tag containing a commit
@@ -117,7 +135,10 @@ under you and breaks the "pin exact versions in CI" contract).
    ```
 
 4. **Copy the two files into this directory, verbatim, overwriting what's
-   here** — no `sed`, no hand-editing image references:
+   here** — no `sed`, no hand-editing image references. (Committing then
+   applies the two non-semantic adaptations described at the top of this
+   file: you re-add the provenance header by hand, and the pre-commit hook
+   reformats both files with prettier.)
 
    ```bash
    cp /tmp/devui-snapshot/docker-compose.yml tests/devnet/docker-compose.yml
@@ -125,7 +146,7 @@ under you and breaks the "pin exact versions in CI" contract).
    ```
 
    Then update this file's header-comment provenance line (the
-   `fc160450b55e64332436f11c091c61130c64030f` / publish-run-URL pair at the
+   `b119c76e56bd53f73f2d0da1647ff7b148b74183` / publish-run-URL pair at the
    top of `docker-compose.yml`) to match the new run, and re-confirm every
    `image:` line resolves to `ghcr.io/0xpolygon/kurtosis-cdk-snapshot-<service>@sha256:<digest>`:
 
