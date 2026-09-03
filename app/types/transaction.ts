@@ -33,6 +33,12 @@ export interface Transaction {
   claimTimestamp?: number;
   claimBlockNumber?: number;
   blockNumber: number;
+  // aggkit's authoritative per-bridge index, as its exact decimal digits --
+  // a string, never a number: L1-origin deposits are 2^64 + deposit_count,
+  // past what a double can represent (see app/services/activity.ts's
+  // parseActivityResponse). Optional only for the synthetic pending rows the
+  // app builds itself; every row from the wire carries it, and
+  // buildClaimAssetParams refuses to build a claim without it.
   globalIndex?: string;
   originTokenAddress: string;
   originTokenNetwork: number;

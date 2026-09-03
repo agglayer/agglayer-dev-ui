@@ -1,7 +1,8 @@
 import type { ClaimProof } from '@/app/services/claimProof';
 import type { Transaction } from '@/app/types/transaction';
 
-import { describe, expect, it } from 'vitest';
+import { fetchActivity } from '@/app/services/activity';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { buildClaimAssetParams } from './transaction';
 
@@ -99,5 +100,93 @@ describe('buildClaimAssetParams — globalIndex parity with the old client-side 
     expect(() => buildClaimAssetParams({ transaction, proof: claimProof })).toThrow(
       'Transaction is missing globalIndex'
     );
+  });
+});
+
+// One trimmed row exactly as the aggkit rc8 devnet activity endpoint sends it
+// for an L1-origin deposit: `global_index` is a bare JSON *number*, and its
+// value is 2^64 + deposit_count. Written as raw text (not an object literal
+// run through JSON.stringify) because the whole point is the digits on the
+// wire -- a JS number literal here would already have lost them.
+const L1_ORIGIN_WIRE_RESPONSE = `{
+  "from_address": [],
+  "bridges": [
+    {
+      "bridge": {
+        "tx_hash": "0xdeposit",
+        "amount": "1000",
+        "block_num": 199,
+        "block_pos": 0,
+        "block_timestamp": 0,
+        "bridge_hash": "0xhash",
+        "deposit_count": 1,
+        "destination_address": "0x2",
+        "destination_network": 1,
+        "global_index": 18446744073709551617,
+        "leaf_type": 0,
+        "metadata": "0x",
+        "origin_address": "0x0000000000000000000000000000000000000000",
+        "origin_network": 0,
+        "to_address": "0x2",
+        "txn_sender": "0x1"
+      },
+      "bridge_network_id": 0,
+      "claimed": "false",
+      "creation_timestamp": 0,
+      "last_updated_timestamp": 0
+    }
+  ]
+}`;
+
+// The parity tests above hand buildClaimAssetParams an already-exact decimal
+// string, so they cannot see the failure mode C13 actually shipped: the
+// activity endpoint sends `global_index` as a bare JSON *number*, and an
+// L1-origin deposit's value is 2^64 + deposit_count -- past IEEE-754 integer
+// precision. Read with `response.json()` it rounded to a flat 2^64, so every
+// manual claim of an L1-origin deposit with deposit_count > 0 was built with a
+// globalIndex short by exactly deposit_count. This exercises the real path --
+// wire text -> fetchActivity -> toTransaction -> buildClaimAssetParams -- and
+// asserts the exact index survives all of it.
+describe('buildClaimAssetParams — globalIndex precision from the wire (C13)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('builds the claim with the exact 2^64 + deposit_count index, not the rounded double', async () => {
+    const depositCount = 1;
+    const exact = BigInt('18446744073709551617');
+    const roundedByDouble = BigInt(2) ** BigInt(64); // 18446744073709551616
+    // Same value the old client-side derivation would have produced, i.e.
+    // this is still the parity check -- just carried over the real wire.
+    expect(exact).toBe(oldComputeGlobalIndex(depositCount, 0));
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        text: () => Promise.resolve(L1_ORIGIN_WIRE_RESPONSE),
+        // Deliberately also stubbed: the pre-fix fetchActivity read the body
+        // with response.json(), which rounds. Keeping json() here means this
+        // test keeps FAILING (rather than erroring on a missing mock method)
+        // if the parse ever regresses back to it -- it is part of the guard,
+        // not an incidental stub detail.
+        json: () => Promise.resolve(JSON.parse(L1_ORIGIN_WIRE_RESPONSE))
+      })
+    );
+
+    const { transactions } = await fetchActivity({
+      baseUrl: 'https://proxy.example',
+      fromAddress: '0x1'
+    });
+    const [transaction] = transactions;
+
+    expect(transaction.depositCount).toBe(depositCount);
+    expect(transaction.sourceNetwork).toBe(0);
+    expect(transaction.globalIndex).toBe('18446744073709551617');
+
+    const params = buildClaimAssetParams({ transaction, proof: claimProof });
+
+    expect(params.globalIndex).toBe(exact);
+    expect(params.globalIndex).not.toBe(roundedByDouble);
   });
 });

@@ -52,17 +52,19 @@ const mockFetchOk = (bridges: unknown[]) =>
     'fetch',
     vi.fn().mockResolvedValue({
       ok: true,
-      json: () =>
-        Promise.resolve({
-          from_address: [],
-          bridges: bridges.map((bridge) => ({
-            bridge,
-            bridge_network_id: 0,
-            claimed: 'false',
-            creation_timestamp: 0,
-            last_updated_timestamp: 0
-          }))
-        })
+      text: () =>
+        Promise.resolve(
+          JSON.stringify({
+            from_address: [],
+            bridges: bridges.map((bridge) => ({
+              bridge,
+              bridge_network_id: 0,
+              claimed: 'false',
+              creation_timestamp: 0,
+              last_updated_timestamp: 0
+            }))
+          })
+        )
     })
   );
 
@@ -191,7 +193,7 @@ describe('useTransactions -- activity queryKey parity with useReadyToClaimCount'
   it('dedupes into a single fetch when mounted together with different chainIds but the same mode/address', async () => {
     const fetchSpy = vi.fn().mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve({ from_address: [], bridges: [] })
+      text: () => Promise.resolve(JSON.stringify({ from_address: [], bridges: [] }))
     });
     vi.stubGlobal('fetch', fetchSpy);
 
