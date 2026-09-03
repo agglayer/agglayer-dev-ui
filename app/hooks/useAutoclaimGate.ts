@@ -34,15 +34,19 @@ export const useAutoclaimGate = (transaction: Transaction): AutoclaimGate => {
     // whether it was auto-claimed or claimed manually, its readyAt entry is
     // done and can be evicted rather than lingering until it ages out.
     if (transaction.status === 'CLAIMED') {
-      evictReadyAt(mode, transaction.bridgeHash);
+      evictReadyAt(mode, transaction.hubUID);
     }
     if (!active) {
       setReadyAt(null);
       return;
     }
-    setReadyAt(recordReadyAt(mode, transaction.bridgeHash, Date.now()));
+    // hubUID, not bridgeHash: bridge_hash is a content hash shared by every
+    // deposit of the same amount to the same receiver, so keying the grace
+    // window on it made sibling deposits share (and evict) one entry -- see
+    // app/utils/autoclaim.ts's getReadyAt.
+    setReadyAt(recordReadyAt(mode, transaction.hubUID, Date.now()));
     setNow(Date.now());
-  }, [active, mode, transaction.bridgeHash, transaction.status]);
+  }, [active, mode, transaction.hubUID, transaction.status]);
 
   useEffect(() => {
     if (!active || readyAt === null) return;

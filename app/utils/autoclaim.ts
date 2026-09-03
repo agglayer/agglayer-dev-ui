@@ -44,7 +44,7 @@ const readReadyAtMap = (mode: AppMode): ReadyAtMap =>
 
 // Upper bound on how long a readyAt entry can possibly still matter: past
 // this age every route's grace period has elapsed regardless of which route
-// the entry belongs to (the map doesn't track route, only bridgeHash), so
+// the entry belongs to (the map doesn't track route, only the row id), so
 // the gate would already read 'overdue' either way. Used to bound map growth
 // for entries whose CLAIMED status never got observed (e.g. the tab closed,
 // or the wallet changed) without needing a timer.
@@ -65,31 +65,47 @@ const pruneReadyAtMap = (mode: AppMode, map: ReadyAtMap, now: number): ReadyAtMa
   return pruned;
 };
 
-export const getReadyAt = (mode: AppMode, bridgeHash: string): number | null =>
-  pruneReadyAtMap(mode, readReadyAtMap(mode), Date.now())[bridgeHash] ?? null;
+// `transactionId` is the row's own unique per-deposit identity --
+// `Transaction.hubUID`, i.e. `tx_hash:deposit_count` (see
+// app/services/activity.ts's toHubUID). Deliberately NOT `bridgeHash`:
+// aggkit's `bridge_hash` is a CONTENT hash over the deposit's fields
+// (origin/destination network + address, amount, metadata), so every bridge
+// of the same amount to the same receiver shares one value -- 13 real
+// bridges collapsed to 5 distinct hashes on the live rc8 devnet. Keying the
+// grace window on it made sibling deposits share one entry: the second
+// deposit inherited the first's readyAt (its window read as already
+// elapsed), and evictReadyAt on either one being CLAIMED wiped the other's
+// still-live window, flipping a row back from the "Claim tokens" button to
+// the "waiting for auto claim" hint.
+export const getReadyAt = (mode: AppMode, transactionId: string): number | null =>
+  pruneReadyAtMap(mode, readReadyAtMap(mode), Date.now())[transactionId] ?? null;
 
 // Records `timestampMs` as the first-observed READY_TO_CLAIM time for
-// `bridgeHash` if none is stored yet, and returns the effective (existing or
-// newly-stored) value so the grace period is stable across refreshes. Keyed
-// per app mode (see STORAGE_KEYS.AUTOCLAIM_READY_AT) so the same bridgeHash
-// in two different modes (e.g. devnet re-using a hash already seen on
-// testnet) never collides.
-export const recordReadyAt = (mode: AppMode, bridgeHash: string, timestampMs: number): number => {
+// `transactionId` if none is stored yet, and returns the effective (existing
+// or newly-stored) value so the grace period is stable across refreshes.
+// Keyed per app mode (see STORAGE_KEYS.AUTOCLAIM_READY_AT) so the same row id
+// in two different modes (e.g. devnet replaying a tx hash already seen on a
+// previous enclave run) never collides.
+export const recordReadyAt = (
+  mode: AppMode,
+  transactionId: string,
+  timestampMs: number
+): number => {
   const map = pruneReadyAtMap(mode, readReadyAtMap(mode), timestampMs);
-  const existing = map[bridgeHash];
+  const existing = map[transactionId];
   if (existing !== undefined) return existing;
-  map[bridgeHash] = timestampMs;
+  map[transactionId] = timestampMs;
   StorageUtils.setItem(STORAGE_KEYS.AUTOCLAIM_READY_AT(mode), map);
   return timestampMs;
 };
 
-// Evicts `bridgeHash` from the readyAt map once its bridge is observed
+// Evicts `transactionId` from the readyAt map once its bridge is observed
 // CLAIMED -- the grace period no longer applies, so nothing needs it. Reads
 // via getReadyAt first so a CLAIMED observation also runs the age-based
 // eviction pass above, not just this entry's removal.
-export const evictReadyAt = (mode: AppMode, bridgeHash: string): void => {
-  if (getReadyAt(mode, bridgeHash) === null) return;
+export const evictReadyAt = (mode: AppMode, transactionId: string): void => {
+  if (getReadyAt(mode, transactionId) === null) return;
   const map = readReadyAtMap(mode);
-  delete map[bridgeHash];
+  delete map[transactionId];
   StorageUtils.setItem(STORAGE_KEYS.AUTOCLAIM_READY_AT(mode), map);
 };
