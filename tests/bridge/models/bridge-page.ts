@@ -43,6 +43,7 @@ class BridgePage {
   // the transaction row that triggers it.
   readonly trackerDetail: Locator;
   readonly closeModalButton: Locator;
+  readonly showTrackerDetailButton: Locator;
 
   constructor({ page }: { page: Page }) {
     this.page = page;
@@ -64,6 +65,7 @@ class BridgePage {
     this.toChainSelector = page.getByTestId('to-chain-selector');
     this.trackerDetail = page.getByTestId('tracker-detail');
     this.closeModalButton = page.getByRole('button', { name: 'Close modal' });
+    this.showTrackerDetailButton = page.getByTestId('show-tracker-detail-button');
   }
 
   async navigate(): Promise<void> {
@@ -211,6 +213,25 @@ class BridgePage {
 
   async closeTransactionDetailsModal(): Promise<void> {
     await this.closeModalButton.click();
+  }
+
+  // transactionDetailsModal.tsx mounts TrackerDetail directly while
+  // tx.status !== 'CLAIMED', but once a row has reached CLAIMED it instead
+  // renders a "Show bridge steps" button (`show-tracker-detail-button`) and
+  // only mounts TrackerDetail (onDemand) after that button is clicked. Which
+  // branch fires depends on how far the deposit got before the modal was
+  // opened, so callers that just want TrackerDetail mounted -- regardless of
+  // status -- should call this right after openTransactionDetails instead of
+  // asserting on trackerDetail directly.
+  async revealTrackerDetail(): Promise<void> {
+    await Promise.race([
+      this.trackerDetail.waitFor({ state: 'visible' }),
+      this.showTrackerDetailButton.waitFor({ state: 'visible' })
+    ]);
+    if (await this.showTrackerDetailButton.isVisible().catch(() => false)) {
+      await this.showTrackerDetailButton.click();
+    }
+    await this.trackerDetail.waitFor({ state: 'visible' });
   }
 
   getTrackerDetailStep(index: number): Locator {
