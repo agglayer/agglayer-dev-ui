@@ -5,13 +5,20 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Mirrors useReadyToClaimCount.test.tsx's setup: mocks appMode and stubs
-// `fetch` directly rather than the SDK, since fetchActivity is a plain fetch
-// call (see app/services/activity.ts).
+import type { AggkitBridgeAggregator } from '@agglayer/sdk';
+
+// Mirrors useReadyToClaimCount.test.tsx's setup: mocks appMode + the SDK
+// aggregator context directly (fetchActivity now goes through
+// AggkitBridgeAggregator.getActivity -- see app/services/activity.ts --
+// rather than calling fetch() itself, agglayer/sdk#30/#31).
 vi.mock('@/app/context/appMode', () => ({
   useAppMode: vi.fn()
 }));
+vi.mock('@/app/context/aggLayerSdk', () => ({
+  useAggkitAggregator: vi.fn()
+}));
 
+import { useAggkitAggregator } from '@/app/context/aggLayerSdk';
 import { useAppMode } from '@/app/context/appMode';
 import { PendingBridgesProvider, usePendingBridges } from '@/app/context/pendingBridges';
 
@@ -47,26 +54,25 @@ const rawBridge = (overrides: Partial<Record<string, unknown>> = {}) => ({
   ...overrides
 });
 
+// A SINGLE mocked `getActivity` backs every render of the hook under test
+// (see `beforeEach` below) -- reassigning `useAggkitAggregator`'s return
+// value per call would only take effect on the NEXT render, since
+// `aggregator` is captured in `useTransactions`'s closure at render time,
+// unlike a stubbed global `fetch` which every call reads fresh regardless
+// of when it was last stubbed.
+const mockGetActivity = vi.fn();
+
 const mockFetchOk = (bridges: unknown[]) =>
-  vi.stubGlobal(
-    'fetch',
-    vi.fn().mockResolvedValue({
-      ok: true,
-      text: () =>
-        Promise.resolve(
-          JSON.stringify({
-            from_address: [],
-            bridges: bridges.map((bridge) => ({
-              bridge,
-              bridge_network_id: 0,
-              claimed: 'false',
-              creation_timestamp: 0,
-              last_updated_timestamp: 0
-            }))
-          })
-        )
-    })
-  );
+  mockGetActivity.mockResolvedValue({
+    bridges: bridges.map((bridge) => ({
+      bridge,
+      bridge_network_id: 0,
+      claimed: 'false',
+      creation_timestamp: 0,
+      last_updated_timestamp: 0
+    })),
+    warnings: []
+  });
 
 // Same synthetic shape bridgeCard.tsx builds right after a bridge tx confirms
 // (see that file's addPendingBridge call).
@@ -114,10 +120,13 @@ describe('useTransactions -- pending bridge placeholders', () => {
       mode: 'mainnet',
       config: { aggkitBridgeApis: { 1: 'https://proxy.example' } }
     } as unknown as ReturnType<typeof useAppMode>);
+    vi.mocked(useAggkitAggregator).mockReturnValue({
+      getActivity: mockGetActivity
+    } as unknown as AggkitBridgeAggregator);
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
+    mockGetActivity.mockReset();
   });
 
   it('shows a locally-added placeholder immediately, before the activity feed reports it', async () => {
@@ -178,10 +187,13 @@ describe('useTransactions -- activity queryKey parity with useReadyToClaimCount'
       mode: 'mainnet',
       config: { aggkitBridgeApis: { 1: 'https://proxy.example', 2: 'https://proxy.example' } }
     } as unknown as ReturnType<typeof useAppMode>);
+    vi.mocked(useAggkitAggregator).mockReturnValue({
+      getActivity: mockGetActivity
+    } as unknown as AggkitBridgeAggregator);
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
+    mockGetActivity.mockReset();
   });
 
   // chainId used to be part of both hooks' queryKey even though
@@ -191,11 +203,7 @@ describe('useTransactions -- activity queryKey parity with useReadyToClaimCount'
   // Transactions page ended up as two separate cache entries firing two
   // fetches instead of dedupe kicking in.
   it('dedupes into a single fetch when mounted together with different chainIds but the same mode/address', async () => {
-    const fetchSpy = vi.fn().mockResolvedValue({
-      ok: true,
-      text: () => Promise.resolve(JSON.stringify({ from_address: [], bridges: [] }))
-    });
-    vi.stubGlobal('fetch', fetchSpy);
+    mockGetActivity.mockResolvedValue({ bridges: [], warnings: [] });
 
     const { result } = renderHook(
       () => ({
@@ -212,6 +220,6 @@ describe('useTransactions -- activity queryKey parity with useReadyToClaimCount'
     await waitFor(() => expect(result.current.transactions.isLoading).toBe(false));
     await waitFor(() => expect(result.current.readyToClaimCount.isSuccess).toBe(true));
 
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(mockGetActivity).toHaveBeenCalledTimes(1);
   });
 });

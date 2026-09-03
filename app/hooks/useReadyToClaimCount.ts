@@ -1,7 +1,8 @@
 'use client';
 
+import { useAggkitAggregator } from '@/app/context/aggLayerSdk';
 import { useAppMode } from '@/app/context/appMode';
-import { fetchActivity, resolveAggkitProxyBaseUrl } from '@/app/services/activity';
+import { fetchActivity } from '@/app/services/activity';
 import { useQuery } from '@tanstack/react-query';
 
 // Same GET /tracker/v1/activity/from/{address} call useTransactions makes,
@@ -15,15 +16,15 @@ export const useReadyToClaimCount = (params: {
   enabled?: boolean;
 }) => {
   const { chainId, address, enabled = true } = params;
-  const { mode, config } = useAppMode();
-  const baseUrl = resolveAggkitProxyBaseUrl(config.aggkitBridgeApis);
+  const { mode } = useAppMode();
+  const aggregator = useAggkitAggregator();
 
   return useQuery({
     queryKey: ['activity', mode, address],
-    enabled: enabled && Boolean(chainId && address && baseUrl),
+    enabled: enabled && Boolean(chainId && address),
     queryFn: async () => {
-      if (!address || !baseUrl) throw new Error('MISSING_PARAMS');
-      return fetchActivity({ baseUrl, fromAddress: address });
+      if (!address) throw new Error('MISSING_PARAMS');
+      return fetchActivity({ aggregator, fromAddress: address });
     },
     select: (data) => data.transactions.filter((tx) => tx.status === 'READY_TO_CLAIM').length,
     staleTime: 30 * 1000,
