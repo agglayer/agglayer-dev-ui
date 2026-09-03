@@ -45,7 +45,7 @@ const mockFetchOk = (body: unknown) =>
     'fetch',
     vi.fn().mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve(body)
+      text: () => Promise.resolve(JSON.stringify(body))
     })
   );
 

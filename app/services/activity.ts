@@ -40,7 +40,16 @@ interface RawBridge {
   destination_address: string;
   destination_network: number;
   from_address?: string;
-  global_index: string;
+  // Sent as a bare JSON *number*, NOT a string (verified against the live
+  // aggkit rc8 devnet -- and note the asymmetry with RawClaim.global_index
+  // below, which the same response quotes). For L1-origin deposits its value
+  // is aggkit's mainnet-flagged index 2^64 + deposit_count, well past
+  // Number.MAX_SAFE_INTEGER. parseActivityResponse below re-quotes any such
+  // integer while the payload is still text, so what actually lands here is a
+  // digit-exact string for large values and a number for small ones -- and a
+  // string either way if aggkit ever starts quoting this field too. Never
+  // `BigInt()` this off a raw `JSON.parse`; see parseActivityResponse.
+  global_index: string | number;
   leaf_type: number;
   metadata: string;
   origin_address: string;
@@ -58,6 +67,11 @@ interface RawClaim {
   destination_network: number;
   from_address: string;
   global_exit_root: string;
+  // A quoted decimal *string* here, unlike RawBridge.global_index above --
+  // the same activity response really does send the two differently (verified
+  // live: bridge -> 18446744073709551617, claim -> "18446744073709551617").
+  // Being quoted already, it survives JSON.parse untouched; nothing reads it
+  // today, and parseActivityResponse leaves quoted values alone.
   global_index: string;
   is_message: boolean;
   mainnet_exit_root: string;
@@ -160,12 +174,15 @@ const toLeafType = (leafType: number): string => (leafType === 1 ? 'message' : '
 // one bridge_hash. Using it as the key produced React's "two children with
 // the same key" warning and unstable row identity.
 //
-// `global_index` is not usable either, despite being aggkit's authoritative
+// `global_index` was rejected too, despite being aggkit's authoritative
 // unique per-bridge id: the endpoint ships it as a bare JSON *number* around
-// 2^64 (e.g. 18446744073709551616 / ...617 for deposit_count 0 / 1), far
-// past Number.MAX_SAFE_INTEGER, so JSON.parse collapses consecutive deposits
-// onto the identical double. It cannot tell apart exactly the rows we need
-// to tell apart.
+// 2^64 (e.g. 18446744073709551616 / ...617 for deposit_count 0 / 1), far past
+// Number.MAX_SAFE_INTEGER, so a plain JSON.parse collapsed consecutive
+// deposits onto the identical double -- it could not tell apart exactly the
+// rows we need to tell apart. parseActivityResponse now preserves those
+// digits, but the key stays tx_hash + deposit_count: it is unique without
+// depending on the endpoint shipping global_index at all, and it is already
+// what every consumer stores.
 //
 // `tx_hash` + `deposit_count` is unique and precision-safe: deposit_count is
 // the bridge contract's own monotonic per-deposit counter, and pairing it
@@ -203,7 +220,11 @@ export const toTransaction = (item: RawActivityItem): Transaction => {
     claimTimestamp: claim?.block_timestamp,
     claimBlockNumber: claim?.block_num,
     blockNumber: bridge.block_num,
-    globalIndex: bridge.global_index,
+    // Always the exact decimal digits, never a JS number: buildClaimAssetParams
+    // BigInt()s this straight into the claim's globalIndex argument, and the
+    // wire value is a ~2^64 bare number for L1-origin deposits (see
+    // RawBridge.global_index / parseActivityResponse).
+    globalIndex: String(bridge.global_index),
     originTokenAddress: bridge.origin_address,
     originTokenNetwork: bridge.origin_network,
     timestamp: bridge.block_timestamp,
@@ -223,6 +244,89 @@ export const toTransaction = (item: RawActivityItem): Transaction => {
 export const resolveAggkitProxyBaseUrl = (
   aggkitBridgeApis: Record<number, string>
 ): string | undefined => Object.values(aggkitBridgeApis)[0];
+
+// A JSON number literal, matched sticky from a known-safe offset (see
+// quotePrecisionUnsafeIntegers -- never used to scan the payload blindly).
+const JSON_NUMBER_LITERAL = /-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/y;
+
+// Rewrites every integer literal a double cannot hold exactly into a quoted
+// string, leaving the rest of the payload byte-identical.
+//
+// This exists because the activity endpoint ships `global_index` as a bare
+// JSON number whose L1-origin values are 2^64 + deposit_count (live rc8
+// devnet: 18446744073709551617). `JSON.parse` rounds those to the nearest
+// double, collapsing every consecutive L1 deposit onto the identical
+// 18446744073709551616 -- so a manual claim of such a deposit would be built
+// with a globalIndex short by exactly `deposit_count`. The digits cannot be
+// recovered after the fact: by the time the parsed object exists they are
+// already gone. They have to be captured while the payload is still text,
+// which is what this does.
+//
+// Deliberately a whole-payload transform rather than a `global_index`-only
+// pattern, so any future 64-bit field on this response is precision-safe by
+// default -- and deliberately a scan that tracks string state (and escapes)
+// rather than a `"key": <digits>` regex, which would also rewrite digits that
+// merely appear inside a string value (e.g. a `warnings[].message` like
+// "dial tcp 34.147.196.6:5577"). Values already quoted on the wire are left
+// untouched, so a deployment that sends `global_index` as a string behaves
+// identically.
+export const quotePrecisionUnsafeIntegers = (json: string): string => {
+  let out = '';
+  // Everything before this offset has already been copied into `out`. Only
+  // the spans around an actual rewrite are ever copied, so a payload with no
+  // unsafe integer is returned as-is rather than rebuilt character by
+  // character (this runs over the address's whole history on every poll).
+  let copiedUpTo = 0;
+  let index = 0;
+  let inString = false;
+
+  while (index < json.length) {
+    const char = json[index];
+
+    if (inString) {
+      // A backslash escapes the next character, quotes included.
+      if (char === '\\') {
+        index += 2;
+        continue;
+      }
+      if (char === '"') inString = false;
+      index += 1;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      index += 1;
+      continue;
+    }
+
+    // Outside a string, a number literal can only start here.
+    if (char === '-' || (char >= '0' && char <= '9')) {
+      JSON_NUMBER_LITERAL.lastIndex = index;
+      const literal = JSON_NUMBER_LITERAL.exec(json)?.[0];
+      if (literal !== undefined) {
+        // Only a plain integer can be re-read losslessly from its digits;
+        // anything with a fraction or exponent is passed through as sent.
+        const isPlainInteger = !/[.eE]/.test(literal);
+        if (isPlainInteger && !Number.isSafeInteger(Number(literal))) {
+          out += `${json.slice(copiedUpTo, index)}"${literal}"`;
+          copiedUpTo = index + literal.length;
+        }
+        index += literal.length;
+        continue;
+      }
+    }
+
+    index += 1;
+  }
+
+  return copiedUpTo === 0 ? json : out + json.slice(copiedUpTo);
+};
+
+// Parse the activity response from its raw text -- NOT via `response.json()`,
+// which would round `global_index` past repair (see above).
+export const parseActivityResponse = (json: string): RawActivityResponse =>
+  JSON.parse(quotePrecisionUnsafeIntegers(json)) as RawActivityResponse;
 
 export interface ActivityResult {
   transactions: Transaction[];
@@ -248,7 +352,9 @@ export const fetchActivity = async (params: {
     throw new Error(body?.message ?? `ACTIVITY_FETCH_FAILED: ${response.status}`);
   }
 
-  const raw: RawActivityResponse = await response.json();
+  // response.text(), then parseActivityResponse: `response.json()` here would
+  // silently destroy every L1-origin `global_index` (see above).
+  const raw = parseActivityResponse(await response.text());
 
   // Every reported bridge becomes a row: the tracker already returns one
   // unified, server-side-deduped list per address, so there is nothing left
