@@ -13,10 +13,28 @@ at `anvil-devui-snapshot.md`; a stub remains at the old path redirecting
 here.)
 
 This directory contains two files taken from that workflow's published
-artifact (plus this README). Both are **byte-identical** to what the
-publish run produced -- unlike the v1 bundle, `docker-compose.yml` needs no
-local edit, because the artifact itself is already pinned at the published
-GHCR digests (see "Tag scheme" below).
+artifact (plus this README). They are **semantically verbatim, not literally
+byte-identical**: step 4 of "Regenerating the bundle" below is the
+authoritative method (copy the artifact over, then adjust only what follows),
+and the three adaptations it leaves behind are all non-semantic.
+
+- **A vendoring provenance header** prepended to `docker-compose.yml`: the
+  kurtosis-cdk branch and commit it came from, the publish-run URL, and a
+  pointer back at this README. Comments only -- nothing Docker resolves.
+- **Prettier formatting.** `tests/devnet/*.{yml,json}` are not in
+  `.prettierignore`, so the repo's pre-commit hook (`.lintstagedrc.js` runs
+  `prettier --write` over `*.{json,yaml,yml}`) normalizes whitespace and
+  quoting on the way in. It is idempotent, so this never drifts.
+- **Kurtosis-internal ticket references normalized out** of the copied
+  comments -- they point at trackers a reader of this repo cannot open.
+
+Everything that carries meaning IS verbatim: every `image:` digest, every
+service definition, port, environment variable and healthcheck, and every
+`summary.json` field. Unlike the v1 bundle there is also no "repoint the
+compose defaults at the published tag" edit, because the artifact itself is
+already pinned at the published GHCR digests (see "Tag scheme" below). A
+`git diff` against a freshly downloaded artifact should show only the three
+categories above -- anything else is a hand-edit, and a bug.
 
 - `docker-compose.yml` — self-contained (no bind mounts, no volumes); every
   service's chain state, config and keystores are baked into its image.
@@ -117,7 +135,10 @@ under you and breaks the "pin exact versions in CI" contract).
    ```
 
 4. **Copy the two files into this directory, verbatim, overwriting what's
-   here** — no `sed`, no hand-editing image references:
+   here** — no `sed`, no hand-editing image references. (Committing then
+   applies the two non-semantic adaptations described at the top of this
+   file: you re-add the provenance header by hand, and the pre-commit hook
+   reformats both files with prettier.)
 
    ```bash
    cp /tmp/devui-snapshot/docker-compose.yml tests/devnet/docker-compose.yml

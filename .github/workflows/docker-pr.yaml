@@ -16,7 +16,11 @@
 # for this step is WITHDRAWN: D-2 proved the image builds today without
 # waiting on sdk#28 (§3, verified build EXIT=0), so this job always builds
 # and smoke-tests -- no skip condition, no continue-on-error, no `if:`
-# guard tied to sdk#28.
+# guard tied to sdk#28. Kept as the record of WHY there is no skip guard;
+# the question is moot either way now that agglayer/sdk#28's APIs ship in a
+# published npm release (`@agglayer/sdk` is pinned in package.json) and the
+# repo carries no SDK source-vendoring at all -- see review comment
+# 3862947960 / C5.
 name: Docker PR Build and Smoke Test
 
 on:
