@@ -247,6 +247,48 @@ describe('fetchActivity', () => {
     ]);
   });
 
+  it('dedupes bridges that share the same bridge_hash across multiple bridge_network_id reports', async () => {
+    // Reproduces a live S11 finding against the aggkit rc8 devnet: an
+    // L1-origin bridge visible to more than one configured bridge service
+    // (one per L2) came back as two activity items with the same
+    // bridge.bridge_hash/tx_hash/amount but different bridge_network_id --
+    // the same physical deposit, reported twice.
+    const duplicatedBridge = {
+      ...baseBridge,
+      bridge_hash: '0xduplicate',
+      tx_hash: '0xsametx'
+    };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          from_address: [],
+          bridges: [
+            {
+              bridge: duplicatedBridge,
+              bridge_network_id: 1,
+              claimed: 'error',
+              creation_timestamp: 0,
+              last_updated_timestamp: 0
+            },
+            {
+              bridge: duplicatedBridge,
+              bridge_network_id: 2,
+              claimed: 'error',
+              creation_timestamp: 0,
+              last_updated_timestamp: 0
+            }
+          ]
+        })
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await fetchActivity({ baseUrl: 'https://proxy.example', fromAddress: '0xabc' });
+
+    expect(result.transactions).toHaveLength(1);
+    expect(result.transactions[0].hubUID).toBe('0xduplicate');
+  });
+
   it('throws with the server-provided message on a non-OK response', async () => {
     vi.stubGlobal(
       'fetch',

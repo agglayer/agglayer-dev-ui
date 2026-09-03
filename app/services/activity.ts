@@ -218,8 +218,31 @@ export const fetchActivity = async (params: {
   }
 
   const raw: RawActivityResponse = await response.json();
+
+  // The tracker endpoint fans out server-side to every configured bridge
+  // service (one per L2), and an L1-origin bridge visible to more than one
+  // of those services (e.g. a broadcast/system bridge every L2's own bridge
+  // service independently scans off the shared L1 bridge contract) can be
+  // reported once per bridge_network_id even though it is the same physical
+  // on-chain deposit -- identical bridge.bridge_hash, tx_hash, amount and
+  // receiver. Rendering every report as its own row would both duplicate
+  // the same transaction in the UI and collide on bridge_hash as the
+  // transaction list's React key (transactionList.tsx keys rows by
+  // tx.hubUID, i.e. bridge.bridge_hash) -- observed live against the S10
+  // aggkit rc8 devnet as a "two children with the same key" warning plus a
+  // visibly duplicated row. Dedupe by bridge_hash, keeping the first-seen
+  // report; the old per-network SDK fan-out never surfaced this because it
+  // queried one network's bridge service at a time and never merged results
+  // across networks.
+  const seenBridgeHashes = new Set<string>();
+  const dedupedBridges = raw.bridges.filter((item) => {
+    if (seenBridgeHashes.has(item.bridge.bridge_hash)) return false;
+    seenBridgeHashes.add(item.bridge.bridge_hash);
+    return true;
+  });
+
   return {
-    transactions: raw.bridges.map(toTransaction),
+    transactions: dedupedBridges.map(toTransaction),
     warnings: raw.warnings ?? []
   };
 };
