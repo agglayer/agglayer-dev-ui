@@ -142,12 +142,43 @@ export const deriveStatus = (
 // types.ClaimResponse.is_message documents on the claim side.
 const toLeafType = (leafType: number): string => (leafType === 1 ? 'message' : 'asset');
 
+// The app's own per-row identity: React key in transactionList.tsx, the
+// selected-row lookup in transactionsView.tsx, and the
+// `tx.hubUID === claimingTxId` comparison that decides which row shows the
+// live claim step (useClaimExecution stores `transaction.hubUID` as its
+// `transactionId`). All three need a value that is unique per physical
+// deposit and stable across polls.
+//
+// `bridge_hash` -- which this used to be -- is neither: it is a CONTENT hash
+// over the deposit's fields (origin/destination network + address, amount,
+// metadata), so every bridge of the same amount to the same receiver shares
+// it. Confirmed live against the aggkit rc8 devnet, where a single
+// bridge_hash covered 5 genuinely distinct deposits (different tx_hash,
+// deposit_count 3..7, different block_num) all under the same
+// bridge_network_id -- and the freshly-snapshotted devnet likewise reports
+// two distinct L1 deposits (deposit_count 0 and 1, blocks 82 and 199) under
+// one bridge_hash. Using it as the key produced React's "two children with
+// the same key" warning and unstable row identity.
+//
+// `global_index` is not usable either, despite being aggkit's authoritative
+// unique per-bridge id: the endpoint ships it as a bare JSON *number* around
+// 2^64 (e.g. 18446744073709551616 / ...617 for deposit_count 0 / 1), far
+// past Number.MAX_SAFE_INTEGER, so JSON.parse collapses consecutive deposits
+// onto the identical double. It cannot tell apart exactly the rows we need
+// to tell apart.
+//
+// `tx_hash` + `deposit_count` is unique and precision-safe: deposit_count is
+// the bridge contract's own monotonic per-deposit counter, and pairing it
+// with the transaction hash also keeps two deposits batched into one tx
+// distinct.
+const toHubUID = (bridge: RawBridge): string => `${bridge.tx_hash}:${bridge.deposit_count}`;
+
 export const toTransaction = (item: RawActivityItem): Transaction => {
   const { bridge, claim } = item;
   const { status, statusError } = deriveStatus(item);
 
   return {
-    hubUID: bridge.bridge_hash,
+    hubUID: toHubUID(bridge),
     txSender: bridge.txn_sender,
     fromAddress: bridge.from_address ?? bridge.txn_sender,
     receiverAddress: bridge.destination_address,
@@ -219,30 +250,14 @@ export const fetchActivity = async (params: {
 
   const raw: RawActivityResponse = await response.json();
 
-  // The tracker endpoint fans out server-side to every configured bridge
-  // service (one per L2), and an L1-origin bridge visible to more than one
-  // of those services (e.g. a broadcast/system bridge every L2's own bridge
-  // service independently scans off the shared L1 bridge contract) can be
-  // reported once per bridge_network_id even though it is the same physical
-  // on-chain deposit -- identical bridge.bridge_hash, tx_hash, amount and
-  // receiver. Rendering every report as its own row would both duplicate
-  // the same transaction in the UI and collide on bridge_hash as the
-  // transaction list's React key (transactionList.tsx keys rows by
-  // tx.hubUID, i.e. bridge.bridge_hash) -- observed live against the S10
-  // aggkit rc8 devnet as a "two children with the same key" warning plus a
-  // visibly duplicated row. Dedupe by bridge_hash, keeping the first-seen
-  // report; the old per-network SDK fan-out never surfaced this because it
-  // queried one network's bridge service at a time and never merged results
-  // across networks.
-  const seenBridgeHashes = new Set<string>();
-  const dedupedBridges = raw.bridges.filter((item) => {
-    if (seenBridgeHashes.has(item.bridge.bridge_hash)) return false;
-    seenBridgeHashes.add(item.bridge.bridge_hash);
-    return true;
-  });
-
+  // Every reported bridge becomes a row: the tracker already returns one
+  // unified, server-side-deduped list per address, so there is nothing left
+  // to dedupe here. In particular do NOT filter on bridge_hash -- it is a
+  // content hash shared by every deposit of the same amount to the same
+  // receiver, so dropping repeats silently loses real transactions (see
+  // toHubUID above for the live evidence).
   return {
-    transactions: dedupedBridges.map(toTransaction),
+    transactions: raw.bridges.map(toTransaction),
     warnings: raw.warnings ?? []
   };
 };

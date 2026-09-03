@@ -128,7 +128,8 @@ describe('toTransaction', () => {
     });
 
     expect(tx.status).toBe('CLAIMED');
-    expect(tx.hubUID).toBe('0xhash');
+    // hubUID is tx_hash + deposit_count, NOT bridge_hash -- see toHubUID.
+    expect(tx.hubUID).toBe('0xabc:5');
     expect(tx.bridgeHash).toBe('0xhash');
     // sourceNetwork is the RECORDING network (bridge_network_id), not the
     // token's origin_network -- see getRouteType/autoclaim consumers.
@@ -247,46 +248,79 @@ describe('fetchActivity', () => {
     ]);
   });
 
-  it('dedupes bridges that share the same bridge_hash across multiple bridge_network_id reports', async () => {
-    // Reproduces a live S11 finding against the aggkit rc8 devnet: an
-    // L1-origin bridge visible to more than one configured bridge service
-    // (one per L2) came back as two activity items with the same
-    // bridge.bridge_hash/tx_hash/amount but different bridge_network_id --
-    // the same physical deposit, reported twice.
-    const duplicatedBridge = {
-      ...baseBridge,
-      bridge_hash: '0xduplicate',
-      tx_hash: '0xsametx'
-    };
+  it('keeps every distinct deposit that shares one bridge_hash, with a unique hubUID each', async () => {
+    // Live shape from the aggkit rc8 devnet: bridge_hash is a CONTENT hash
+    // (origin/destination network + address, amount, metadata), so five
+    // separate native-ETH bridges of the identical amount to the identical
+    // receiver all reported the same bridge_hash -- same bridge_network_id,
+    // but genuinely different tx_hash / deposit_count / block_num. An
+    // earlier bridge_hash dedupe here silently dropped four real
+    // transactions; nothing may be dropped, and each row still needs its own
+    // React key (transactionList.tsx keys on tx.hubUID).
+    const sharedBridgeHash = '0xae7da905f5e09ee99f9e0c4b8f9b255ff42a1522dbe61f8066c53c8c49a5377f';
+    const deposits = [
+      { tx_hash: '0xtx3', deposit_count: 3, block_num: 309 },
+      { tx_hash: '0xtx4', deposit_count: 4, block_num: 324 },
+      { tx_hash: '0xtx5', deposit_count: 5, block_num: 593 },
+      { tx_hash: '0xtx6', deposit_count: 6, block_num: 835 },
+      { tx_hash: '0xtx7', deposit_count: 7, block_num: 883 }
+    ];
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: () =>
         Promise.resolve({
           from_address: [],
-          bridges: [
-            {
-              bridge: duplicatedBridge,
-              bridge_network_id: 1,
-              claimed: 'error',
-              creation_timestamp: 0,
-              last_updated_timestamp: 0
-            },
-            {
-              bridge: duplicatedBridge,
-              bridge_network_id: 2,
-              claimed: 'error',
-              creation_timestamp: 0,
-              last_updated_timestamp: 0
-            }
-          ]
+          bridges: deposits.map((deposit) => ({
+            bridge: { ...baseBridge, ...deposit, bridge_hash: sharedBridgeHash },
+            bridge_network_id: 0,
+            claimed: 'false',
+            creation_timestamp: 0,
+            last_updated_timestamp: 0
+          }))
         })
     });
     vi.stubGlobal('fetch', fetchMock);
 
     const result = await fetchActivity({ baseUrl: 'https://proxy.example', fromAddress: '0xabc' });
 
-    expect(result.transactions).toHaveLength(1);
-    expect(result.transactions[0].hubUID).toBe('0xduplicate');
+    expect(result.transactions).toHaveLength(5);
+    expect(result.transactions.map((tx) => tx.transactionHash)).toEqual([
+      '0xtx3',
+      '0xtx4',
+      '0xtx5',
+      '0xtx6',
+      '0xtx7'
+    ]);
+    expect(result.transactions.map((tx) => tx.hubUID)).toEqual([
+      '0xtx3:3',
+      '0xtx4:4',
+      '0xtx5:5',
+      '0xtx6:6',
+      '0xtx7:7'
+    ]);
+    expect(new Set(result.transactions.map((tx) => tx.hubUID)).size).toBe(5);
+  });
+
+  it('gives distinct hubUIDs to two deposits batched into one transaction', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          from_address: [],
+          bridges: [0, 1].map((depositCount) => ({
+            bridge: { ...baseBridge, tx_hash: '0xbatched', deposit_count: depositCount },
+            bridge_network_id: 0,
+            claimed: 'false',
+            creation_timestamp: 0,
+            last_updated_timestamp: 0
+          }))
+        })
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await fetchActivity({ baseUrl: 'https://proxy.example', fromAddress: '0xabc' });
+
+    expect(result.transactions.map((tx) => tx.hubUID)).toEqual(['0xbatched:0', '0xbatched:1']);
   });
 
   it('throws with the server-provided message on a non-OK response', async () => {

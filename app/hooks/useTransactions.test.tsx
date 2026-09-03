@@ -150,7 +150,11 @@ describe('useTransactions -- pending bridge placeholders', () => {
 
     await waitFor(() => expect(result.current.pending.pendingBridges).toHaveLength(0));
     expect(result.current.transactions.transactions).toHaveLength(1);
-    expect(result.current.transactions.transactions[0].hubUID).toBe('bridge-real');
+    // The surviving row is the real activity one (it carries the wire's
+    // bridge_hash), not the local placeholder -- whose hubUID/bridgeHash are
+    // both `pending-0xjust-sent`.
+    expect(result.current.transactions.transactions[0].bridgeHash).toBe('bridge-real');
+    expect(result.current.transactions.transactions[0].hubUID).toBe('0xjust-sent:1');
   });
 
   it('does not surface a placeholder added for a different address', async () => {
