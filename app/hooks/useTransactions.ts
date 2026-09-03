@@ -3,9 +3,10 @@
 import type { ActivityResult } from '@/app/services/activity';
 import type { Transaction, TransactionFilters } from '@/app/types/transaction';
 
+import { useAggkitAggregator } from '@/app/context/aggLayerSdk';
 import { useAppMode } from '@/app/context/appMode';
 import { usePendingBridges } from '@/app/context/pendingBridges';
-import { fetchActivity, resolveAggkitProxyBaseUrl } from '@/app/services/activity';
+import { fetchActivity } from '@/app/services/activity';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
@@ -47,8 +48,8 @@ export const useTransactions = (params: {
   aggressiveRefetch?: boolean;
 }) => {
   const { chainId, filters = {}, enabled = true, aggressiveRefetch = false } = params;
-  const { mode, config } = useAppMode();
-  const baseUrl = resolveAggkitProxyBaseUrl(config.aggkitBridgeApis);
+  const { mode } = useAppMode();
+  const aggregator = useAggkitAggregator();
   const fromAddress = filters.fromAddress;
   const { pendingBridges, removePendingBridge } = usePendingBridges();
 
@@ -65,15 +66,15 @@ export const useTransactions = (params: {
 
   const query = useQuery<ActivityResult, Error>({
     // chainId is NOT part of the key: fetchActivity's response doesn't vary
-    // by it (see queryFn below -- only baseUrl/fromAddress go into the
+    // by it (see queryFn below -- only the aggregator/fromAddress go into the
     // request), so including it would just fragment the cache. It's still
     // required below via `enabled` -- see useReadyToClaimCount, which reads
     // the exact same key so the two dedupe into a single request.
     queryKey: ['activity', mode, fromAddress],
-    enabled: enabled && Boolean(chainId) && Boolean(fromAddress) && Boolean(baseUrl),
+    enabled: enabled && Boolean(chainId) && Boolean(fromAddress),
     queryFn: async () => {
-      if (!fromAddress || !baseUrl) throw new Error('MISSING_ACTIVITY_PARAMS');
-      const data = await fetchActivity({ baseUrl, fromAddress });
+      if (!fromAddress) throw new Error('MISSING_ACTIVITY_PARAMS');
+      const data = await fetchActivity({ aggregator, fromAddress });
       if (aggressiveRefetch) fetchCountRef.current++;
       return data;
     },

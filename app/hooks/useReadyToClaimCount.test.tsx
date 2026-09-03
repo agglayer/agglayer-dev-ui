@@ -4,14 +4,21 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { AggkitBridgeAggregator } from '@agglayer/sdk';
+
 // Since S-review 2026-08-28, useReadyToClaimCount reads from the same
 // GET /tracker/v1/activity/from/{address} call useTransactions makes (see
-// app/services/activity.ts) instead of AggkitBridgeAggregator's fan-out, so
-// this suite mocks `fetch` directly rather than useAggkitAggregator.
+// app/services/activity.ts) -- since agglayer/sdk#30/#31, that call goes
+// through AggkitBridgeAggregator.getActivity rather than a raw fetch(), so
+// this suite mocks useAggkitAggregator directly.
 vi.mock('@/app/context/appMode', () => ({
   useAppMode: vi.fn()
 }));
+vi.mock('@/app/context/aggLayerSdk', () => ({
+  useAggkitAggregator: vi.fn()
+}));
 
+import { useAggkitAggregator } from '@/app/context/aggLayerSdk';
 import { useAppMode } from '@/app/context/appMode';
 
 import { useReadyToClaimCount } from './useReadyToClaimCount';
@@ -40,14 +47,10 @@ const rawBridge = (bridgeHash: string) => ({
   txn_sender: '0xabc'
 });
 
-const mockFetchOk = (body: unknown) =>
-  vi.stubGlobal(
-    'fetch',
-    vi.fn().mockResolvedValue({
-      ok: true,
-      text: () => Promise.resolve(JSON.stringify(body))
-    })
-  );
+const mockGetActivity = vi.fn();
+
+const mockFetchOk = (body: { bridges: unknown[]; warnings?: unknown[] }) =>
+  mockGetActivity.mockResolvedValue({ warnings: [], ...body });
 
 describe('useReadyToClaimCount', () => {
   beforeEach(() => {
@@ -55,15 +58,17 @@ describe('useReadyToClaimCount', () => {
       mode: 'mainnet',
       config: { aggkitBridgeApis: { 1: 'https://proxy.example' } }
     } as unknown as ReturnType<typeof useAppMode>);
+    vi.mocked(useAggkitAggregator).mockReturnValue({
+      getActivity: mockGetActivity
+    } as unknown as AggkitBridgeAggregator);
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
+    mockGetActivity.mockReset();
   });
 
   it('counts only bridges that are unclaimed and waiting on just the claim step', async () => {
     mockFetchOk({
-      from_address: [],
       bridges: [
         // claimed -- not counted
         {
