@@ -163,6 +163,33 @@ describe('useClaimExecution — AlreadyClaimed race recheck', () => {
     expect(result.current.state.error?.message).not.toBe('This deposit has already been claimed');
   });
 
+  it('skips the backoff loop for a raw code-4001 rejection whose message matches no substring', async () => {
+    // The case the message-substring check genuinely cannot see, and why
+    // review comment 3862948256 (C7) asked for code 4001 specifically. Note
+    // a viem-MAPPED rejection was already caught by the substrings, because
+    // viem overwrites the wallet's copy with its own fixed "User rejected
+    // the request." shortMessage. This is the unmapped path: a provider
+    // error that reaches the catch block as-is, reporting the rejection
+    // only via its EIP-1193 code.
+    const rawRejection = { code: 4001, message: 'Usuario cancelo la solicitud' };
+    const isClaimed = vi.fn().mockResolvedValue(false); // pre-flight check only
+    const sendTransactionAsync = vi.fn().mockRejectedValue(rawRejection);
+    setUpMocks({ isClaimed, sendTransactionAsync });
+
+    const { result } = renderHook(() => useClaimExecution({ chains }));
+
+    await act(async () => {
+      await result.current.execute({
+        transaction: makeTransaction(),
+        destinationChainId: DESTINATION_CHAIN_ID
+      });
+    });
+
+    await waitFor(() => expect(result.current.state.currentStep).toBe('error'));
+    expect(isClaimed).toHaveBeenCalledTimes(1);
+    expect(result.current.state.error?.message).not.toBe('This deposit has already been claimed');
+  });
+
   it('still runs the isClaimed backoff loop and reports the race for a non-rejection failure', async () => {
     const isClaimed = vi
       .fn()
