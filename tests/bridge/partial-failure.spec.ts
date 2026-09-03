@@ -39,6 +39,15 @@ test('activity page surfaces a network-warning notice for a network the tracker 
     message: 'partial-failure fixture: dial tcp 127.0.0.1:33080: no route to host'
   };
 
+  // NOTE for anyone copying this interceptor: `response.json()` here rounds
+  // every precision-unsafe integer in the payload, `bridge.global_index`
+  // included (~2^64 for L1-origin deposits -- see app/services/activity.ts's
+  // parseActivityResponse, which exists precisely to avoid this). Harmless in
+  // THIS spec: it only reads the warnings modal and the "Total transactions"
+  // line, and row identity is tx_hash + deposit_count, not global_index. Do
+  // NOT reuse this shape in a spec that goes on to CLAIM -- the claim would be
+  // built with a globalIndex short by exactly `deposit_count`. Splice the
+  // warning into the raw `await response.text()` instead if you need that.
   await page.route(
     (url) => url.pathname.includes('/tracker/v1/activity/from/'),
     async (route) => {
