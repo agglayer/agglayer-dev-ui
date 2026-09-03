@@ -184,21 +184,22 @@ describe('readyAt storage (getReadyAt / recordReadyAt / evictReadyAt)', () => {
     expect(rawMap(devnet)).toEqual({});
   });
 
-  it('isolates the same bridgeHash recorded under two different app modes', () => {
-    // This is the devnet stale-hash bug: without mode scoping, the same
-    // bridgeHash observed on two different modes would collide in a single
-    // shared map.
-    recordReadyAt(devnet, '0xsamehash', 0);
+  it('isolates the same row id recorded under two different app modes', () => {
+    // This is the devnet stale-hash bug: without mode scoping, the same row
+    // id (Transaction.hubUID -- kurtosis enclaves replay identical tx hashes
+    // across rebuilds) observed on two different modes would collide in a
+    // single shared map.
+    recordReadyAt(devnet, '0xsametx:0', 0);
     vi.setSystemTime(500);
-    recordReadyAt(testnet, '0xsamehash', 500);
+    recordReadyAt(testnet, '0xsametx:0', 500);
 
-    expect(getReadyAt(devnet, '0xsamehash')).toBe(0);
-    expect(getReadyAt(testnet, '0xsamehash')).toBe(500);
+    expect(getReadyAt(devnet, '0xsametx:0')).toBe(0);
+    expect(getReadyAt(testnet, '0xsametx:0')).toBe(500);
 
-    evictReadyAt(devnet, '0xsamehash');
-    expect(getReadyAt(devnet, '0xsamehash')).toBeNull();
+    evictReadyAt(devnet, '0xsametx:0');
+    expect(getReadyAt(devnet, '0xsametx:0')).toBeNull();
     // Evicting the devnet entry must not touch testnet's.
-    expect(getReadyAt(testnet, '0xsamehash')).toBe(500);
+    expect(getReadyAt(testnet, '0xsametx:0')).toBe(500);
   });
 
   it('does not let the persisted map grow across repeated eviction passes', () => {
