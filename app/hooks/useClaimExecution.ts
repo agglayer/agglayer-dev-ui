@@ -19,22 +19,10 @@ import {
   mapTransactionRequest,
   resolveLeafIndex
 } from '@/app/utils/transaction';
+import { isUserRejectionError } from '@/app/utils/walletErrors';
 import { getPublicClient } from '@wagmi/core';
 import { useCallback, useState } from 'react';
 import { useConfig, useSendTransaction } from 'wagmi';
-
-// Same substrings ClaimResultModal's isUserRejection checks for, so a
-// rejected wallet prompt is recognized consistently between where the
-// rejection happens (here) and where it's finally displayed (that modal).
-const isWalletRejection = (error: unknown): boolean => {
-  const message = error instanceof Error ? error.message : String(error);
-  const lowerMessage = message.toLowerCase();
-  return (
-    lowerMessage.includes('rejected') ||
-    lowerMessage.includes('denied') ||
-    lowerMessage.includes('user refused')
-  );
-};
 
 interface UseClaimExecutionParams {
   chains: AppChain[];
@@ -254,7 +242,7 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
         // straight to reporting the rejection instead of burning ~1.4s on
         // isClaimed() polling that can only end up unused.
         let raceLostToAnotherClaimer = false;
-        if (!isWalletRejection(error)) {
+        if (!isUserRejectionError(error)) {
           const bridgeClient = native.bridge(bridgeAddress, destinationChainId);
           const isClaimedParams = {
             leafIndex: resolveLeafIndex(transaction),
