@@ -23,6 +23,13 @@ const STEP_LABELS: Record<AggkitBridgeStep, (params: TrackerStepLabelParams) => 
   WaitL1SettledGER: () => 'Waiting for settlement to confirm on L1',
   WaitingGERInjection: ({ destinationName }) =>
     `Waiting for the exit root to reach ${destinationName || 'the destination'}`,
+  // Added immediately before WaitingClaim on all three routes (L1->L2,
+  // L2->L1, L2->L2) by agglayer/aggkit#1823 (PR #1829) -- see the SDK's
+  // AggkitBridgeStep doc comment. Covers the resolving bridge-service's own
+  // L1 Info Tree sync catching up far enough to include this deposit's leaf,
+  // a prerequisite for building the claim proof (result, when done:
+  // AggkitWaitingL1InfoLeafAvailableResult's l1_info_tree_index).
+  WaitingL1InfoLeafAvailable: () => 'Waiting until the claim proof can be generated',
   // Deliberately NOT "Ready" -- entering this step only means the tracker's
   // fast path (a direct read of the settlement tx's own L1 receipt) has
   // resolved; it does not mean aggkit's bridge-service has finished its own,
@@ -35,7 +42,7 @@ const STEP_LABELS: Record<AggkitBridgeStep, (params: TrackerStepLabelParams) => 
   // read as a UI bug the moment a user notices the claim button hasn't
   // appeared yet.
   WaitingClaim: ({ destinationName }) =>
-    `Finalizing claim data for ${destinationName || 'the destination'}`,
+    `Waiting for the claim on ${destinationName || 'the destination'}`,
   Claimed: () => 'Claimed'
 };
 

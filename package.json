@@ -24,7 +24,7 @@
     "check": "pnpm run validate:config && pnpm run lint && pnpm run typecheck && pnpm run test"
   },
   "dependencies": {
-    "@agglayer/sdk": "1.0.0-snapshot-ca6df75e",
+    "@agglayer/sdk": "1.0.0-dev.20260907140808.d648280",
     "@reown/appkit": "^1.8.15",
     "@reown/appkit-adapter-wagmi": "^1.8.15",
     "@tanstack/react-query": "^5.90.16",

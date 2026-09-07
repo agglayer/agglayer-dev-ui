@@ -23,79 +23,31 @@ const baseBridge = {
   txn_sender: '0xsender'
 };
 
+// BREAKING (agglayer/aggkit#1830, SDK PR #1831): the endpoint's old `claimed`
+// tri-state is gone, replaced by `claim_status: AggkitClaimStatus`
+// ('pending'/'readyToClaim'/'claimed'/'error'), already resolved
+// server-side -- deriveStatus no longer inspects `tracking` itself (see its
+// own comment in activity.ts), so these cases collapse to one per value.
 describe('deriveStatus', () => {
-  it('maps claimed "true" to CLAIMED', () => {
-    expect(deriveStatus({ claimed: 'true' })).toEqual({ status: 'CLAIMED' });
+  it('maps claim_status "claimed" to CLAIMED', () => {
+    expect(deriveStatus({ claim_status: 'claimed' })).toEqual({ status: 'CLAIMED' });
   });
 
-  it('maps claimed "error" to ERROR, surfacing errors.claim', () => {
+  it('maps claim_status "error" to ERROR, surfacing errors.claim', () => {
     expect(
-      deriveStatus({ claimed: 'error', errors: { claim: 'no bridge contract configured' } })
+      deriveStatus({ claim_status: 'error', errors: { claim: 'no bridge contract configured' } })
     ).toEqual({
       status: 'ERROR',
       statusError: 'no bridge contract configured'
     });
   });
 
-  it('maps unclaimed with no tracking yet to PENDING', () => {
-    expect(deriveStatus({ claimed: 'false' })).toEqual({ status: 'PENDING' });
+  it('maps claim_status "readyToClaim" to READY_TO_CLAIM', () => {
+    expect(deriveStatus({ claim_status: 'readyToClaim' })).toEqual({ status: 'READY_TO_CLAIM' });
   });
 
-  it('maps unclaimed + current step WaitingClaim/inProgress to READY_TO_CLAIM', () => {
-    expect(
-      deriveStatus({
-        claimed: 'false',
-        tracking: {
-          tracking_status: 'running',
-          network_id: 0,
-          tx_hash: '0xabc',
-          bridge_status: null,
-          step_index: 0,
-          all_steps: [{ step_index: 0, step_name: 'WaitingClaim', status: 'inProgress' }],
-          error: null
-        }
-      })
-    ).toEqual({ status: 'READY_TO_CLAIM' });
-  });
-
-  it('maps unclaimed + current step WaitingClaim/done to PENDING (claimed flag not caught up yet)', () => {
-    expect(
-      deriveStatus({
-        claimed: 'false',
-        tracking: {
-          tracking_status: 'finished',
-          network_id: 0,
-          tx_hash: '0xabc',
-          bridge_status: null,
-          step_index: 1,
-          all_steps: [
-            { step_index: 0, step_name: 'WaitingClaim', status: 'done' },
-            { step_index: 1, step_name: 'Claimed', status: 'done' }
-          ],
-          error: null
-        }
-      })
-    ).toEqual({ status: 'PENDING' });
-  });
-
-  it('maps unclaimed + an earlier step in progress to PENDING', () => {
-    expect(
-      deriveStatus({
-        claimed: 'false',
-        tracking: {
-          tracking_status: 'running',
-          network_id: 0,
-          tx_hash: '0xabc',
-          bridge_status: null,
-          step_index: 0,
-          all_steps: [
-            { step_index: 0, step_name: 'WaitingGERUpdate', status: 'inProgress' },
-            { step_index: 1, step_name: 'WaitingClaim', status: 'pending' }
-          ],
-          error: null
-        }
-      })
-    ).toEqual({ status: 'PENDING' });
+  it('maps claim_status "pending" to PENDING', () => {
+    expect(deriveStatus({ claim_status: 'pending' })).toEqual({ status: 'PENDING' });
   });
 });
 
@@ -124,7 +76,7 @@ describe('toTransaction', () => {
         rollup_exit_root: '0xrer'
       },
       claim_network_id: 1,
-      claimed: 'true',
+      claim_status: 'claimed',
       creation_timestamp: 50,
       last_updated_timestamp: 200
     });
@@ -149,14 +101,14 @@ describe('toTransaction', () => {
     const asset = toTransaction({
       bridge: baseBridge,
       bridge_network_id: 0,
-      claimed: 'false',
+      claim_status: 'pending',
       creation_timestamp: 50,
       last_updated_timestamp: 50
     });
     const message = toTransaction({
       bridge: { ...baseBridge, leaf_type: 1 },
       bridge_network_id: 0,
-      claimed: 'false',
+      claim_status: 'pending',
       creation_timestamp: 50,
       last_updated_timestamp: 50
     });
@@ -169,7 +121,7 @@ describe('toTransaction', () => {
     const tx = toTransaction({
       bridge: baseBridge,
       bridge_network_id: 0,
-      claimed: 'false',
+      claim_status: 'pending',
       creation_timestamp: 50,
       last_updated_timestamp: 50
     });
@@ -195,7 +147,7 @@ describe('fetchActivity', () => {
         {
           bridge: baseBridge,
           bridge_network_id: 0,
-          claimed: 'true',
+          claim_status: 'claimed',
           creation_timestamp: 0,
           last_updated_timestamp: 0
         }
@@ -262,7 +214,7 @@ describe('fetchActivity', () => {
       bridges: deposits.map((deposit) => ({
         bridge: { ...baseBridge, ...deposit, bridge_hash: sharedBridgeHash },
         bridge_network_id: 0,
-        claimed: 'false',
+        claim_status: 'pending',
         creation_timestamp: 0,
         last_updated_timestamp: 0
       })),
@@ -297,7 +249,7 @@ describe('fetchActivity', () => {
       bridges: [0, 1].map((depositCount) => ({
         bridge: { ...baseBridge, tx_hash: '0xbatched', deposit_count: depositCount },
         bridge_network_id: 0,
-        claimed: 'false',
+        claim_status: 'pending',
         creation_timestamp: 0,
         last_updated_timestamp: 0
       })),

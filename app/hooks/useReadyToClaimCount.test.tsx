@@ -68,38 +68,32 @@ describe('useReadyToClaimCount', () => {
   });
 
   it('counts only bridges that are unclaimed and waiting on just the claim step', async () => {
+    // BREAKING (agglayer/aggkit#1830, SDK PR #1831): the old `claimed`
+    // tri-state + hand-inspected `tracking` is gone -- `claim_status` already
+    // gives this signal directly (see activity.ts's deriveStatus).
     mockFetchOk({
       bridges: [
         // claimed -- not counted
         {
           bridge: rawBridge('0x1'),
           bridge_network_id: 0,
-          claimed: 'true',
+          claim_status: 'claimed',
           creation_timestamp: 0,
           last_updated_timestamp: 0
         },
-        // unclaimed, current step is WaitingClaim/inProgress -- counted
+        // unclaimed, ready to claim -- counted
         {
           bridge: rawBridge('0x2'),
           bridge_network_id: 0,
-          claimed: 'false',
+          claim_status: 'readyToClaim',
           creation_timestamp: 0,
-          last_updated_timestamp: 0,
-          tracking: {
-            tracking_status: 'running',
-            network_id: 0,
-            tx_hash: '0x2',
-            bridge_status: null,
-            step_index: 0,
-            all_steps: [{ step_index: 0, step_name: 'WaitingClaim', status: 'inProgress' }],
-            error: null
-          }
+          last_updated_timestamp: 0
         },
-        // unclaimed, no tracking yet -- not counted (PENDING, not READY_TO_CLAIM)
+        // unclaimed, not yet ready -- not counted (PENDING, not READY_TO_CLAIM)
         {
           bridge: rawBridge('0x3'),
           bridge_network_id: 0,
-          claimed: 'false',
+          claim_status: 'pending',
           creation_timestamp: 0,
           last_updated_timestamp: 0
         }

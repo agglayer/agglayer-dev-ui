@@ -4,8 +4,7 @@ import type {
   AggkitActivityBridge,
   AggkitActivityItem,
   AggkitActivityWarning,
-  AggkitBridgeAggregator,
-  AggkitTrackingData
+  AggkitBridgeAggregator
 } from '@agglayer/sdk';
 
 // Thin wrapper over `AggkitBridgeAggregator.getActivity`, which itself wraps
@@ -37,37 +36,47 @@ import type {
 //    TransactionsView, which renders it as a dismissible warning icon
 //    rather than blocking the rest of the list.
 //  - Status collapses from 4 values (BRIDGED/LEAF_INCLUDED/READY_TO_CLAIM/
-//    CLAIMED) to what this endpoint actually guarantees: a claimed tri-state
-//    (`claimed`) plus, when `includeTracking=true`, the same step-based
-//    tracking data the old per-row tracker poll used. See deriveStatus below
-//    for exactly how PENDING/READY_TO_CLAIM/CLAIMED/ERROR are derived from
-//    that pair.
+//    CLAIMED) to what this endpoint actually guarantees: a `claim_status`
+//    summary (`'pending'`/`'readyToClaim'`/`'claimed'`/`'error'`, agglayer/
+//    aggkit#1830, SDK PR #1831 -- previously a plain claimed tri-state, see
+//    deriveStatus below for the migration note) plus, when
+//    `includeTracking=true`, the same step-based tracking data the old
+//    per-row tracker poll used. See deriveStatus below for exactly how
+//    PENDING/READY_TO_CLAIM/CLAIMED/ERROR are derived from it.
 
-// The last step of every route (L1->L2, L2->L1, L2->L2) is always
-// "WaitingClaim" (see app/components/transactions/trackerProgressBar.tsx's
-// route-length note and the captured fixtures in
-// app/__fixtures__/tracker.ts) -- an unclaimed bridge whose current step is
-// WaitingClaim and not yet "done" has nothing left to wait on but the claim
-// transaction itself, which is exactly READY_TO_CLAIM.
-const isWaitingOnClaimOnly = (tracking: AggkitTrackingData | undefined): boolean => {
-  if (!tracking || tracking.step_index === null || !tracking.all_steps) return false;
-  const currentStep = tracking.all_steps[tracking.step_index];
-  return currentStep?.step_name === 'WaitingClaim' && currentStep.status !== 'done';
-};
-
-// Collapses the endpoint's claimed tri-state (+ optional tracking) into the
-// 4 states the UI renders. This intentionally loses the old BRIDGED vs
-// LEAF_INCLUDED distinction: the activity endpoint has no field for it, and
-// approximating it from tracking step names was judged too speculative to
-// ship (product decision, S-review 2026-08-28) -- everything unclaimed that
-// isn't already waiting on just the claim tx renders as a single PENDING
-// state instead.
+// Collapses the endpoint's claim_status (+ optional tracking, folded into
+// claim_status server-side -- see below) into the 4 states the UI renders.
+// This intentionally loses the old BRIDGED vs LEAF_INCLUDED distinction: the
+// activity endpoint has no field for it, and approximating it from tracking
+// step names was judged too speculative to ship (product decision, S-review
+// 2026-08-28) -- everything unclaimed that isn't already ready to claim
+// renders as a single PENDING state instead.
+//
+// BREAKING (agglayer/aggkit#1830, SDK PR #1831): the endpoint's old `claimed`
+// field -- a tri-state (`'true'`/`'false'`/`'error'`) mirroring only the
+// destination bridge contract's `isClaimed()` call -- is gone, replaced by
+// `claim_status: AggkitClaimStatus` (`'pending'`/`'readyToClaim'`/`'claimed'`/
+// `'error'`). It already encodes everything this function used to derive by
+// hand: previously READY_TO_CLAIM read `tracking.claim_status ===
+// 'readyToClaim'` (agglayer/aggkit#1823, PR #1829), itself replacing
+// hand-inspecting whether `all_steps[step_index]` was `WaitingClaim` and not
+// yet `done` -- PR #1831 lifts that same signal onto the item directly (per
+// the SDK's `AggkitActivityItem.claim_status` doc, resolved server-side even
+// without `includeTracking`), so no `tracking` lookup is needed here at all
+// anymore.
 export const deriveStatus = (
-  item: Pick<AggkitActivityItem, 'claimed' | 'tracking' | 'errors'>
+  item: Pick<AggkitActivityItem, 'claim_status' | 'errors'>
 ): { status: TransactionStatus; statusError?: string } => {
-  if (item.claimed === 'true') return { status: 'CLAIMED' };
-  if (item.claimed === 'error') return { status: 'ERROR', statusError: item.errors?.claim };
-  return { status: isWaitingOnClaimOnly(item.tracking) ? 'READY_TO_CLAIM' : 'PENDING' };
+  switch (item.claim_status) {
+    case 'claimed':
+      return { status: 'CLAIMED' };
+    case 'error':
+      return { status: 'ERROR', statusError: item.errors?.claim };
+    case 'readyToClaim':
+      return { status: 'READY_TO_CLAIM' };
+    default:
+      return { status: 'PENDING' };
+  }
 };
 
 // leaf_type 1 is a message, 0 is an asset -- same convention
@@ -104,7 +113,8 @@ const toLeafType = (leafType: number): string => (leafType === 1 ? 'message' : '
 // the bridge contract's own monotonic per-deposit counter, and pairing it
 // with the transaction hash also keeps two deposits batched into one tx
 // distinct.
-const toHubUID = (bridge: AggkitActivityBridge): string => `${bridge.tx_hash}:${bridge.deposit_count}`;
+const toHubUID = (bridge: AggkitActivityBridge): string =>
+  `${bridge.tx_hash}:${bridge.deposit_count}`;
 
 export const toTransaction = (item: AggkitActivityItem): Transaction => {
   const { bridge, claim } = item;

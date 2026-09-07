@@ -19,6 +19,7 @@ vi.mock('@/app/hooks/useBridgeTracking', () => ({
 import {
   l1l2FinishedFixture,
   l1l2RunningFixture,
+  l1l2RunningWithL1InfoLeafFixture,
   l2l2RunningFixture,
   registeredFixture
 } from '@/app/__fixtures__/tracker';
@@ -106,6 +107,26 @@ describe('TrackerProgressBar', () => {
     expect(pendingDot).toHaveClass('border-grey-light', 'bg-transparent');
   });
 
+  // agglayer/aggkit#1823 (PR #1829): WaitingL1InfoLeafAvailable is spliced in
+  // ahead of WaitingClaim on every route, so this route now renders 5 dots
+  // (not 4) and the new step needs its own recognized label -- otherwise it
+  // falls back to trackerSteps.ts's "Unrecognized step" copy.
+  it('renders 5 dots for an L1->L2 bridge waiting on the L1 info leaf, with a recognized label', () => {
+    mockTracking(l1l2RunningWithL1InfoLeafFixture);
+    const { container } = render(<TrackerProgressBar transaction={makeTransaction()} />);
+
+    expect(container.querySelectorAll('[data-test-id^="tracker-step-"]')).toHaveLength(5);
+
+    const inProgressDot = container.querySelector('[data-test-id="tracker-step-2"]');
+    expect(inProgressDot).toHaveAttribute('data-step', 'WaitingL1InfoLeafAvailable');
+    expect(inProgressDot).toHaveAttribute('data-status', 'inProgress');
+
+    const tooltip = inProgressDot?.parentElement?.querySelector('[role="tooltip"]');
+    expect(tooltip).toHaveTextContent(
+      'Waiting until the claim proof can be generated — In progress'
+    );
+  });
+
   it('renders 7 dots for an L2->L2 mid-flight bridge', () => {
     mockTracking(l2l2RunningFixture);
     const { container } = render(<TrackerProgressBar transaction={makeTransaction()} />);
@@ -134,6 +155,6 @@ describe('TrackerProgressBar', () => {
 
     const dot = container.querySelector('[data-test-id="tracker-step-2"]');
     const tooltip = dot?.parentElement?.querySelector('[role="tooltip"]');
-    expect(tooltip).toHaveTextContent('Finalizing claim data for Devnet L2-001 — In progress');
+    expect(tooltip).toHaveTextContent('Waiting for the claim on Devnet L2-001 — In progress');
   });
 });

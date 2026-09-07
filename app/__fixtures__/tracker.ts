@@ -5,11 +5,24 @@ import type { AggkitTrackingData } from '@agglayer/sdk';
 // sibling SDK repo) -- kept here so dev-ui's own unit tests (S9) don't reach
 // across repos. Field values are the real captured ones; only comments/
 // whitespace differ from the source JSON.
+//
+// `claim_status` (agglayer/aggkit#1823, PR #1829) was added to the wire
+// format after every one of these fixtures was captured, so it isn't part of
+// the "real captured" data above -- each fixture below backfills it by hand,
+// applying the SDK's AggkitClaimStatus precedence rules (error > claimed >
+// readyToClaim > pending) to that fixture's own tracking_status/step_index/
+// all_steps, i.e. exactly what a server that also shipped this field at
+// capture time would have reported. `all_steps` itself is left as originally
+// captured (no `WaitingL1InfoLeafAvailable` entry) for the same reason the
+// SDK's own fixtures weren't backfilled with it either -- see
+// l1l2RunningWithL1InfoLeafFixture below for a fixture that does cover it,
+// SYNTHESIZED rather than captured.
 
 // tracking_status 'registered': all_steps still null, tracker hasn't
 // resolved the route yet.
 export const registeredFixture: AggkitTrackingData = {
   tracking_status: 'registered',
+  claim_status: 'pending',
   network_id: 1,
   tx_hash: '0xdeadbeef00000000000000000000000000000000000000000000000000000000',
   bridge_status: null,
@@ -28,6 +41,7 @@ export const registeredFixture: AggkitTrackingData = {
 // L1->L2 mid-flight: 4 steps, step_index 2 (WaitingClaim) inProgress.
 export const l1l2RunningFixture: AggkitTrackingData = {
   tracking_status: 'running',
+  claim_status: 'readyToClaim',
   network_id: 0,
   tx_hash: '0x64b65138996aae61811dac45f10c2baddbf0ab5aae9ef587766b92a23c85791e',
   bridge_status: {
@@ -90,6 +104,7 @@ export const l1l2RunningFixture: AggkitTrackingData = {
 export const l1l2FinishedFixture: AggkitTrackingData = {
   ...l1l2RunningFixture,
   tracking_status: 'finished',
+  claim_status: 'claimed',
   step_index: 3,
   all_steps: [
     l1l2RunningFixture.all_steps![0],
@@ -120,6 +135,7 @@ export const l1l2FinishedFixture: AggkitTrackingData = {
 // to assert the modal detail renders both result shapes.
 export const l2l1FinishedFixture: AggkitTrackingData = {
   tracking_status: 'finished',
+  claim_status: 'claimed',
   network_id: 1,
   tx_hash: '0xcfbdc931acce665da204150bc025cd76cdbe5566578abaa1ec4ef236fa5c8009',
   bridge_status: {
@@ -217,6 +233,7 @@ export const l2l1FinishedFixture: AggkitTrackingData = {
 // L2->L2 mid-flight: 7 steps, step_index 4 (WaitingGERInjection) inProgress.
 export const l2l2RunningFixture: AggkitTrackingData = {
   tracking_status: 'running',
+  claim_status: 'pending',
   network_id: 1,
   tx_hash: '0x66a20ab10e92748f7ee30f9a487e262a673b790df365bf3067a59c8b71fb2fe8',
   bridge_status: {
@@ -324,6 +341,7 @@ export const l2l2RunningFixture: AggkitTrackingData = {
 export const l2l2RunningStepErrorFixture: AggkitTrackingData = {
   ...l2l2RunningFixture,
   tracking_status: 'error',
+  claim_status: 'error',
   all_steps: l2l2RunningFixture.all_steps!.map((step) =>
     step.step_index === 4
       ? {
@@ -344,6 +362,7 @@ export const l2l2RunningStepErrorFixture: AggkitTrackingData = {
 // (tx not found / not a bridge tx). bridge_status and all_steps stay null.
 export const errorGiveupFixture: AggkitTrackingData = {
   tracking_status: 'error',
+  claim_status: 'error',
   network_id: 1,
   tx_hash: '0xdeadbeef00000000000000000000000000000000000000000000000000000000',
   bridge_status: null,
@@ -357,4 +376,74 @@ export const errorGiveupFixture: AggkitTrackingData = {
       'network=1/tx=0xdeadbeef00000000000000000000000000000000000000000000000000000000 does not exist on the network'
     ]
   }
+};
+
+// SYNTHESIZED (not a captured fixture -- like l2l2RunningStepErrorFixture
+// above, no captured fixture covers this: all app/__fixtures__/tracker.ts
+// and sdk/src/aggkit/__fixtures__/tracker_*.json fixtures predate
+// agglayer/aggkit#1823 (PR #1829), which inserts `WaitingL1InfoLeafAvailable`
+// immediately before `WaitingClaim` on every route. This is
+// l1l2RunningFixture (L1->L2, 4 steps) with that step spliced in ahead of
+// WaitingClaim -- 5 steps total, WaitingClaim/Claimed shifted from
+// step_index 2/3 to 3/4 -- and the current step moved back to the new one,
+// still inProgress. claim_status stays 'pending': the bridge isn't
+// readyToClaim until the current step reaches WaitingClaim itself.
+export const l1l2RunningWithL1InfoLeafFixture: AggkitTrackingData = {
+  ...l1l2RunningFixture,
+  claim_status: 'pending',
+  step_index: 2,
+  all_steps: [
+    l1l2RunningFixture.all_steps![0],
+    l1l2RunningFixture.all_steps![1],
+    {
+      step_index: 2,
+      step_name: 'WaitingL1InfoLeafAvailable',
+      status: 'inProgress',
+      start_date: '2026-08-07T14:45:56.844525693Z'
+    },
+    { step_index: 3, step_name: 'WaitingClaim', status: 'pending' },
+    { ...l1l2RunningFixture.all_steps![3], step_index: 4 }
+  ]
+};
+
+// SYNTHESIZED, same route as l1l2RunningWithL1InfoLeafFixture but carried
+// through to `finished`: exercises WaitingL1InfoLeafAvailable's `done`
+// result shape (AggkitWaitingL1InfoLeafAvailableResult -- l1_info_tree_index)
+// alongside WaitingClaim's, the same way l2l1FinishedFixture exercises two
+// result shapes together for PendingInclusion/WaitingClaim.
+export const l1l2FinishedWithL1InfoLeafFixture: AggkitTrackingData = {
+  ...l1l2RunningWithL1InfoLeafFixture,
+  tracking_status: 'finished',
+  claim_status: 'claimed',
+  step_index: 4,
+  all_steps: [
+    l1l2RunningWithL1InfoLeafFixture.all_steps![0],
+    l1l2RunningWithL1InfoLeafFixture.all_steps![1],
+    {
+      step_index: 2,
+      step_name: 'WaitingL1InfoLeafAvailable',
+      status: 'done',
+      start_date: '2026-08-07T14:45:56.844525693Z',
+      end_date: '2026-08-07T14:45:58.844525693Z',
+      result: { l1_info_tree_index: 6 }
+    },
+    {
+      step_index: 3,
+      step_name: 'WaitingClaim',
+      status: 'done',
+      start_date: '2026-08-07T14:45:58.844525693Z',
+      end_date: '2026-08-07T14:46:06.844712083Z',
+      result: {
+        claim_tx: '0x178eed25e7a70d088367b81879bffb7fa800e3f23789d8a11bd05ae78505e3f3',
+        block_number: 909
+      }
+    },
+    {
+      step_index: 4,
+      step_name: 'Claimed',
+      status: 'done',
+      start_date: '2026-08-07T14:46:06.844712083Z',
+      end_date: '2026-08-07T14:46:06.844712083Z'
+    }
+  ]
 };
