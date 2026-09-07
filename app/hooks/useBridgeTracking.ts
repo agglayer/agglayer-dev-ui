@@ -49,7 +49,7 @@ export const hasTrackingStarted = (data: AggkitTrackingData | undefined): boolea
 // own poll.
 //
 // The activity endpoint never embeds tracking for an already-CLAIMED bridge
-// (attached "only when unclaimed" -- see activity.ts's RawActivityItem doc),
+// (attached "only when unclaimed" -- see the SDK's AggkitActivityItem doc),
 // so once a bridge finishes there is nothing left to pass through.
 // `options.enabled` opts into an ON-DEMAND fetch instead, straight from the
 // aggkit tracker (AggkitBridgeAggregator.getBridgeTracking) -- the same
