@@ -119,7 +119,7 @@ export const TransactionListItem = ({
             <TransactionStatusBadge
               status={transaction.status}
               className="text-xs sm:text-sm"
-              isConfirming={isPendingClaimConfirmation}
+              isConfirming={isPendingClaimConfirmation || transaction.isPlaceholder}
             />
           </div>
         </div>
