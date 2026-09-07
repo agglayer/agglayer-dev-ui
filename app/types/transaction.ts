@@ -49,6 +49,13 @@ export interface Transaction {
   // useBridgeTracking now just reads this back instead of polling its own
   // per-row endpoint -- see that hook's doc comment.
   tracking?: AggkitTrackingData;
+  // True only for the local, optimistic row bridgeCard.tsx adds via
+  // addPendingBridge the instant a bridge tx confirms -- it carries none of
+  // the real deposit data yet (depositCount/blockNumber/leafIndex are all
+  // placeholder zeros). useTransactions.ts drops it as soon as the real
+  // activity feed reports the same transactionHash. UI reads this to show a
+  // generic "updating" state instead of trusting its guessed `status`.
+  isPlaceholder?: boolean;
 }
 
 export interface TransactionFilters {
