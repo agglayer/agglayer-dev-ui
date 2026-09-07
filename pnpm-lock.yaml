@@ -6,15 +6,14 @@ settings:
 
 overrides:
   '@wagmi/connectors': ^5.9.9
-  '@agglayer/sdk': 1.0.0-snapshot-ca6df75e
 
 importers:
 
   .:
     dependencies:
       '@agglayer/sdk':
-        specifier: 1.0.0-snapshot-ca6df75e
-        version: 1.0.0-snapshot-ca6df75e(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3)
+        specifier: 1.0.0-dev.20260907140808.d648280
+        version: 1.0.0-dev.20260907140808.d648280(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3)
       '@reown/appkit':
         specifier: ^1.8.15
         version: 1.8.19(@types/react@19.2.14)(bufferutil@4.1.0)(react@19.2.3)(typescript@5.9.3)(use-sync-external-store@1.4.0(react@19.2.3))(utf-8-validate@5.0.10)(zod@4.4.3)
@@ -136,8 +135,8 @@ packages:
   '@adraffy/ens-normalize@1.11.1':
     resolution: {integrity: sha512-nhCBV3quEgesuf7c7KYfperqSS14T8bYuvJ8PcLJp6znkZpFc0AuW4qBtr8eKVyPPe/8RSr7sglCWPU5eaxwKQ==}
 
-  '@agglayer/sdk@1.0.0-snapshot-ca6df75e':
-    resolution: {integrity: sha512-vN1KTX+XNFY6/H62LvtEWv4uJc7hOR+vQExLQFbCAqdH4jMyiWyTc/ap9hndYbKAMPMRur82vvE6ndm+KNF9dQ==}
+  '@agglayer/sdk@1.0.0-dev.20260907140808.d648280':
+    resolution: {integrity: sha512-lnItiqaupM6Z902RB/yeAYWOTtiEAujf+ehkuvhx/i/N56vteKrg9h+MenwD1n38abl+sOOj4cjI6GFUcfVu0Q==}
     engines: {node: '>=18.0.0'}
 
   '@alloc/quick-lru@5.2.0':
@@ -4750,7 +4749,7 @@ snapshots:
 
   '@adraffy/ens-normalize@1.11.1': {}
 
-  '@agglayer/sdk@1.0.0-snapshot-ca6df75e(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3)':
+  '@agglayer/sdk@1.0.0-dev.20260907140808.d648280(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3)':
     dependencies:
       viem: 2.49.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3)
     transitivePeerDependencies:
