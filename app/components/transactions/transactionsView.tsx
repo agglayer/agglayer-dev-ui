@@ -1,6 +1,6 @@
 'use client';
 
-import type { TransactionStatus, Transaction } from '@/app/types/transaction';
+import type { ClaimExecutionResult, TransactionStatus, Transaction } from '@/app/types/transaction';
 
 import { ClaimResultModal } from '@/app/components/transactions/claimResultModal';
 import { getTransactionInitialStatus } from '@/app/components/transactions/intialStatus';
@@ -40,6 +40,16 @@ export const TransactionsView = () => {
   // whatever Transaction object it's handed.
   const [selectedTransactionId, setSelectedTransactionId] = useState<string | null>(null);
   const [warningsModalOpen, setWarningsModalOpen] = useState(false);
+  // hubUIDs whose claim just succeeded, kept flagged (button hidden, status
+  // badge shows a loading state) until the next activity poll actually
+  // confirms it -- see the cleanup effect below and
+  // transactionListItem.tsx's isPendingClaimConfirmation. Needed because
+  // useClaimExecution's own success state clears on modal close/reset, well
+  // before the row's real status (still READY_TO_CLAIM from the last poll)
+  // catches up.
+  const [pendingClaimConfirmationIds, setPendingClaimConfirmationIds] = useState<Set<string>>(
+    () => new Set()
+  );
 
   const queryFilters = useMemo(
     () => ({
@@ -80,14 +90,43 @@ export const TransactionsView = () => {
     return () => clearTimeout(timeout);
   }, [aggressiveRefetch, clearAggressiveRefetch]);
 
-  const handleClaimComplete = useCallback(() => {
-    triggerAggressiveRefetch();
-    // useReadyToClaimCount (header badge) shares this exact queryKey
-    // (['activity', mode, chainId, address], see useTransactions/
-    // useReadyToClaimCount) so refetching here also refreshes the badge --
-    // no separate invalidation needed.
-    void refetch();
-  }, [refetch, triggerAggressiveRefetch]);
+  const handleClaimComplete = useCallback(
+    (result: ClaimExecutionResult) => {
+      triggerAggressiveRefetch();
+      if (result.status === 'success') {
+        setPendingClaimConfirmationIds((prev) => {
+          const next = new Set(prev);
+          next.add(result.transactionId);
+          return next;
+        });
+      }
+      // useReadyToClaimCount (header badge) shares this exact queryKey
+      // (['activity', mode, chainId, address], see useTransactions/
+      // useReadyToClaimCount) so refetching here also refreshes the badge --
+      // no separate invalidation needed.
+      void refetch();
+    },
+    [refetch, triggerAggressiveRefetch]
+  );
+
+  // Clears a row's "pending confirmation" flag once a poll actually reflects
+  // the claim -- its status moved off READY_TO_CLAIM (typically to CLAIMED),
+  // or it dropped out of the current filtered page entirely.
+  useEffect(() => {
+    setPendingClaimConfirmationIds((prev) => {
+      if (prev.size === 0) return prev;
+      let changed = false;
+      const next = new Set(prev);
+      for (const id of prev) {
+        const tx = allTransactions.find((transaction) => transaction.hubUID === id);
+        if (!tx || tx.status !== 'READY_TO_CLAIM') {
+          next.delete(id);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [allTransactions]);
 
   const ensureCorrectChain = useEnforceCorrectChain();
   const claimExecution = useClaimExecution({
@@ -282,6 +321,7 @@ export const TransactionsView = () => {
           claimingTxId={claimingTxId}
           claimStep={claimStep}
           isAnyClaiming={isAnyClaiming}
+          pendingClaimConfirmationIds={pendingClaimConfirmationIds}
         />
       )}
 
@@ -323,6 +363,9 @@ export const TransactionsView = () => {
         onClaim={handleClaim}
         claimStep={selectedTransaction?.hubUID === claimingTxId ? claimStep : undefined}
         isAnyClaiming={isAnyClaiming}
+        isPendingClaimConfirmation={
+          selectedTransaction ? pendingClaimConfirmationIds.has(selectedTransaction.hubUID) : false
+        }
       />
 
       <ClaimResultModal
