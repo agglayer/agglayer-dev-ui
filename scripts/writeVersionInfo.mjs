@@ -12,6 +12,15 @@
 // pipeline that *does* have the commit available (e.g. from $GITHUB_SHA)
 // inject it without needing .git; with neither available this falls back to
 // "unknown" rather than failing the build over metadata.
+//
+// The version has the same problem one level up: package.json's "version"
+// field is not tied to how this app is actually released -- docker-publish
+// .yaml tags images from the release/dispatch ref, never from package.json
+// -- so a Docker build reading package.json alone reports a stale/unrelated
+// number. DEV_UI_BUILD_VERSION lets a build pipeline that knows the real
+// released version (or dispatch tag) override it the same way
+// DEV_UI_BUILD_COMMIT overrides the commit; with no override this falls
+// back to package.json's version, same as before.
 import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -32,14 +41,19 @@ const resolveCommit = () => {
   }
 };
 
+const resolveVersion = () => {
+  if (process.env.DEV_UI_BUILD_VERSION) return process.env.DEV_UI_BUILD_VERSION;
+
+  const { version } = JSON.parse(fs.readFileSync(PACKAGE_JSON_PATH, 'utf8'));
+  return version;
+};
+
 /**
  * @returns {{ destination: string, info: { version: string, commit: string, builtAt: string } }}
  */
 export const writeVersionInfo = () => {
-  const { version } = JSON.parse(fs.readFileSync(PACKAGE_JSON_PATH, 'utf8'));
-
   const info = {
-    version,
+    version: resolveVersion(),
     commit: resolveCommit(),
     builtAt: new Date().toISOString()
   };
