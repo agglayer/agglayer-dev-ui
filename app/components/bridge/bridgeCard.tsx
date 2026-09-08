@@ -145,7 +145,8 @@ const BridgeCardContent = () => {
       originTokenAddress: isNative ? ZERO_ADDRESS : selectedToken.address,
       originTokenNetwork: fromChain.networkId,
       timestamp: nowSeconds,
-      leafIndex: 0
+      leafIndex: 0,
+      isPlaceholder: true
     });
   }, [
     currentStep,

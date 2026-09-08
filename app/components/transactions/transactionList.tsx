@@ -19,6 +19,10 @@ interface TransactionListProps {
   claimingTxId?: string;
   claimStep?: ClaimStep;
   isAnyClaiming?: boolean;
+  // hubUIDs whose claim just succeeded and are awaiting confirmation from
+  // the next activity poll -- see transactionsView.tsx's
+  // pendingClaimConfirmationIds.
+  pendingClaimConfirmationIds?: Set<string>;
 }
 
 export const TransactionList = ({
@@ -31,7 +35,8 @@ export const TransactionList = ({
   onSelect,
   claimingTxId,
   claimStep,
-  isAnyClaiming
+  isAnyClaiming,
+  pendingClaimConfirmationIds
 }: TransactionListProps) => {
   const sentinelRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -80,6 +85,7 @@ export const TransactionList = ({
                 onSelect={onSelect}
                 claimStep={tx.hubUID === claimingTxId ? claimStep : undefined}
                 isAnyClaiming={isAnyClaiming}
+                isPendingClaimConfirmation={pendingClaimConfirmationIds?.has(tx.hubUID) ?? false}
               />
             ))}
           </div>

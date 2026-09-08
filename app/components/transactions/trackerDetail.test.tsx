@@ -28,6 +28,7 @@ vi.mock('@/app/hooks/useBridgeTracking', async () => {
 import {
   errorGiveupFixture,
   l1l2FinishedFixture,
+  l1l2FinishedWithL1InfoLeafFixture,
   l1l2RunningFixture,
   l2l1FinishedFixture,
   l2l2RunningStepErrorFixture,
@@ -116,6 +117,20 @@ describe('TrackerDetail', () => {
     expect(screen.getByText('Claim tx')).toBeInTheDocument();
     const claimTx = (l2l1FinishedFixture.all_steps![4].result as { claim_tx: string }).claim_tx;
     expect(screen.getByText(shortenAddress(claimTx, 6))).toBeInTheDocument();
+  });
+
+  // agglayer/aggkit#1823 (PR #1829): WaitingL1InfoLeafAvailable's own `done`
+  // result (l1_info_tree_index) renders instead of falling through to the
+  // unrecognized-step fallback.
+  it("renders the L1 info tree index from a finished bridge's WaitingL1InfoLeafAvailable result", () => {
+    mockTracking(l1l2FinishedWithL1InfoLeafFixture);
+    const { container } = render(<TrackerDetail transaction={makeTransaction()} />);
+
+    expect(screen.getByText('L1 Info Tree index')).toBeInTheDocument();
+    expect(screen.getByText('6')).toBeInTheDocument();
+    expect(
+      container.querySelectorAll('[data-test-id="tracker-detail-unrecognized-step-result"]')
+    ).toHaveLength(0);
   });
 
   // C12: a step's `result` shape depends on `step_name`, but the SDK's

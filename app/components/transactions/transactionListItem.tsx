@@ -25,6 +25,12 @@ interface TransactionListItemProps {
   onSelect?: (transaction: Transaction) => void;
   claimStep?: ClaimStep;
   isAnyClaiming?: boolean;
+  // True right after this row's claim succeeded, until the next activity
+  // poll actually reflects it (transaction.status moving off READY_TO_CLAIM
+  // -- see transactionsView.tsx's pendingClaimConfirmationIds). Hides the
+  // claim button and shows a loading badge instead of re-offering "Claim
+  // tokens" against a still-stale READY_TO_CLAIM row.
+  isPendingClaimConfirmation?: boolean;
 }
 
 export const TransactionListItem = ({
@@ -32,12 +38,13 @@ export const TransactionListItem = ({
   onClaim,
   onSelect,
   claimStep,
-  isAnyClaiming
+  isAnyClaiming,
+  isPendingClaimConfirmation
 }: TransactionListItemProps) => {
   const { chains } = useAppMode();
   const sourceChain = getChainByNetworkId(chains, transaction.sourceNetwork);
   const destChain = getChainByNetworkId(chains, transaction.destinationNetwork);
-  const isClaimable = transaction.status === 'READY_TO_CLAIM';
+  const isClaimable = transaction.status === 'READY_TO_CLAIM' && !isPendingClaimConfirmation;
   const isPending = transaction.status === 'PENDING';
   // Per-route autoclaim grace period: 'no-autoclaim' shows the button now,
   // 'waiting' shows a "claim manually now" hint while autoclaim is expected,
@@ -109,7 +116,11 @@ export const TransactionListItem = ({
             {destChain && <span className="font-medium">{destChain.name}</span>}
           </div>
           <div className="flex justify-end sm:justify-start">
-            <TransactionStatusBadge status={transaction.status} className="text-xs sm:text-sm" />
+            <TransactionStatusBadge
+              status={transaction.status}
+              className="text-xs sm:text-sm"
+              isConfirming={isPendingClaimConfirmation || transaction.isPlaceholder}
+            />
           </div>
         </div>
         <div className="flex items-center justify-between gap-3">

@@ -23,6 +23,7 @@ import type {
   AggkitWaitingClaimResult,
   AggkitWaitingGERInjectionResult,
   AggkitWaitingGERUpdateResult,
+  AggkitWaitingL1InfoLeafAvailableResult,
   AggkitWaitingLERUpdateResult,
   AggkitWaitL1SettledGERResult
 } from '@agglayer/sdk';
@@ -101,6 +102,17 @@ const isWaitL1SettledGERResult = (
 const isWaitingClaimResult = (result: AggkitBridgeStepResult): result is AggkitWaitingClaimResult =>
   'claim_tx' in result;
 
+// `AggkitWaitingL1InfoLeafAvailableResult` (agglayer/aggkit#1823, PR #1829)
+// is the only result shape whose sole field is `l1_info_tree_index` --
+// `AggkitWaitingGERUpdateResult` and `AggkitWaitL1SettledGERResult` both also
+// carry an `l1_info_tree_index`, but always alongside a `ger` field, hence
+// the exclusion (same pattern isGERResult above uses to tell its two shapes
+// apart from AggkitWaitL1SettledGERResult).
+const isWaitingL1InfoLeafAvailableResult = (
+  result: AggkitBridgeStepResult
+): result is AggkitWaitingL1InfoLeafAvailableResult =>
+  'l1_info_tree_index' in result && !('ger' in result);
+
 // Rendered instead of guessing at a shape: either the step's `result` failed
 // its guard above (malformed/unexpected wire payload for that `step_name`),
 // or `step_name` itself isn't one of the recognized values at all. Either
@@ -174,6 +186,15 @@ const StepResultDetail = ({ step }: { step: AggkitBridgeStepPath }) => {
           <span>Settlement tx</span>
           <HashValue value={result.tx_hash} />
           <span>Block {result.block_number}</span>
+        </div>
+      );
+    }
+    case 'WaitingL1InfoLeafAvailable': {
+      if (!isWaitingL1InfoLeafAvailableResult(result)) return <UnrecognizedStepResult />;
+      return (
+        <div className="flex items-center gap-2 text-xs text-grey">
+          <span>L1 Info Tree index</span>
+          <span className="font-mono text-black">{result.l1_info_tree_index}</span>
         </div>
       );
     }
