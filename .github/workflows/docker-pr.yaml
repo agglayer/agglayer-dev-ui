@@ -48,6 +48,12 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Resolve build metadata
+        id: meta
+        run: |
+          set -euo pipefail
+          echo "built_sha=$(git rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -68,6 +74,14 @@ jobs:
           tags: ${{ env.IMAGE_TAG }}
           cache-from: type=gha,scope=docker-pr
           cache-to: type=gha,mode=max,scope=docker-pr
+          # Same DEV_UI_BUILD_COMMIT thread as docker-publish.yaml, so a PR
+          # build's /version.json is also traceable to the PR head commit
+          # instead of "unknown" (see Dockerfile). No DEV_UI_BUILD_VERSION
+          # override here -- a PR build has no release/dispatch tag to give
+          # it, so it falls back to package.json's version like `pnpm dev`
+          # would.
+          build-args: |
+            DEV_UI_BUILD_COMMIT=${{ steps.meta.outputs.built_sha }}
 
       - name: Smoke test image (HTTP 200, valid /config.json)
         run: |
@@ -111,7 +125,18 @@ jobs:
             exit 1
           fi
 
-          echo "Smoke test passed: / -> $root_status, /config.json -> $config_status (valid JSON)"
+          # Guards against the DEV_UI_BUILD_COMMIT build-arg above silently
+          # regressing back to the Dockerfile's "unknown" fallback.
+          expected_commit="${{ steps.meta.outputs.built_sha }}"
+          version_body="$(curl -fsS http://localhost:8080/version.json)"
+          actual_commit="$(echo "$version_body" | jq -r '.commit')"
+          if [ "$actual_commit" != "$expected_commit" ]; then
+            echo "::error::published /version.json commit does not match this build -- expected $expected_commit, got $version_body" >&2
+            docker logs devui-smoke >&2 || true
+            exit 1
+          fi
+
+          echo "Smoke test passed: / -> $root_status, /config.json -> $config_status (valid JSON), /version.json commit -> $actual_commit"
           docker logs devui-smoke
           docker rm -f devui-smoke
 

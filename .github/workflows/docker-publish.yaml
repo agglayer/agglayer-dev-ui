@@ -149,6 +149,12 @@ jobs:
             fi
 
             TAGS="$REGISTRY_IMAGE:$DISPATCH_TAG"
+            # No clean semver exists on this path -- the dispatch tag itself
+            # is the closest thing to "the version" and is what a human
+            # would look at to identify the build, so it doubles as the
+            # baked public/version.json `version` value (see "version" output
+            # below, consumed as the DEV_UI_BUILD_VERSION build-arg).
+            VERSION="$DISPATCH_TAG"
           fi
 
           {
@@ -156,9 +162,11 @@ jobs:
             echo "$TAGS"
             echo "EOF_TAGS"
           } >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
           echo "Resolved tags:"
           echo "$TAGS"
+          echo "Resolved version: $VERSION"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -197,6 +205,14 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.tags.outputs.tags }}
+          # Threads the commit/version this job already resolved (for
+          # image tagging) into the baked public/version.json, via the
+          # Dockerfile's DEV_UI_BUILD_COMMIT/DEV_UI_BUILD_VERSION args --
+          # without these the app-builder stage has no .git and falls back
+          # to "unknown" / package.json's untouched placeholder version.
+          build-args: |
+            DEV_UI_BUILD_COMMIT=${{ steps.meta.outputs.built_sha }}
+            DEV_UI_BUILD_VERSION=${{ steps.tags.outputs.version }}
 
       - name: Verify published manifest
         run: docker buildx imagetools inspect "${{ env.REGISTRY_IMAGE }}@${{ steps.build.outputs.digest }}"
@@ -236,6 +252,21 @@ jobs:
             exit 1
           fi
 
-          echo "Smoke test passed: / -> $root_status, /config.json -> $config_status"
+          # Guards against the DEV_UI_BUILD_COMMIT/DEV_UI_BUILD_VERSION
+          # build-args above silently regressing back to the Dockerfile's
+          # "unknown" / package.json fallback -- assert the baked
+          # /version.json actually carries the values this job resolved.
+          expected_commit="${{ steps.meta.outputs.built_sha }}"
+          expected_version="${{ steps.tags.outputs.version }}"
+          version_json="$(curl -fsS http://localhost:8080/version.json)"
+          actual_commit="$(echo "$version_json" | jq -r '.commit')"
+          actual_version="$(echo "$version_json" | jq -r '.version')"
+          if [ "$actual_commit" != "$expected_commit" ] || [ "$actual_version" != "$expected_version" ]; then
+            echo "::error::published /version.json does not match this build -- expected commit=$expected_commit version=$expected_version, got $version_json" >&2
+            docker logs devui-smoke >&2 || true
+            exit 1
+          fi
+
+          echo "Smoke test passed: / -> $root_status, /config.json -> $config_status, /version.json -> $version_json"
           docker logs devui-smoke
           docker rm -f devui-smoke
