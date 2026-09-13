@@ -145,6 +145,9 @@ how the app calls aggkit.
 `aggkitProxy` may be omitted entirely to mark a mode "not yet configured" — see
 [Validation](#validation) below.
 
+To load-test an `aggkitProxy` deployment at scale (many simulated users bridging
+concurrently through it), see [`loadtest/README.md`](../loadtest/README.md).
+
 ### Removed: the per-network `aggkitBridgeApis` map
 
 Earlier versions of this schema also accepted `aggkitBridgeApis` — an object mapping L2
