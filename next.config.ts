@@ -16,10 +16,22 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: '*',
-      },
-    ],
+        hostname: '*'
+      }
+    ]
   },
+  // Turbopack's persistent build cache (`next build`, as opposed to `next
+  // dev`, where this already defaults to true) is still experimental and
+  // defaults to false -- opt in ONLY for the loadtest tool's own `build-ui`
+  // command (loadtest/ui/build.ts sets LOADTEST_UI_BUILD=true), so every
+  // other build path (production, Cloudflare Workers deploy, Docker image
+  // build) keeps its current, unchanged behavior. build-ui repeatedly
+  // rebuilds this same app (once per loadtest run) with only config.json
+  // changing, which is exactly the repeat-build scenario this cache exists
+  // for (bridge-loadtest-plan.md S09).
+  ...(process.env.LOADTEST_UI_BUILD === 'true'
+    ? { experimental: { turbopackFileSystemCacheForBuild: true } }
+    : {})
 };
 
 export default nextConfig;
