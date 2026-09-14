@@ -289,6 +289,15 @@ export class BrowserUser implements UserDriver {
 
   private readonly pendingDeposits = new Map<string, PendingDeposit>();
 
+  /**
+   * S25 (plan §7 root-cause fix — "up to six concurrent laps drive a
+   * single shared Playwright page with no serialization"): `runExclusive`
+   * below is the queue that fixes it. See that method's doc for the full
+   * design rationale (why a queue, not the single-flight/dedup shape this
+   * file already uses for `fetchActivitySingleFlight`).
+   */
+  private mutexTail: Promise<void> = Promise.resolve();
+
   // S11 retry defect (4): a plain read-only RPC client per chain, used ONLY
   // to fetch the bridge tx's own receipt so `bridge()` can decode a REAL
   // `depositCount` instead of always reporting `null` (see
@@ -433,168 +442,170 @@ export class BrowserUser implements UserDriver {
   // address seeding).
   // -------------------------------------------------------------------------
   async bridge(hop: HopSpec): Promise<BridgeSubmission> {
-    return this.runGuarded(async () => {
-      const fromChain = this.chainByKey(hop.fromChainKey);
-      const toChain = this.chainByKey(hop.toChainKey);
-      const isNative = hop.assetKind === 'eth';
+    return this.runExclusive(() =>
+      this.runGuarded(async () => {
+        const fromChain = this.chainByKey(hop.fromChainKey);
+        const toChain = this.chainByKey(hop.toChainKey);
+        const isNative = hop.assetKind === 'eth';
 
-      if (!isNative) {
-        const tokenAddress = await this.resolveTokenAddress(hop, fromChain);
-        await this.bridgePage.seedCustomToken({
-          chainId: fromChain.chainId,
-          address: tokenAddress,
-          decimals: hop.decimals,
-          symbol: LOADTEST_TOKEN_SYMBOL,
-          name: LOADTEST_TOKEN_NAME
-        });
-      }
-
-      await this.gotoHome();
-      // `bridge-page.ts#selectChainPair` also runs `assertChainPair`, which
-      // reads the EXPECTED chain name from the repo's root `config.json`
-      // via `loadAppConfigForNode()` — the production config, unrelated to
-      // this run's `build-ui`-generated config (whose chain names are
-      // `titleCase(chain.key)`, e.g. "L1", not "Devnet L1"). Against a
-      // loadtest build the two disagree, so this driver selects the pair
-      // directly (`selectFromChain`/`selectToChain`, same locators
-      // `selectChainPair` uses) without that cross-check — a deliberate,
-      // documented divergence from the shared page object's own spec-only
-      // convenience method, not a defect in it (S10 feedback pack).
-      await this.bridgePage.selectFromChain(fromChain.chainId);
-      await this.bridgePage.selectToChain(toChain.chainId);
-
-      // S11 retry defect (4) fix: this driver has no reliable way to obtain
-      // an approve tx's OWN hash/receipt from the DOM (the step indicator
-      // only shows that approval happened, not its result) — a real
-      // limitation, not something to paper over. Previously this method
-      // fabricated an `approve` `TxStepResult` with `txHash: null` whenever
-      // the step indicator became visible; `core/ring.ts`'s `eventsFromBridge`
-      // -> `txEvents` treats ANY `TxStepResult` with a null `txHash` and no
-      // `error` as a failed send (`{message: 'send did not resolve'}`),
-      // which `outcomeFromDriverError` then falls through to `'internal'`
-      // (no `errorClass` to switch on) — so EVERY non-native (ERC20) browser
-      // bridge whose approve step became visible failed the hop outcome
-      // `internal`, unconditionally, regardless of whether the bridge itself
-      // succeeded. Reporting no approve data at all (`approve: null`, same
-      // as the native-asset case) is honest; a fabricated one that trips a
-      // failure path is not. `page_load`/`wallet_connect` are already
-      // absent for headless the same way (DESIGN §5.1) — this is the same
-      // "missing, not zero" treatment for the other direction.
-      if (!isNative) {
-        await this.bridgePage.openTokenSelector();
-        await this.bridgePage.selectToken(LOADTEST_TOKEN_SYMBOL);
-      }
-
-      const submitStartedAt = this.clock.now();
-      await this.bridgePage.fillAmount(hop.amount);
-      await this.bridgePage.submitBridge();
-      await this.bridgePage.waitForTransactionModal();
-
-      try {
-        await this.bridgePage.waitForBridgeSuccess(this.bridgeSuccessTimeoutMs);
-      } catch (error) {
-        const submitDurationMs = this.clock.now() - submitStartedAt;
-        return {
-          allowance: null,
-          approve: null,
-          bridge: {
-            txHash: null,
-            submit: { startedAt: submitStartedAt, durationMs: submitDurationMs },
-            receipt: null,
-            error: classifyUiAssertionError({
-              message: error instanceof Error ? error.message : String(error),
-              testId: 'bridge-success-view'
-            })
-          },
-          depositCount: null,
-          bridgeEventFound: false
-        };
-      }
-
-      const submitDurationMs = this.clock.now() - submitStartedAt;
-
-      const explorerHref = await this.bridgePage.bridgeSuccessExplorerLink.getAttribute('href');
-      const txHash = explorerHref?.match(/0x[a-fA-F0-9]{64}$/)?.[0] as Hex | undefined;
-      if (!txHash) {
-        return {
-          allowance: null,
-          approve: null,
-          bridge: {
-            txHash: null,
-            submit: { startedAt: submitStartedAt, durationMs: submitDurationMs },
-            receipt: null,
-            error: classifyUiAssertionError({
-              message: 'could not read the bridge transaction hash from the success view',
-              testId: 'bridge-success-explorer-link'
-            })
-          },
-          depositCount: null,
-          bridgeEventFound: false
-        };
-      }
-
-      await this.bridgePage.bridgeSuccessCta.click(); // -> transactions route
-      this.pendingDeposits.set(txHash, { txHash, fromNetworkId: hop.fromNetworkId });
-
-      // S11 retry defect (4) fix: decode the REAL `depositCount` off the
-      // bridge tx's own receipt (fetched read-only, node-side) instead of
-      // always reporting `null` — see `decodeBridgeEventLog`'s doc above.
-      // The UI's success view proves the tx mined successfully (it only
-      // renders on a mined, non-reverted receipt), so a decode failure here
-      // means the log scan itself failed (RPC hiccup, unexpected log
-      // shape) — a genuine `bridge_event_missing`, not the false positive
-      // this fix removes.
-      let depositCount: number | null = null;
-      let bridgeEventFound = false;
-      // VALIDATION-1.md A8: this used to be a BARE `catch {}` — any failure
-      // of the receipt fetch/log-decode below (a transient RPC hiccup, not
-      // just "genuinely no matching log") silently fell through to the
-      // exact same `bridgeEventFound: false`, which `core/ring.ts`'s T11
-      // then reports as `bridge_event_missing` — an outcome that reads as
-      // "the chain did not emit a BridgeEvent". A live run recorded 8 of
-      // these, all browser-mode (headless never hits this path — it
-      // decodes off a receipt it already holds). The underlying error is
-      // now classified and reported instead of swallowed.
-      let bridgeEventDecodeError: DriverError | undefined;
-      try {
-        // S24: this driver's own bookkeeping (decoding a REAL depositCount
-        // off the receipt) — the real UI never fetches this receipt itself
-        // (its success view is DOM-only), so this is `harness`, not `ui`.
-        const receipt = await runWithFetchContext(
-          { userId: this.userId, mode: this.mode, origin: 'harness' },
-          () => this.getPublicClient(hop.fromChainKey).getTransactionReceipt({ hash: txHash })
-        );
-        const decoded = decodeBridgeEventLog(fromChain.bridgeAddress as Address, receipt.logs);
-        if (decoded) {
-          depositCount = decoded.depositCount;
-          bridgeEventFound = true;
+        if (!isNative) {
+          const tokenAddress = await this.resolveTokenAddress(hop, fromChain);
+          await this.bridgePage.seedCustomToken({
+            chainId: fromChain.chainId,
+            address: tokenAddress,
+            decimals: hop.decimals,
+            symbol: LOADTEST_TOKEN_SYMBOL,
+            name: LOADTEST_TOKEN_NAME
+          });
         }
-      } catch (error) {
-        // Leave depositCount/bridgeEventFound at their "not found" defaults
-        // — `core/ring.ts`'s T11 will now correctly fail this hop only when
-        // decoding genuinely failed, not on every success — but classify
-        // and surface WHY, rather than swallowing it (A8).
-        bridgeEventDecodeError = classifyRpcError({
-          message: error instanceof Error ? error.message : String(error)
-        });
-      }
 
-      return {
-        allowance: null,
-        approve: null,
-        bridge: {
-          txHash,
-          submit: { startedAt: submitStartedAt, durationMs: submitDurationMs },
-          receipt: {
-            status: 'success',
-            timing: { startedAt: submitStartedAt, durationMs: submitDurationMs }
+        await this.gotoHome();
+        // `bridge-page.ts#selectChainPair` also runs `assertChainPair`, which
+        // reads the EXPECTED chain name from the repo's root `config.json`
+        // via `loadAppConfigForNode()` — the production config, unrelated to
+        // this run's `build-ui`-generated config (whose chain names are
+        // `titleCase(chain.key)`, e.g. "L1", not "Devnet L1"). Against a
+        // loadtest build the two disagree, so this driver selects the pair
+        // directly (`selectFromChain`/`selectToChain`, same locators
+        // `selectChainPair` uses) without that cross-check — a deliberate,
+        // documented divergence from the shared page object's own spec-only
+        // convenience method, not a defect in it (S10 feedback pack).
+        await this.bridgePage.selectFromChain(fromChain.chainId);
+        await this.bridgePage.selectToChain(toChain.chainId);
+
+        // S11 retry defect (4) fix: this driver has no reliable way to obtain
+        // an approve tx's OWN hash/receipt from the DOM (the step indicator
+        // only shows that approval happened, not its result) — a real
+        // limitation, not something to paper over. Previously this method
+        // fabricated an `approve` `TxStepResult` with `txHash: null` whenever
+        // the step indicator became visible; `core/ring.ts`'s `eventsFromBridge`
+        // -> `txEvents` treats ANY `TxStepResult` with a null `txHash` and no
+        // `error` as a failed send (`{message: 'send did not resolve'}`),
+        // which `outcomeFromDriverError` then falls through to `'internal'`
+        // (no `errorClass` to switch on) — so EVERY non-native (ERC20) browser
+        // bridge whose approve step became visible failed the hop outcome
+        // `internal`, unconditionally, regardless of whether the bridge itself
+        // succeeded. Reporting no approve data at all (`approve: null`, same
+        // as the native-asset case) is honest; a fabricated one that trips a
+        // failure path is not. `page_load`/`wallet_connect` are already
+        // absent for headless the same way (DESIGN §5.1) — this is the same
+        // "missing, not zero" treatment for the other direction.
+        if (!isNative) {
+          await this.bridgePage.openTokenSelector();
+          await this.bridgePage.selectToken(LOADTEST_TOKEN_SYMBOL);
+        }
+
+        const submitStartedAt = this.clock.now();
+        await this.bridgePage.fillAmount(hop.amount);
+        await this.bridgePage.submitBridge();
+        await this.bridgePage.waitForTransactionModal();
+
+        try {
+          await this.bridgePage.waitForBridgeSuccess(this.bridgeSuccessTimeoutMs);
+        } catch (error) {
+          const submitDurationMs = this.clock.now() - submitStartedAt;
+          return {
+            allowance: null,
+            approve: null,
+            bridge: {
+              txHash: null,
+              submit: { startedAt: submitStartedAt, durationMs: submitDurationMs },
+              receipt: null,
+              error: classifyUiAssertionError({
+                message: error instanceof Error ? error.message : String(error),
+                testId: 'bridge-success-view'
+              })
+            },
+            depositCount: null,
+            bridgeEventFound: false
+          };
+        }
+
+        const submitDurationMs = this.clock.now() - submitStartedAt;
+
+        const explorerHref = await this.bridgePage.bridgeSuccessExplorerLink.getAttribute('href');
+        const txHash = explorerHref?.match(/0x[a-fA-F0-9]{64}$/)?.[0] as Hex | undefined;
+        if (!txHash) {
+          return {
+            allowance: null,
+            approve: null,
+            bridge: {
+              txHash: null,
+              submit: { startedAt: submitStartedAt, durationMs: submitDurationMs },
+              receipt: null,
+              error: classifyUiAssertionError({
+                message: 'could not read the bridge transaction hash from the success view',
+                testId: 'bridge-success-explorer-link'
+              })
+            },
+            depositCount: null,
+            bridgeEventFound: false
+          };
+        }
+
+        await this.bridgePage.bridgeSuccessCta.click(); // -> transactions route
+        this.pendingDeposits.set(txHash, { txHash, fromNetworkId: hop.fromNetworkId });
+
+        // S11 retry defect (4) fix: decode the REAL `depositCount` off the
+        // bridge tx's own receipt (fetched read-only, node-side) instead of
+        // always reporting `null` — see `decodeBridgeEventLog`'s doc above.
+        // The UI's success view proves the tx mined successfully (it only
+        // renders on a mined, non-reverted receipt), so a decode failure here
+        // means the log scan itself failed (RPC hiccup, unexpected log
+        // shape) — a genuine `bridge_event_missing`, not the false positive
+        // this fix removes.
+        let depositCount: number | null = null;
+        let bridgeEventFound = false;
+        // VALIDATION-1.md A8: this used to be a BARE `catch {}` — any failure
+        // of the receipt fetch/log-decode below (a transient RPC hiccup, not
+        // just "genuinely no matching log") silently fell through to the
+        // exact same `bridgeEventFound: false`, which `core/ring.ts`'s T11
+        // then reports as `bridge_event_missing` — an outcome that reads as
+        // "the chain did not emit a BridgeEvent". A live run recorded 8 of
+        // these, all browser-mode (headless never hits this path — it
+        // decodes off a receipt it already holds). The underlying error is
+        // now classified and reported instead of swallowed.
+        let bridgeEventDecodeError: DriverError | undefined;
+        try {
+          // S24: this driver's own bookkeeping (decoding a REAL depositCount
+          // off the receipt) — the real UI never fetches this receipt itself
+          // (its success view is DOM-only), so this is `harness`, not `ui`.
+          const receipt = await runWithFetchContext(
+            { userId: this.userId, mode: this.mode, origin: 'harness' },
+            () => this.getPublicClient(hop.fromChainKey).getTransactionReceipt({ hash: txHash })
+          );
+          const decoded = decodeBridgeEventLog(fromChain.bridgeAddress as Address, receipt.logs);
+          if (decoded) {
+            depositCount = decoded.depositCount;
+            bridgeEventFound = true;
           }
-        },
-        depositCount,
-        bridgeEventFound,
-        ...(bridgeEventDecodeError !== undefined ? { bridgeEventDecodeError } : {})
-      };
-    });
+        } catch (error) {
+          // Leave depositCount/bridgeEventFound at their "not found" defaults
+          // — `core/ring.ts`'s T11 will now correctly fail this hop only when
+          // decoding genuinely failed, not on every success — but classify
+          // and surface WHY, rather than swallowing it (A8).
+          bridgeEventDecodeError = classifyRpcError({
+            message: error instanceof Error ? error.message : String(error)
+          });
+        }
+
+        return {
+          allowance: null,
+          approve: null,
+          bridge: {
+            txHash,
+            submit: { startedAt: submitStartedAt, durationMs: submitDurationMs },
+            receipt: {
+              status: 'success',
+              timing: { startedAt: submitStartedAt, durationMs: submitDurationMs }
+            }
+          },
+          depositCount,
+          bridgeEventFound,
+          ...(bridgeEventDecodeError !== undefined ? { bridgeEventDecodeError } : {})
+        };
+      })
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -606,12 +617,24 @@ export class BrowserUser implements UserDriver {
   // check-then-act flat-interval wait, which raced under
   // `maxInflightLapsPerUser` concurrency (see `activityFetchInFlight`'s
   // field doc for the full diagnosis). `observeActivity()` itself stays
-  // the public, per-call entry point every caller (including `readState()`)
-  // uses unchanged; it now delegates to `fetchActivitySingleFlight()`,
-  // which is the only place that decides whether THIS call gets a cached
-  // snapshot, joins an already-in-flight fetch, or starts a new one.
+  // the public, per-call entry point most callers use (`runner.ts`'s
+  // `observe_activity` action calls it directly); it delegates to
+  // `fetchActivitySingleFlight()`, which is the only place that decides
+  // whether THIS call gets a cached snapshot, joins an already-in-flight
+  // fetch, or starts a new one.
+  //
+  // S25: also routed through `runExclusive` — this issues a real
+  // `page.evaluate` fetch (`performActivityFetch`) just like `bridge()`/
+  // `claim()` touch the page, so it must take its turn in the SAME queue
+  // rather than racing a concurrent `bridge()`/`claim()` call's navigation
+  // (this is literally one of the root-cause table's named symptoms:
+  // `page.evaluate: Execution context was destroyed`). `readState()` below
+  // is already inside its OWN exclusive turn when it needs an activity
+  // snapshot, so it calls `fetchActivitySingleFlight()` directly rather
+  // than through this method — going through `observeActivity()` from
+  // inside an already-held turn would deadlock (queue behind itself).
   async observeActivity(): Promise<ObservedRow[]> {
-    return this.runGuarded(() => this.fetchActivitySingleFlight());
+    return this.runExclusive(() => this.runGuarded(() => this.fetchActivitySingleFlight()));
   }
 
   private fetchActivitySingleFlight(): Promise<ObservedRow[]> {
@@ -746,105 +769,116 @@ export class BrowserUser implements UserDriver {
   // apply here (browser mode never builds tx params itself).
   // -------------------------------------------------------------------------
   async claim(_hop: HopSpec, row: ObservedRow): Promise<ClaimSubmission> {
-    return this.runGuarded(async () => {
-      const isClaimedStartedAt = this.clock.now();
-      if (row.status === 'CLAIMED') {
-        return {
-          isClaimedBefore: true,
-          isClaimedTiming: {
-            startedAt: isClaimedStartedAt,
-            durationMs: this.clock.now() - isClaimedStartedAt
-          },
-          claimInputs: null,
-          claim: null,
-          isClaimedRecheck: null
+    return this.runExclusive(() =>
+      this.runGuarded(async () => {
+        const isClaimedStartedAt = this.clock.now();
+        if (row.status === 'CLAIMED') {
+          return {
+            isClaimedBefore: true,
+            isClaimedTiming: {
+              startedAt: isClaimedStartedAt,
+              durationMs: this.clock.now() - isClaimedStartedAt
+            },
+            claimInputs: null,
+            claim: null,
+            isClaimedRecheck: null
+          };
+        }
+        const isClaimedTiming: StepTiming = {
+          startedAt: isClaimedStartedAt,
+          durationMs: this.clock.now() - isClaimedStartedAt
         };
-      }
-      const isClaimedTiming: StepTiming = {
-        startedAt: isClaimedStartedAt,
-        durationMs: this.clock.now() - isClaimedStartedAt
-      };
 
-      const submitStartedAt = this.clock.now();
-      try {
-        await this.bridgePage.clickClaim(row.transactionHash);
-      } catch (error) {
-        // S16/A2 (VALIDATION-1.md): the row *was* READY_TO_CLAIM — only the
-        // UI click failed — so this must report `claimInputs: { claimable:
-        // true, ... }` like the two later failure paths in this method do,
-        // not `claimInputs: null`. `null` here made `core/ring.ts`'s
-        // `eventsFromClaim` drop the `ui_assertion` error entirely and let
-        // the hop time out as `timeout_not_claimable` (a *devnet* outcome)
-        // instead of surfacing the driver's own classified error.
+        const submitStartedAt = this.clock.now();
+        try {
+          await this.bridgePage.clickClaim(row.transactionHash);
+        } catch (error) {
+          // S16/A2 (VALIDATION-1.md): the row *was* READY_TO_CLAIM — only the
+          // UI click failed — so this must report `claimInputs: { claimable:
+          // true, ... }` like the two later failure paths in this method do,
+          // not `claimInputs: null`. `null` here made `core/ring.ts`'s
+          // `eventsFromClaim` drop the `ui_assertion` error entirely and let
+          // the hop time out as `timeout_not_claimable` (a *devnet* outcome)
+          // instead of surfacing the driver's own classified error.
+          return {
+            isClaimedBefore: false,
+            isClaimedTiming,
+            claimInputs: { claimable: true, timing: { startedAt: submitStartedAt, durationMs: 0 } },
+            claim: {
+              txHash: null,
+              submit: {
+                startedAt: submitStartedAt,
+                durationMs: this.clock.now() - submitStartedAt
+              },
+              receipt: null,
+              error: classifyUiAssertionError({
+                message: error instanceof Error ? error.message : String(error),
+                testId: 'claim-tokens-button'
+              })
+            },
+            isClaimedRecheck: null
+          };
+        }
+
+        try {
+          await expect(this.page.getByRole('heading', { name: 'Claim successful' })).toBeVisible({
+            timeout: this.claimTimeoutMs
+          });
+        } catch (error) {
+          const alreadyClaimedVisible = await this.page
+            .getByText(/already claimed/i)
+            .isVisible()
+            .catch(() => false);
+          const classified = alreadyClaimedVisible
+            ? classifyRevertError({
+                message: 'AlreadyClaimed()',
+                selector: ALREADY_CLAIMED_SELECTOR
+              })
+            : classifyUiAssertionError({
+                message: error instanceof Error ? error.message : String(error),
+                testId: 'claim-successful-heading'
+              });
+          return {
+            isClaimedBefore: false,
+            isClaimedTiming,
+            claimInputs: { claimable: true, timing: { startedAt: submitStartedAt, durationMs: 0 } },
+            claim: {
+              txHash: null,
+              submit: {
+                startedAt: submitStartedAt,
+                durationMs: this.clock.now() - submitStartedAt
+              },
+              receipt: null,
+              error: classified
+            },
+            isClaimedRecheck: null
+          };
+        }
+
+        const receiptAt = this.clock.now();
+        const claimExplorerHref = await this.page
+          .getByRole('link', { name: /view on explorer/i })
+          .getAttribute('href')
+          .catch(() => null);
+        const claimTxHash = claimExplorerHref?.match(/0x[a-fA-F0-9]{64}$/)?.[0] as Hex | undefined;
+        await this.page
+          .getByRole('button', { name: 'Close', exact: true })
+          .click()
+          .catch(() => undefined);
+
         return {
           isClaimedBefore: false,
           isClaimedTiming,
           claimInputs: { claimable: true, timing: { startedAt: submitStartedAt, durationMs: 0 } },
           claim: {
-            txHash: null,
-            submit: { startedAt: submitStartedAt, durationMs: this.clock.now() - submitStartedAt },
-            receipt: null,
-            error: classifyUiAssertionError({
-              message: error instanceof Error ? error.message : String(error),
-              testId: 'claim-tokens-button'
-            })
+            txHash: claimTxHash ?? null,
+            submit: { startedAt: submitStartedAt, durationMs: receiptAt - submitStartedAt },
+            receipt: { status: 'success', timing: { startedAt: receiptAt, durationMs: 0 } }
           },
           isClaimedRecheck: null
         };
-      }
-
-      try {
-        await expect(this.page.getByRole('heading', { name: 'Claim successful' })).toBeVisible({
-          timeout: this.claimTimeoutMs
-        });
-      } catch (error) {
-        const alreadyClaimedVisible = await this.page
-          .getByText(/already claimed/i)
-          .isVisible()
-          .catch(() => false);
-        const classified = alreadyClaimedVisible
-          ? classifyRevertError({ message: 'AlreadyClaimed()', selector: ALREADY_CLAIMED_SELECTOR })
-          : classifyUiAssertionError({
-              message: error instanceof Error ? error.message : String(error),
-              testId: 'claim-successful-heading'
-            });
-        return {
-          isClaimedBefore: false,
-          isClaimedTiming,
-          claimInputs: { claimable: true, timing: { startedAt: submitStartedAt, durationMs: 0 } },
-          claim: {
-            txHash: null,
-            submit: { startedAt: submitStartedAt, durationMs: this.clock.now() - submitStartedAt },
-            receipt: null,
-            error: classified
-          },
-          isClaimedRecheck: null
-        };
-      }
-
-      const receiptAt = this.clock.now();
-      const claimExplorerHref = await this.page
-        .getByRole('link', { name: /view on explorer/i })
-        .getAttribute('href')
-        .catch(() => null);
-      const claimTxHash = claimExplorerHref?.match(/0x[a-fA-F0-9]{64}$/)?.[0] as Hex | undefined;
-      await this.page
-        .getByRole('button', { name: 'Close', exact: true })
-        .click()
-        .catch(() => undefined);
-
-      return {
-        isClaimedBefore: false,
-        isClaimedTiming,
-        claimInputs: { claimable: true, timing: { startedAt: submitStartedAt, durationMs: 0 } },
-        claim: {
-          txHash: claimTxHash ?? null,
-          submit: { startedAt: submitStartedAt, durationMs: receiptAt - submitStartedAt },
-          receipt: { status: 'success', timing: { startedAt: receiptAt, durationMs: 0 } }
-        },
-        isClaimedRecheck: null
-      };
-    });
+      })
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -853,26 +887,43 @@ export class BrowserUser implements UserDriver {
   // driver doesn't add) exactly like headless's native-asset case.
   // -------------------------------------------------------------------------
   async readState(_hop: HopSpec, row: ObservedRow | null): Promise<HopReadState> {
-    return this.runGuarded(async () => {
-      let isClaimed = false;
-      if (row !== null) {
-        const rows = await this.observeActivity();
-        isClaimed = rows.some(
-          (candidate) => candidate.rowKey === row.rowKey && candidate.status === 'CLAIMED'
-        );
-      }
-      return { allowanceSufficient: null, isClaimed };
-    });
+    return this.runExclusive(() =>
+      this.runGuarded(async () => {
+        let isClaimed = false;
+        if (row !== null) {
+          // S25: call the underlying fetch directly, NOT the public
+          // `observeActivity()` — this call is already running inside
+          // THIS driver's own exclusive turn (see `runExclusive`'s doc),
+          // and `observeActivity()` re-acquiring the same queue from
+          // inside its own turn would deadlock (wait for itself to
+          // release, which never happens).
+          const rows = await this.fetchActivitySingleFlight();
+          isClaimed = rows.some(
+            (candidate) => candidate.rowKey === row.rowKey && candidate.status === 'CLAIMED'
+          );
+        }
+        return { allowanceSufficient: null, isClaimed };
+      })
+    );
   }
 
-  /** Bookkeeping hook for a future runner's DESIGN §7.4 recycling (not exercised by a 1-2 lap smoke run). */
+  /**
+   * Bookkeeping hook for a future runner's DESIGN §7.4 recycling (not
+   * exercised by a 1-2 lap smoke run). S25/S26: routed through
+   * `runExclusive` so a recycle can never swap `this.context`/`this.page`
+   * out from under a lap that is still mid-flight on the OLD page — it now
+   * queues behind whatever is currently running (or queued) on this
+   * driver, exactly like `bridge`/`claim`/`observeActivity`/`readState`.
+   */
   async notifyLapCompleted(recycleAfterLaps: number): Promise<void> {
     this.lapsCompleted += 1;
     if (this.lapsCompleted % recycleAfterLaps !== 0) return;
-    this.timingHandle?.uninstall();
-    this.timingHandle = null;
-    this.context = await this.pool.recycleContext(this.userId);
-    await this.openFreshPage();
+    await this.runExclusive(async () => {
+      this.timingHandle?.uninstall();
+      this.timingHandle = null;
+      this.context = await this.pool.recycleContext(this.userId);
+      await this.openFreshPage();
+    });
   }
 
   async dispose(): Promise<void> {
@@ -889,12 +940,22 @@ export class BrowserUser implements UserDriver {
    * resumes from chain state on the next tick, exactly as DESIGN §7.3
    * describes. Not part of `UserDriver`; a future runner (S11) would call
    * this from whatever catches the crash outcome.
+   *
+   * S25: routed through `runExclusive` for the same reason as
+   * `notifyLapCompleted` — this swaps `this.context`/`this.page` out and
+   * must not do so while another queued call is still relying on the old
+   * ones. Queueing behind, rather than racing, whatever is currently
+   * running/queued also means a call that started just before the crash
+   * and is still waiting for its own turn will run against the RECOVERED
+   * page once it gets it, not a half-torn-down one.
    */
   async recover(): Promise<void> {
-    this.timingHandle?.uninstall();
-    this.timingHandle = null;
-    this.context = await this.pool.acquireContext(this.userId);
-    await this.openFreshPage();
+    await this.runExclusive(async () => {
+      this.timingHandle?.uninstall();
+      this.timingHandle = null;
+      this.context = await this.pool.acquireContext(this.userId);
+      await this.openFreshPage();
+    });
   }
 
   // -------------------------------------------------------------------------
@@ -994,6 +1055,70 @@ export class BrowserUser implements UserDriver {
    * kept as a secondary net for a crash surfaced as a rejection from `fn()`
    * itself (e.g. a Playwright locator action that DOES reject promptly).
    */
+  /**
+   * S25 (plan §7 root-cause fix): serializes every operation that touches
+   * this driver's shared `page`/`bridgePage`/`context` — `bridge`, `claim`,
+   * `observeActivity`, `readState` (via its own internal fetch, see that
+   * method's comment), `notifyLapCompleted`'s context-recycle swap, and
+   * `recover()`'s crash-recovery swap. Before this fix,
+   * `maxInflightLapsPerUser` could put several of ONE user's laps in
+   * flight at once (already `>= 2` concurrent laps per user with `>= 2`
+   * assets, even at that setting's lowest useful value of 1 per asset),
+   * every one of which called straight into this SAME `Page` with no lock
+   * at all — exactly the collision the plan's root-cause table names for
+   * `locator.click: Timeout exceeded`, `page.evaluate: Execution context
+   * was destroyed`, and the "eth only, never erc20" symptom (the two
+   * assets' laps fighting over the one token selector). A real user has
+   * one tab and does one thing at a time; this makes that true of the
+   * driver too, rather than leaving it to whatever `maxInflightLapsPerUser`
+   * happens to be configured to. It ALSO closes S26's "verify recycling
+   * cannot happen mid-lap" concern by construction: `notifyLapCompleted`
+   * and `recover()` now queue behind any lap still using the old page/
+   * context, so a recycle/recover can never swap `this.page` out from
+   * under an operation that is still running against it.
+   *
+   * This is a QUEUE, not the single-flight/dedup shape `pool.ts`'s
+   * `crashInFlight` and this file's own `fetchActivitySingleFlight` use.
+   * Single-flight collapses N concurrent callers onto ONE piece of work and
+   * hands every joiner the SAME result — correct for a duplicate READ, but
+   * wrong here: two queued `bridge()` calls are two DIFFERENT laps, each of
+   * which must actually run and each get its OWN result. Queueing via the
+   * obvious `this.mutexTail = this.mutexTail.then(() => fn())` has the
+   * exact failure-propagation trap S24 already hit once with single-flight
+   * (see `activityFetchInFlight`'s doc): the moment one `fn()` rejects,
+   * that chained promise itself becomes REJECTED, and every subsequently-
+   * queued `.then(() => fn())` chained off a rejected promise skips
+   * straight to rejecting WITHOUT ever calling its own `fn()` — one lap's
+   * failure would silently fail (and never even attempt) every lap queued
+   * after it.
+   *
+   * The fix: `mutexTail` is a side-channel promise that NEVER rejects
+   * (built from `new Promise<void>((resolve) => ...)` with `resolve` as
+   * the only exit), used purely to sequence turns. Each caller's OWN
+   * promise — the one actually returned to ITS OWN caller — settles from
+   * its OWN `fn()` call, independent of every other queued caller's
+   * outcome. `releaseNextTurn()` runs in a `finally`, so it fires whether
+   * `fn()` threw, resolved, or (via `runGuarded`'s crash race, which
+   * settles as soon as the crash signal wins even if the raw Playwright
+   * action underneath is still abandoned in flight) gave up early — so one
+   * crashed or failed lap can never leave the queue stuck waiting on it
+   * forever.
+   */
+  private runExclusive<T>(fn: () => Promise<T>): Promise<T> {
+    const myTurn = this.mutexTail;
+    let releaseNextTurn: () => void = () => {};
+    this.mutexTail = new Promise<void>((resolve) => {
+      releaseNextTurn = resolve;
+    });
+    return myTurn.then(async () => {
+      try {
+        return await fn();
+      } finally {
+        releaseNextTurn();
+      }
+    });
+  }
+
   private async runGuarded<T>(fn: () => Promise<T>): Promise<T> {
     let unsubscribe: () => void = () => {};
     const crashSignal = new Promise<never>((_, reject) => {
