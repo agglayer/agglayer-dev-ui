@@ -414,10 +414,27 @@ const main = async (): Promise<void> => {
   }
 };
 
-main().catch((error: unknown) => {
-  // DESIGN §2.2: every error message reaching a log is redacted — this is
-  // the single choke point every CLI command's thrown error passes
-  // through, so no command needs to remember to redact its own errors.
-  process.stderr.write(`${redactError(error)}\n`);
-  process.exitCode = 1;
-});
+main()
+  .catch((error: unknown) => {
+    // DESIGN §2.2: every error message reaching a log is redacted — this is
+    // the single choke point every CLI command's thrown error passes
+    // through, so no command needs to remember to redact its own errors.
+    process.stderr.write(`${redactError(error)}\n`);
+    process.exitCode = 1;
+  })
+  .finally(() => {
+    // loadtest/REVIEW.md R1: `browser/pool.ts`'s `dispose()` awaiting every
+    // in-flight launch (the actual leak fix) stops a NEW Chromium process
+    // from being resurrected after teardown, but it does not guarantee the
+    // event loop drains on its own — a viem client, an open keep-alive
+    // socket, or any other still-referenced handle left over from a `run`
+    // is enough to hang the process indefinitely *after* `run: complete`
+    // has already printed (`runRun` prints it only once `runLoadTest` --
+    // and therefore `disposeEverything` -- has resolved). Calling
+    // `process.exit()` explicitly once `main()` has settled, rather than
+    // relying on the event loop to drain naturally, is the documented (but
+    // previously unimplemented) other half of the R1 fix — this line was
+    // missing from the code despite loadtest/REVIEW.md's "R1 — FIXED" entry
+    // describing it as already present.
+    process.exit(process.exitCode ?? 0);
+  });
