@@ -191,6 +191,19 @@ export type ErrorClass =
   | 'console_error'
   | 'funding'
   | 'config'
+  // R10 (loadtest/REVIEW.md), fixed S26: a browser context's connected
+  // wallet did not match the address the driver derived for this user (or
+  // — the catastrophic case — matched the build-time E2E fallback key
+  // `0x6Aa7F0e2397117D732a1d6A76D8A25fdC0bA7B07`, meaning the per-context
+  // `window.__AGGLAYER_E2E_PRIVATE_KEY__` override silently failed to
+  // apply). Deliberately its OWN class rather than folded into `internal`:
+  // this failure mode invalidates every measurement for that user (wrong
+  // signer, wrong nonces), so it must never be indistinguishable in the
+  // error-by-class table from a generic setup failure. Thrown once, at
+  // `BrowserUser.init()`'s `assertConnectedWallet()`, before any hop can
+  // run — see `core/ring.ts`'s `outcomeFromDriverError` for why the ring
+  // itself never needs to turn this into a `FailureOutcome`.
+  | 'wallet_identity_mismatch'
   | 'internal';
 
 export type FailureOutcome =

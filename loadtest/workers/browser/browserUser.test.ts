@@ -25,7 +25,7 @@ import type { HopSpec } from '../../core/types';
 import type { BrowserPool } from './pool';
 
 import { createCollector } from '../../metrics/collector';
-import { BrowserUser } from './browserUser';
+import { BrowserUser, WalletIdentityMismatchError } from './browserUser';
 
 const TEST_PRIVATE_KEY =
   '0x0a7e0bab4de92cadc79ea1747dd9d5042411051ab69806ad905bc917432fc08e' as const;
@@ -401,5 +401,205 @@ describe('BrowserUser — S25 one-page-at-a-time serialization', () => {
     // All three actually attempted their own `navigate()` — lap 2/3 were
     // never skipped as a side effect of lap 1's failure.
     expect(navigateCalls).toBe(3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A8 (loadtest/VALIDATION-1.md), fixed S26: the receipt-fetch/log-decode step
+// used to be a bare `catch {}` — any failure there (a transient RPC hiccup,
+// not just "genuinely no matching log") silently produced the exact same
+// `bridgeEventFound: false` a real absent log would, which `core/ring.ts`'s
+// T11 reports as the misleading outcome `bridge_event_missing`. These tests
+// prove the underlying error is now classified via `classifyRpcError` and
+// surfaced as `bridgeEventDecodeError`, instead of being swallowed.
+// ---------------------------------------------------------------------------
+describe('BrowserUser.bridge — A8 receipt-decode error is classified, not swallowed', () => {
+  it('a thrown RPC error from the post-success receipt fetch is reported as bridgeEventDecodeError (rpc_error), not silently swallowed', async () => {
+    const user = makeBridgeDriver(makeFakeBridgePage());
+    (
+      user as unknown as {
+        getPublicClient: (chainKey: string) => { getTransactionReceipt: () => Promise<never> };
+      }
+    ).getPublicClient = () => ({
+      getTransactionReceipt: async () => {
+        throw new Error('connection reset while fetching receipt');
+      }
+    });
+
+    const result = await user.bridge(ETH_HOP);
+
+    // Still the "not found" shape T11 keys off — a genuine decode failure
+    // and a genuinely absent log are the SAME outcome to the ring — but the
+    // real cause must now be attached rather than dropped.
+    expect(result.bridgeEventFound).toBe(false);
+    expect(result.depositCount).toBeNull();
+    expect(result.bridgeEventDecodeError).toBeDefined();
+    expect(result.bridgeEventDecodeError?.errorClass).toBe('rpc_error');
+    expect(result.bridgeEventDecodeError?.message).toContain(
+      'connection reset while fetching receipt'
+    );
+  });
+
+  it('a genuine decode failure with no matching log carries no bridgeEventDecodeError (the true bridge_event_missing case)', async () => {
+    // `makeBridgeDriver`'s default `getPublicClient` resolves with
+    // `{ logs: [] }` — a successful fetch that legitimately finds no
+    // matching `BridgeEvent` log. This must stay silent on the diagnostic
+    // field: A8 only stops SWALLOWED FAILURES from masquerading as this
+    // case, it does not manufacture a diagnostic for the real thing.
+    const user = makeBridgeDriver(makeFakeBridgePage());
+
+    const result = await user.bridge(ETH_HOP);
+
+    expect(result.bridgeEventFound).toBe(false);
+    expect(result.depositCount).toBeNull();
+    expect(result.bridgeEventDecodeError).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// R10 (loadtest/REVIEW.md), fixed S26: no runtime assertion previously
+// existed that a browser context's connected wallet is this user's own
+// derived address. `assertConnectedWallet()` is exercised directly here
+// (bypassing `init()`'s real Playwright launch, same escape hatch this file
+// uses throughout) against a stubbed `bridgePage.walletConnectedBadge`.
+// ---------------------------------------------------------------------------
+const FALLBACK_ADDRESS_SHORT = '0x6A...7B07'; // shortenAddress('0x6Aa7F0e2397117D732a1d6A76D8A25fdC0bA7B07')
+
+/** Builds a `BrowserUser` whose `bridgePage.walletConnectedBadge` reads `badgeText`. */
+const makeIdentityDriver = (badgeText: string): BrowserUser => {
+  const user = new BrowserUser({
+    userId: 'u1',
+    privateKey: TEST_PRIVATE_KEY, // derives to 0xF9cE6adFfc253Cfe25B338772a16FaE5cC1D0000
+    pool: fakePool,
+    chains: [CHAIN],
+    aggkitProxyUrl: 'http://localhost:9000',
+    collector: createCollector(),
+    clock: makeClock()
+  });
+  (
+    user as unknown as {
+      bridgePage: { walletConnectedBadge: { textContent: () => Promise<string> } };
+    }
+  ).bridgePage = { walletConnectedBadge: { textContent: async () => badgeText } };
+  return user;
+};
+
+const assertConnectedWallet = (user: BrowserUser): Promise<void> =>
+  (user as unknown as { assertConnectedWallet: () => Promise<void> }).assertConnectedWallet();
+
+describe('BrowserUser.assertConnectedWallet — R10 wallet-identity assertion', () => {
+  it('does not fire on the happy path: the badge shows this user’s own derived address', async () => {
+    const user = makeIdentityDriver('Connected: 0xF9...0000');
+    await expect(assertConnectedWallet(user)).resolves.toBeUndefined();
+  });
+
+  it('fires with WalletIdentityMismatchError when the badge shows an unrelated wrong address', async () => {
+    const user = makeIdentityDriver('Connected: 0x11...2222');
+    const error = await assertConnectedWallet(user).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(WalletIdentityMismatchError);
+    expect((error as WalletIdentityMismatchError).errorClass).toBe('wallet_identity_mismatch');
+  });
+
+  it('fires — and names the cause — when the badge shows the shared build-time E2E fallback wallet', async () => {
+    // The catastrophic case R10 exists for: every browser user collapsed
+    // onto one EOA because the per-context private-key override silently
+    // failed to apply (S03's addInitScript).
+    const user = makeIdentityDriver(`Connected: ${FALLBACK_ADDRESS_SHORT}`);
+    const error = await assertConnectedWallet(user).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(WalletIdentityMismatchError);
+    expect((error as WalletIdentityMismatchError).errorClass).toBe('wallet_identity_mismatch');
+    expect((error as Error).message).toContain('shared build-time E2E fallback wallet');
+    expect((error as Error).message).toContain('0x6Aa7F0e2397117D732a1d6A76D8A25fdC0bA7B07');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// S26 acceptance item 3: verify (don't redo) S25's claim that
+// `browser.recycleContextAfterLaps` cannot fire mid-lap now that
+// `notifyLapCompleted`'s recycle body is routed through the SAME
+// `runExclusive` queue as `bridge`/`claim`/`observeActivity`/`readState`.
+// This locks that guarantee for the recycle path specifically, the same way
+// the "one-page-at-a-time" describe block above locks it for concurrent
+// `bridge()` calls.
+// ---------------------------------------------------------------------------
+describe('BrowserUser.notifyLapCompleted — S25/S26 recycle cannot fire mid-lap', () => {
+  it('a recycle triggered by notifyLapCompleted queues behind, and never overlaps, a still-in-flight bridge() call', async () => {
+    const order: string[] = [];
+    let releaseBridge: (() => void) | undefined;
+    let signalBridgeBlocked: () => void;
+    const bridgeBlocked = new Promise<void>((resolve) => {
+      signalBridgeBlocked = resolve;
+    });
+
+    const bridgePage = makeFakeBridgePage({
+      navigate: async () => {
+        order.push('bridge:navigate');
+      },
+      // Holds the lap's turn open so the recycle below has every chance to
+      // jump the queue if serialization were broken.
+      waitForBridgeSuccess: async () => {
+        const blocked = new Promise<void>((resolve) => {
+          releaseBridge = resolve;
+        });
+        signalBridgeBlocked();
+        await blocked;
+      },
+      bridgeSuccessCta: {
+        click: async () => {
+          order.push('bridge:done');
+        }
+      }
+    });
+
+    const recycleContext = vi.fn(async () => 'recycled-context');
+    const pool = {
+      addCrashListener: () => () => {},
+      reportOperationCrash: () => {},
+      recycleContext
+    } as unknown as BrowserPool;
+
+    const user = new BrowserUser({
+      userId: 'u1',
+      privateKey: TEST_PRIVATE_KEY,
+      pool,
+      chains: [CHAIN, CHAIN_L2],
+      aggkitProxyUrl: 'http://localhost:9000',
+      collector: createCollector(),
+      clock: makeClock()
+    });
+    (user as unknown as { bridgePage: FakeBridgePage }).bridgePage = bridgePage;
+    (
+      user as unknown as {
+        getPublicClient: (chainKey: string) => {
+          getTransactionReceipt: () => Promise<{ logs: [] }>;
+        };
+      }
+    ).getPublicClient = () => ({ getTransactionReceipt: async () => ({ logs: [] }) });
+    // `openFreshPage()` does real Playwright work (new page, timing install,
+    // navigate, connect, `assertConnectedWallet()`) this test doesn't need —
+    // stubbed to isolate exactly the thing under test: ordering relative to
+    // the in-flight bridge() call, not the recycle's own internals.
+    (user as unknown as { openFreshPage: () => Promise<void> }).openFreshPage = async () => {
+      order.push('recycle:openFreshPage');
+    };
+
+    const lap = user.bridge(ETH_HOP);
+    await bridgeBlocked;
+
+    // `recycleAfterLaps: 1` recycles on every completed lap — the recycle
+    // body must still QUEUE behind the still-in-flight bridge() above, never
+    // preempt it.
+    const recycle = user.notifyLapCompleted(1);
+
+    expect(recycleContext).not.toHaveBeenCalled();
+    expect(order).toEqual(['bridge:navigate']);
+
+    releaseBridge?.();
+    await Promise.all([lap, recycle]);
+
+    // The recycle only ran AFTER the lap's own turn fully finished — never
+    // interleaved with it.
+    expect(order).toEqual(['bridge:navigate', 'bridge:done', 'recycle:openFreshPage']);
+    expect(recycleContext).toHaveBeenCalledTimes(1);
   });
 });

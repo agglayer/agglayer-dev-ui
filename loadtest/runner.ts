@@ -47,7 +47,11 @@ import { deriveWallets } from './wallets/derive';
 import { fundWallets } from './wallets/fund';
 import { PreflightError, runPreflight } from './wallets/preflight';
 import { redactError } from './wallets/redact';
-import { BrowserCrashError, BrowserUser } from './workers/browser/browserUser';
+import {
+  BrowserCrashError,
+  BrowserUser,
+  WalletIdentityMismatchError
+} from './workers/browser/browserUser';
 import { BrowserPool } from './workers/browser/pool';
 import { HeadlessUser } from './workers/headless/headlessUser';
 import { installTimingFetch } from './workers/headless/uiCallset';
@@ -826,7 +830,16 @@ export const runLoadTest = async (options: RunLoadTestOptions): Promise<RunLoadT
         users.push(u);
         collector.userReady(u.userId, u.mode);
       } else {
-        const classified = classifyError({ source: 'unknown', error: outcome.reason });
+        // R10/S26: `WalletIdentityMismatchError` gets its own `errorClass`
+        // (mirrors `BrowserCrashError`'s handling in the tick loop below)
+        // instead of falling through `classifyError`'s generic `'unknown'`
+        // source, which would collapse it into `internal` and bury the one
+        // failure mode that silently invalidates every measurement for this
+        // user.
+        const classified =
+          outcome.reason instanceof WalletIdentityMismatchError
+            ? { errorClass: outcome.reason.errorClass, message: redactError(outcome.reason) }
+            : classifyError({ source: 'unknown', error: outcome.reason });
         collector.error({
           userId: u.userId,
           mode: u.mode,

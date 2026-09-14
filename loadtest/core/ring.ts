@@ -640,6 +640,18 @@ const outcomeFromDriverError = (error: DriverError | undefined): Outcome => {
       case 'funding':
       case 'config':
         return 'internal';
+      // R10/S26: `wallet_identity_mismatch` is only ever thrown by
+      // `BrowserUser.init()`'s `assertConnectedWallet()`, before any hop
+      // begins (runner.ts's `Promise.allSettled` over `driver.init()`
+      // excludes the user from the run entirely on that failure) — no
+      // ring/hop ever attributes an outcome to it in practice. Handled here
+      // anyway so a future caller that DID attach this class to a mid-hop
+      // `DriverError` still gets a safe, generic outcome instead of a type
+      // error on this switch; the distinct classification survives in the
+      // separately-reported `ErrorClass` regardless (same rationale as
+      // `console_error`/`funding`/`config` above).
+      case 'wallet_identity_mismatch':
+        return 'internal';
       case 'lbt_underflow':
         return 'lbt_underflow';
       // R3 (loadtest/REVIEW.md): the hop's TERMINAL OUTCOME stays

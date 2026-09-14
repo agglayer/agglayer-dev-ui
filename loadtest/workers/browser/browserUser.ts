@@ -203,6 +203,30 @@ export class BrowserCrashError extends Error {
   readonly errorClass = 'browser_crash' as const;
 }
 
+/**
+ * R10 (loadtest/REVIEW.md), fixed S26: thrown by `assertConnectedWallet()`
+ * when a browser context's connected wallet is not the address this driver
+ * derived for its user. Its own `Error` subclass — same shape as
+ * `BrowserCrashError` above — so `runner.ts`'s `driver.init()` failure path
+ * can classify it as `wallet_identity_mismatch` instead of the generic
+ * `internal` catch-all `classifyError({ source: 'unknown', ... })` would
+ * otherwise assign: this failure mode invalidates every measurement for the
+ * affected user, so it must never blend into ordinary setup noise.
+ */
+export class WalletIdentityMismatchError extends Error {
+  readonly errorClass = 'wallet_identity_mismatch' as const;
+}
+
+// The build-time E2E fallback key (`ui/build.ts`'s `THROWAWAY_E2E_PRIVATE_KEY`,
+// a fixed, well-known, unfunded key) and the address it derives to. If a
+// browser context's connected wallet is EVER this address, the per-context
+// `window.__AGGLAYER_E2E_PRIVATE_KEY__` override (S03, `app/context/
+// e2eAccount.ts`) silently failed to apply and this context would sign from
+// the shared fallback wallet instead of its own — the catastrophic case R10
+// exists to catch loudly. Value confirmed against `ui/build.ts:38-39`'s key
+// via `privateKeyToAccount` (loadtest-plan.md S26 acceptance).
+const FALLBACK_WALLET_ADDRESS: Address = '0x6Aa7F0e2397117D732a1d6A76D8A25fdC0bA7B07';
+
 export interface BrowserUserOptions {
   userId: string;
   privateKey: Hex;
@@ -413,11 +437,18 @@ export class BrowserUser implements UserDriver {
   private async assertConnectedWallet(): Promise<void> {
     const badgeText = await this.debugConnectedBadgeText();
     const expected = shortenAddress(this.address);
-    if (!badgeText.includes(expected)) {
-      throw new Error(
-        `browser driver: connected-wallet mismatch for user "${this.userId}" — expected the UI to show "${expected}" (address ${this.address}) but it shows "${badgeText}". This means the per-user private-key override (S03's addInitScript) did not apply, and this browser context would sign from the wrong wallet.`
-      );
-    }
+    if (badgeText.includes(expected)) return;
+    // S26/R10: the badge already fails to match `expected` at this point —
+    // this fallback check exists only to make the FAILURE MESSAGE name the
+    // specific, known-catastrophic cause (every browser user collapsed onto
+    // the shared build-time key) instead of a generic "shows something
+    // else", whenever that specific cause is what actually happened.
+    const isFallback = badgeText.includes(shortenAddress(FALLBACK_WALLET_ADDRESS));
+    throw new WalletIdentityMismatchError(
+      isFallback
+        ? `browser driver: connected-wallet mismatch for user "${this.userId}" — the UI shows the shared build-time E2E fallback wallet (${FALLBACK_WALLET_ADDRESS}) instead of this user's own address (${this.address}). The per-user private-key override (S03's addInitScript) did not apply: this context would sign every transaction from the wrong wallet, and every measurement for this user would be silently mis-attributed.`
+        : `browser driver: connected-wallet mismatch for user "${this.userId}" — expected the UI to show "${expected}" (address ${this.address}) but it shows "${badgeText}". This means the per-user private-key override (S03's addInitScript) did not apply, and this browser context would sign from the wrong wallet.`
+    );
   }
 
   /** Debug/verification helper (not part of `UserDriver`) — the header's shortened-address badge text, for S10's "addresses differ per context" proof. */
