@@ -12,12 +12,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import type { LoadtestAsset, LoadtestChain, LoadtestConfig } from '../config/schema';
+import type { DriverMode } from '../core/userDriver';
 import type {
   CollectorSnapshot,
   ErrorTopEntry,
   GateStats,
   HttpModeSplit,
   HttpStats,
+  LapOutcome,
   ModeSplitStats,
   Stats
 } from './collector';
@@ -91,7 +93,26 @@ export interface ResultsJson {
     byOutcome: Partial<Record<string, number>>;
     byRoute: Record<string, { byOutcome: Partial<Record<string, number>>; phases: unknown }>;
   };
-  laps: { byOutcome: Record<string, number> };
+  laps: {
+    byOutcome: Record<string, number>;
+    // S27 (plans/bridge-loadtest-plan.md §7): per-mode "attempted vs
+    // completed", extending the A10 achieved-rate-per-mode table (see
+    // `AchievedLoad.steadyStateRatePerUserPerModeMin` above) alongside it
+    // rather than duplicating it — that table answers "how often did a
+    // mode START a lap", this answers "of the laps a mode started, how many
+    // actually FINISHED". `attempted` is the sum of a mode's three
+    // `lapsByOutcomeByMode` counts (every lap that reached `lapEnd` — i.e.
+    // excludes only whatever was still `LAP_RUNNING`, in flight, when the
+    // run stopped); `completed` is its `LAP_DONE` count;
+    // `completionRate` is `completed / attempted`, or `null` when a mode
+    // had zero laps reach `lapEnd` (never a false 0% — DESIGN §5.5
+    // invariant 5's "never fill in a zero for absent data" rule, applied
+    // here). This is the number the browser-mode collapse (pre-S25: 1 of
+    // ~58 laps, ~2%) would have made visible on the FACE of `summary.md`
+    // instead of requiring a reader to notice `activity.ndjson` error
+    // classes.
+    byMode: Record<DriverMode, LapReliability>;
+  };
   phases: unknown;
   // R2 (loadtest/REVIEW.md): see `CollectorSnapshot.phaseCensoredCounts`'s
   // doc — how many MORE hops entered a phase and timed out rather than
@@ -220,6 +241,36 @@ export const checkThroughputIdentity = (achieved: AchievedLoad): boolean =>
   achieved.lapStartsSubmitted + achieved.skippedBackpressure + achieved.ticksLostToRamp;
 
 // ---------------------------------------------------------------------------
+// S27 (plans/bridge-loadtest-plan.md §7): per-mode lap reliability —
+// "attempted vs completed", so a mode collapsing toward 0% completion is
+// visible on the face of `summary.md` (see `ResultsJson.laps.byMode`'s doc
+// above for the exact terms and why `completionRate` is `null`, never a
+// false `0`, for a mode with zero laps reaching `lapEnd`).
+// ---------------------------------------------------------------------------
+
+export interface LapReliability {
+  attempted: number;
+  completed: number;
+  completionRate: number | null;
+}
+
+const lapReliabilityForMode = (counts: Record<LapOutcome, number>): LapReliability => {
+  const attempted = counts.LAP_DONE + counts.LAP_FAILED + counts.LAP_ABORTED;
+  return {
+    attempted,
+    completed: counts.LAP_DONE,
+    completionRate: attempted > 0 ? counts.LAP_DONE / attempted : null
+  };
+};
+
+export const lapReliabilityByMode = (
+  lapsByOutcomeByMode: CollectorSnapshot['lapsByOutcomeByMode']
+): Record<DriverMode, LapReliability> => ({
+  browser: lapReliabilityForMode(lapsByOutcomeByMode.browser),
+  headless: lapReliabilityForMode(lapsByOutcomeByMode.headless)
+});
+
+// ---------------------------------------------------------------------------
 // `results.json` assembly
 // ---------------------------------------------------------------------------
 
@@ -248,7 +299,10 @@ export const buildResultsJson = (params: {
       byOutcome: snapshot.hopsByOutcome,
       byRoute: snapshot.hopsByRoute
     },
-    laps: { byOutcome: snapshot.lapsByOutcome },
+    laps: {
+      byOutcome: snapshot.lapsByOutcome,
+      byMode: lapReliabilityByMode(snapshot.lapsByOutcomeByMode)
+    },
     phases: snapshot.phases,
     phaseCensoredCounts: snapshot.phaseCensoredCounts,
     uncontextedRequests: snapshot.uncontextedRequests,
@@ -382,7 +436,35 @@ const renderThroughput = (results: ResultsJson): string => {
     '',
     '**Achieved rate per mode (A10, VALIDATION-1.md)** — the blended figure above can average two modes behaving completely differently; never quote it as "what a real user experiences" without checking this table too:',
     '',
-    mdTable(['mode', 'users (requested)', 'steadyStateRatePerUserPerMin (achieved)'], modeRows)
+    mdTable(['mode', 'users (requested)', 'steadyStateRatePerUserPerMin (achieved)'], modeRows),
+    '',
+    renderLapReliabilityByMode(results)
+  ].join('\n');
+};
+
+/**
+ * S27 (plans/bridge-loadtest-plan.md §7): extends the A10 table directly
+ * above (which answers "how often does a mode START a lap") with the
+ * question A10 does NOT answer: "of the laps a mode started, how many
+ * actually FINISHED". This is the exact number the pre-S25 browser
+ * regression hid — A10's achieved-rate figure can look unremarkable even
+ * while `completionRate` has collapsed toward 0, because a fast-failing lap
+ * still counts as an attempted lap-start.
+ */
+const renderLapReliabilityByMode = (results: ResultsJson): string => {
+  const rows = (['browser', 'headless'] as const).map((mode) => {
+    const r = results.laps.byMode[mode];
+    return [
+      mode,
+      String(r.attempted),
+      String(r.completed),
+      r.completionRate === null ? 'n/a (0 attempted)' : `${(r.completionRate * 100).toFixed(1)}%`
+    ];
+  });
+  return [
+    "**Per-mode lap reliability — attempted vs completed (S27, plans/bridge-loadtest-plan.md §7)** — `attempted` is every lap that reached a final outcome (`LAP_DONE`/`LAP_FAILED`/`LAP_ABORTED`), `completed` is `LAP_DONE` only. This is the gate `tests/loadtest-e2e/run.spec.ts` enforces per mode so a mode collapsing toward 0% completion (browser: 1 of ~58 laps before S25's fix) fails CI instead of hiding behind the other mode's healthy aggregate:",
+    '',
+    mdTable(['mode', 'attempted', 'completed', 'completionRate'], rows)
   ].join('\n');
 };
 

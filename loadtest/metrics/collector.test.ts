@@ -528,6 +528,27 @@ describe('collector — hop/lap outcomes', () => {
       LAP_ABORTED: 0
     });
   });
+
+  // S27 (plans/bridge-loadtest-plan.md §7): `lapsByOutcomeByMode` is what
+  // lets `metrics/report.ts` compute a per-mode attempted/completed figure
+  // instead of only the cross-mode aggregate above — a mode collapsing to
+  // near-zero completion must be visible even when the OTHER mode's laps
+  // keep the aggregate `LAP_DONE` count above zero.
+  it('aggregates lap outcomes PER MODE, independently of the cross-mode aggregate', () => {
+    const collector = createCollector();
+    collector.lapEnd({ userId: 'u1', mode: 'browser', lapId: 'l1', outcome: 'LAP_DONE' });
+    collector.lapEnd({ userId: 'u2', mode: 'browser', lapId: 'l2', outcome: 'LAP_DONE' });
+    collector.lapEnd({ userId: 'u3', mode: 'headless', lapId: 'l3', outcome: 'LAP_DONE' });
+    collector.lapEnd({ userId: 'u4', mode: 'headless', lapId: 'l4', outcome: 'LAP_FAILED' });
+    collector.lapEnd({ userId: 'u5', mode: 'headless', lapId: 'l5', outcome: 'LAP_ABORTED' });
+
+    const snapshot = collector.snapshot();
+    expect(snapshot.lapsByOutcome).toStrictEqual({ LAP_DONE: 3, LAP_FAILED: 1, LAP_ABORTED: 1 });
+    expect(snapshot.lapsByOutcomeByMode).toStrictEqual({
+      browser: { LAP_DONE: 2, LAP_FAILED: 0, LAP_ABORTED: 0 },
+      headless: { LAP_DONE: 1, LAP_FAILED: 1, LAP_ABORTED: 1 }
+    });
+  });
 });
 
 describe('collector — policy counters (§3.4) and scheduler counters / bridgesSubmitted (§5.5)', () => {

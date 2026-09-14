@@ -61,3 +61,32 @@ export const summarizeLapsByAssetAndMode = (
 
   return breakdown;
 };
+
+// S27 (plans/bridge-loadtest-plan.md §7): the hop-level counterpart of
+// `summarizeLapsByAssetAndMode` above — same log, same `hop_end`/`mode`
+// fields (`metrics/collector.ts`'s `hopEnd()` writes `mode` and `outcome`
+// on every line exactly like `lapEnd()` does), just grouped by `mode` alone
+// (no per-asset split needed here) so `run.spec.ts` can hard-assert that at
+// least one HOP — not just a lap, and not just an HTTP request — actually
+// completed in EACH mode. This is what closes the gap the plan calls out:
+// pre-S27, the only browser-mode assertion was `activity?.browser.ui?.n > 0`
+// (an HTTP request COUNT), which stayed true even while browser mode
+// completed ~2% of its laps and, by extension, nearly none of its hops.
+export const summarizeHopsByMode = (
+  activityNdjsonPath: string
+): Record<DriverMode, PerCategoryCounts> => {
+  const breakdown: Record<DriverMode, PerCategoryCounts> = { browser: {}, headless: {} };
+  const raw = fs.readFileSync(activityNdjsonPath, 'utf8');
+
+  for (const line of raw.split('\n')) {
+    if (line.trim().length === 0) continue;
+    const parsed = JSON.parse(line) as ActivityLine;
+    if (parsed.kind !== 'hop_end' || parsed.mode === null) continue;
+
+    const counts = breakdown[parsed.mode];
+    const outcome = parsed.outcome ?? 'unknown';
+    counts[outcome] = (counts[outcome] ?? 0) + 1;
+  }
+
+  return breakdown;
+};

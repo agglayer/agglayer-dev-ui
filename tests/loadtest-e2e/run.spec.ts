@@ -120,15 +120,71 @@
 // this run's 2 browser users and short duration make them unlikely, and
 // the exploratory runs behind this file saw zero of either, but nightly CI
 // should not go red over one flaky OutOfGas revert.
+//
+// ## S27 (plans/bridge-loadtest-plan.md §7): per-mode lap/hop completion
+//    gates, so a mode collapsing toward 0% cannot hide behind the other
+//
+// Before this step, the ONLY assertion touching browser mode at all was
+// the `tracker/activity` HTTP-request-count check below — it proves the
+// browser ISSUED requests, never that a lap or hop it started ever
+// FINISHED. That gap is exactly how CI stayed green while browser mode
+// completed 1 of ~58 attempted laps (~2%) pre-S25. Fixing the browser
+// driver's serialization bug (S25) does not, by itself, stop that same gap
+// from reopening later for EITHER mode — S26's own live run showed it can
+// just as easily move to headless (10 of 18 laps, 56%, on a heavier
+// config) the moment browser looks healthy. So this file now hard-asserts,
+// per mode, that laps actually complete (via `results.laps.byMode`,
+// `metrics/report.ts`'s S27 addition) and that at least one hop actually
+// reaches a `hop_completed_*` outcome (via `activityBreakdown.ts`'s
+// `summarizeHopsByMode`, parsed from `activity.ndjson` the same way the
+// pre-existing per-asset breakdown below is).
+//
+// Threshold derivation — measured data, not invented:
+//   - Browser, post-S25 fix: 100% completion in every recorded
+//     measurement — 16/16 and 15/15 in S25/S26's heavier concurrent
+//     validation runs (plans/bridge-loadtest-plan.md §7), and 2/2 in THIS
+//     exact e2e config's own exploratory run (see this file's "why this is
+//     still safe to run nightly" section above: "LAP_DONE on all 4 laps").
+//     The one documented browser-specific risk is the flaky-but-rare
+//     `ui_assertion`/`internal` UI-timeout class this file already
+//     declines to hard-assert to zero, two paragraphs up — a 100% gate
+//     would turn that single documented, tolerated flake into a hard CI
+//     failure, which contradicts that policy.
+//   - Headless: this same shortened-ring config also measured 100% (2/2)
+//     in its own exploratory run, and a separate 15-minute validation run
+//     completed 51 laps clean. But S26's heavier, longer-ring validation
+//     run saw 56% (10/18), from `rpc_error`s on the `L2B->L1` claim hop —
+//     a hop this file's 2-hop `L1->L2A->L1` ring (see above) never
+//     exercises. Real completion-rate variability exists on this devnet,
+//     though, and this file has no repeated-CI-run history proving 100%
+//     holds reliably for headless even on the lighter config — so
+//     headless gets the SAME floor as browser below, not a tighter one
+//     read off a single good run.
+//   - Both floors are set at 50%. This run's structural per-user tick
+//     count (exactly one, per the "per asset" section above) means each
+//     mode attempts only ~2 laps here, so 50% is the only non-trivial
+//     floor available at this scale — and it sits at the midpoint between
+//     the measured REGRESSED state (~2%, effectively 0 of a run this
+//     size) and the measured FIXED/healthy state (100%): equal headroom
+//     against a silent regression toward either failure mode, while still
+//     absorbing one already-tolerated flaky failure without making
+//     nightly CI flaky on its own account. If future nightly runs
+//     accumulate enough history to show headless (or a tighter browser
+//     bound) reliably clears something stricter, tighten these then —
+//     this is a floor grounded in what has actually been measured, not a
+//     target.
 import fs from 'node:fs';
 import path from 'node:path';
 
 import { expect, test } from '@playwright/test';
 
+import type { Outcome } from '../../loadtest/core/types';
+import type { DriverMode } from '../../loadtest/core/userDriver';
 import type { ResultsJson } from '../../loadtest/metrics/report';
 
 import { serializeLoadtestConfig } from '../../loadtest/config/schema';
-import { summarizeLapsByAssetAndMode } from './activityBreakdown';
+import { isSuccessOutcome } from '../../loadtest/core/types';
+import { summarizeHopsByMode, summarizeLapsByAssetAndMode } from './activityBreakdown';
 import { buildE2eConfig } from './deriveE2eConfig';
 import { runCliOrThrow } from './runCli';
 
@@ -292,6 +348,58 @@ test.describe('loadtest tool E2E (compose devnet)', () => {
       expect(activity?.browser.ui?.n ?? 0).toBeGreaterThan(0);
       expect(activity?.headless.ui?.n ?? 0).toBeGreaterThan(0);
     });
+
+    // --- S27 (plans/bridge-loadtest-plan.md §7): hard per-mode lap/hop
+    // completion gates — see this file's top-of-file doc comment for the
+    // full threshold derivation. `n=2 attempted/mode is this run's
+    // structural minimum (one tick per user, per the "per asset" doc
+    // comment above); 50% is the midpoint between the measured regressed
+    // state (~2%) and the measured fixed/healthy state (100%). ------------
+    const LAP_COMPLETION_THRESHOLD: Record<DriverMode, number> = {
+      browser: 0.5,
+      headless: 0.5
+    };
+
+    for (const mode of ['browser', 'headless'] as const) {
+      const reliability = results.laps.byMode[mode];
+
+      await test.step(`${mode} mode issued at least one lap attempt`, () => {
+        // A mode reporting zero attempted laps is a structural failure
+        // (the scheduler/runner never even started a lap for it) that the
+        // completion-rate check below cannot express on its own (a
+        // `completionRate` of `null` must never be silently read as
+        // "passing" — DESIGN §5.5 invariant 5's "no false zero" rule,
+        // applied to the gate itself).
+        expect(reliability.attempted).toBeGreaterThan(0);
+      });
+
+      await test.step(`${mode} mode lap completion rate clears its ${LAP_COMPLETION_THRESHOLD[mode] * 100}% floor (attempted=${reliability.attempted}, completed=${reliability.completed})`, () => {
+        expect(reliability.completionRate ?? 0).toBeGreaterThanOrEqual(
+          LAP_COMPLETION_THRESHOLD[mode]
+        );
+      });
+    }
+
+    const hopsByMode = summarizeHopsByMode(activityPath);
+    for (const mode of ['browser', 'headless'] as const) {
+      const completedHops = Object.entries(hopsByMode[mode]).reduce(
+        (sum, [outcome, count]) => sum + (isSuccessOutcome(outcome as Outcome) ? count : 0),
+        0
+      );
+
+      await test.step(`${mode} mode completed at least one hop (not just issued HTTP requests)`, () => {
+        // This is the exact assertion that was MISSING before S27 for
+        // browser: `activity?.browser.ui?.n > 0` above proves the browser
+        // issued requests, never that a hop it started ever reached
+        // `hop_completed_*`. Parsed straight from `activity.ndjson`'s
+        // `hop_end` lines (`activityBreakdown.ts`'s `summarizeHopsByMode`)
+        // rather than `results.hops.byRoute` (which has no mode
+        // dimension — see the per-asset breakdown's doc comment above for
+        // why `activity.ndjson` is the source for anything split by mode
+        // AND route/outcome at once).
+        expect(completedHops).toBeGreaterThan(0);
+      });
+    }
 
     // Informational: the real per-(assetKind, mode) lap-outcome breakdown,
     // parsed from activity.ndjson (results.json has no per-asset

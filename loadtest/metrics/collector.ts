@@ -377,6 +377,17 @@ export interface CollectorSnapshot {
     }
   >;
   lapsByOutcome: Record<LapOutcome, number>;
+  // S27 (plans/bridge-loadtest-plan.md §7): the same counts as
+  // `lapsByOutcome` above, split by `DriverMode`. This is what lets
+  // `metrics/report.ts` compute an "attempted vs completed" figure PER
+  // MODE — `attempted` is the sum of a mode's three outcome counts (every
+  // lap that reached `lapEnd`, i.e. every `tick()` that didn't stay
+  // in-flight at run end), `completed` is its `LAP_DONE` count. Added
+  // because the pre-S27 suite only asserted `laps.byOutcome.LAP_DONE >= 1`
+  // in aggregate — a mode collapsing to near-zero completion (browser: 1 of
+  // ~58 laps, pre-S25) was invisible as long as the OTHER mode kept the
+  // aggregate above zero. See run.spec.ts's per-mode threshold assertions.
+  lapsByOutcomeByMode: Record<DriverMode, Record<LapOutcome, number>>;
   // S24: each mode's samples are further split by `HttpOrigin` — see
   // `OriginSplitStats` doc above.
   http: Record<string, HttpModeSplit<HttpStats>>;
@@ -585,6 +596,12 @@ export const createCollector = (options: CollectorOptions = {}): Collector => {
   const hopsByOutcome = new Map<Outcome, number>();
   const hopRouteOutcomes = new Map<string, Map<Outcome, number>>();
   const lapsByOutcome = emptyLapCounts();
+  // S27: per-mode counterpart of `lapsByOutcome` — see its `CollectorSnapshot`
+  // doc above.
+  const lapsByOutcomeByMode: Record<DriverMode, Record<LapOutcome, number>> = {
+    browser: emptyLapCounts(),
+    headless: emptyLapCounts()
+  };
 
   interface HttpSampleRecord {
     durationMs: number;
@@ -861,6 +878,7 @@ export const createCollector = (options: CollectorOptions = {}): Collector => {
 
     lapEnd(input) {
       lapsByOutcome[input.outcome] += 1;
+      lapsByOutcomeByMode[input.mode][input.outcome] += 1;
       writeLine('lap_end', input.userId, input.mode, {
         lapId: input.lapId,
         outcome: input.outcome
@@ -1040,6 +1058,10 @@ export const createCollector = (options: CollectorOptions = {}): Collector => {
         hopsByOutcome: hopsByOutcomeOut,
         hopsByRoute: hopsByRouteOut,
         lapsByOutcome: { ...lapsByOutcome },
+        lapsByOutcomeByMode: {
+          browser: { ...lapsByOutcomeByMode.browser },
+          headless: { ...lapsByOutcomeByMode.headless }
+        },
         http: httpOut,
         gates: gatesOut,
         errors: {

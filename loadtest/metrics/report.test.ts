@@ -468,6 +468,51 @@ describe('renderSummaryMd — every DESIGN §6.3 section is present', () => {
     expect(summaryMd).toMatch(/\|\s*headless\s*\|\s*2\s*\|/);
   });
 
+  it('S27 (plans/bridge-loadtest-plan.md §7): reports attempted-vs-completed laps PER MODE, alongside A10', () => {
+    const config = buildDevnetConfig();
+    const collector = createCollector();
+    // Browser: 3 laps started, all 3 finish (2 done, 1 failed) — 66.7%.
+    // Headless: 2 laps started, both finish, 0 complete — the near-total
+    // collapse this gate exists to catch.
+    collector.lapEnd({ userId: 'b1', mode: 'browser', lapId: 'l1', outcome: 'LAP_DONE' });
+    collector.lapEnd({ userId: 'b2', mode: 'browser', lapId: 'l2', outcome: 'LAP_DONE' });
+    collector.lapEnd({ userId: 'b3', mode: 'browser', lapId: 'l3', outcome: 'LAP_FAILED' });
+    collector.lapEnd({ userId: 'h1', mode: 'headless', lapId: 'l4', outcome: 'LAP_FAILED' });
+    collector.lapEnd({ userId: 'h2', mode: 'headless', lapId: 'l5', outcome: 'LAP_ABORTED' });
+
+    const results = buildResultsJson({ snapshot: collector.snapshot(), config });
+    expect(results.laps.byMode.browser).toStrictEqual({
+      attempted: 3,
+      completed: 2,
+      completionRate: 2 / 3
+    });
+    expect(results.laps.byMode.headless).toStrictEqual({
+      attempted: 2,
+      completed: 0,
+      completionRate: 0
+    });
+
+    const summaryMd = renderSummaryMd(results, config);
+    expect(summaryMd).toContain('Per-mode lap reliability');
+    expect(summaryMd).toMatch(/\|\s*browser\s*\|\s*3\s*\|\s*2\s*\|\s*66\.7%\s*\|/);
+    expect(summaryMd).toMatch(/\|\s*headless\s*\|\s*2\s*\|\s*0\s*\|\s*0\.0%\s*\|/);
+  });
+
+  it('S27: a mode with zero laps reaching lapEnd reports completionRate n/a, never a false 0%', () => {
+    const config = buildDevnetConfig();
+    const collector = createCollector();
+    collector.lapEnd({ userId: 'b1', mode: 'browser', lapId: 'l1', outcome: 'LAP_DONE' });
+    // headless: no lapEnd calls at all.
+    const results = buildResultsJson({ snapshot: collector.snapshot(), config });
+    expect(results.laps.byMode.headless).toStrictEqual({
+      attempted: 0,
+      completed: 0,
+      completionRate: null
+    });
+    const summaryMd = renderSummaryMd(results, config);
+    expect(summaryMd).toMatch(/\|\s*headless\s*\|\s*0\s*\|\s*0\s*\|\s*n\/a \(0 attempted\)\s*\|/);
+  });
+
   it('R7 (loadtest/REVIEW.md): "No errors recorded" distinguishes truly-empty from suppressed-only', () => {
     const config = buildDevnetConfig();
     const collectorEmpty = createCollector();
