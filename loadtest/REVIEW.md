@@ -538,6 +538,93 @@ neither is declared.
 
 ---
 
+#### R3 — REVERSED by S29 (2026-09-14, user-directed): serialize after all
+
+**The decision above ("keep parity, attribute honestly") is superseded.** It
+was made on a rate — "89/1985 hop attempts" — that was diluted across every
+hop in the ring. Measured concentrated on the one hop that actually matters
+(`L2B->L1`'s manual claim), the same self-inflicted collision was **33/85
+(38.8%)** and **11/29 (37.9%)** across two full 3-hop runs — combined
+**44/114 = 38.6%**. That is not "a tolerable rate if left alone"; it is a
+worker that fails more than a third of the time on its hardest hop.
+
+**S29 re-ran the diagnosis before touching anything** (per its own
+instruction: confirm, don't re-derive). `messageOf()` in `headlessUser.ts`
+only ever read `error.shortMessage`, which for viem's
+`TransactionRejectedRpcError` is always the generic "Transaction creation
+failed." — R3's own analysis, and S14's before it, never saw past that
+string. Walking viem's `.cause` chain (`RpcError` -> `RpcRequestError` ->
+the raw JSON-RPC error) on real failures from a live headless-only run
+against the compose devnet surfaced the actual rejection underneath:
+
+```
+{"depth":0,"name":"TransactionExecutionError","shortMessage":"Transaction creation failed.","details":"replacement transaction underpriced", ...}
+{"depth":1,"name":"TransactionRejectedRpcError","code":-32003,"shortMessage":"Transaction creation failed.","details":"replacement transaction underpriced", ...}
+{"depth":2,"name":"RpcRequestError","code":-32003,"shortMessage":"RPC Request failed.","details":"replacement transaction underpriced", ...}
+{"depth":3,"code":-32003,"message":"replacement transaction underpriced"}
+```
+
+`"replacement transaction underpriced"` is anvil/geth's mempool response
+to a **second transaction arriving at the same nonce** as one already
+pending, with no fee bump — textbook same-EOA concurrent-send collision,
+observed on both `L1` and `L2B`, exactly where R3 predicted it. This
+confirms the nonce-contention hypothesis directly rather than by inference
+from message prose, and rules out "the chain/proxy genuinely rejected a
+valid claim" as the cause.
+
+**The parity argument itself was reconsidered, not just the rate.** R3
+reasoned: "a real user's wallet has the same dropped-nonce behaviour, so
+serializing here would diverge from the UI." That is true in isolation but
+was applied backwards — **a real user does not submit up to six concurrent
+bridges from one wallet.** Real usage is inherently serial (one person, one
+wallet, one pending intent at a time), so a tool that fires several
+concurrent sends from one EOA is the thing that diverges from a real user,
+not the fix. This is the exact reasoning S25 already used to justify
+serializing the browser driver's UI flow per page — R3 simply hadn't been
+revisited in that light until directed to.
+
+**Resolution: serialize nonce-consuming sends per (user, chain).**
+`workers/headless/headlessUser.ts`'s `sendAndWait` (the only send site in
+the user path — still true, still the right, minimal scope) is now wrapped
+in `workers/headless/uiCallset.ts`'s new `KeyedSerialQueue`, keyed by
+`chainKey`: the exact FIFO-queue shape `browserUser.ts`'s `runExclusive`
+proved for S25 (a queue, not the single-flight/dedup shape used elsewhere
+in this codebase — see that class's doc for why dedup is wrong here and
+for the failure-non-amplification guarantee), generalized to be keyed so
+unrelated chains for the same user still proceed concurrently.
+`ChainNonceManager` (`wallets/chainClients.ts`) was considered and **not**
+reused: it hands out unique nonce values without serializing the
+surrounding send, so concurrent `prepareTransactionRequest` calls would
+still race gas/fee derivation, and using an assigned nonce would require
+bypassing `mapTransactionRequest`'s nonce-drop (finding C4, `app/`-owned,
+out of scope without explicit approval) — neither gives the strict
+one-at-a-time ordering this fix needs. The alternative, deeper fix — stop
+`mapTransactionRequest` from dropping the SDK's nonce/gas in the first
+place (finding C4, `app/utils/transaction.ts:26-38`) — would likely be the
+more complete fix (it would also halve the double `eth_estimateGas` +
+`eth_getTransactionCount` C4 already documents), but that file is in
+`app/` and changing it needs explicit user approval; the worker-side queue
+was chosen as directed, and this is recorded here as a standing
+recommendation for a future step.
+
+The `nonce_conflict` error class (S21, `metrics/errors.ts`) is unaffected
+and stays wired — a genuine node-side nonce issue unrelated to this tool's
+own concurrency is still theoretically possible and should still be
+attributed honestly if it recurs — but with sends serialized per (user,
+chain) it should no longer fire from self-inflicted collisions.
+
+**Required consequence, verified in a real run:** a serialized headless
+user will not always keep up with `--rate` when sends are slow to confirm.
+Those unserved ticks land in `skipped_backpressure` (the same,
+already-tested scheduler mechanism S25 relied on for browser mode — no
+`core/` change was needed here either), never as failures.
+
+See `DESIGN.md` §5.3's `nonce_conflict` row for the parallel update, and
+the S29 feedback pack (plan `bridge-loadtest-plan.md` §8) for the measured
+before/after `L2B->L1` rate.
+
+---
+
 ### R4 — Timed-out driver operations are never cancelled, so a failed hop keeps generating recorded traffic
 
 **Severity: High** (report honesty + bounded resource leak).

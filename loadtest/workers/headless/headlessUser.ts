@@ -69,6 +69,7 @@ import {
   IS_CLAIMED_RECHECK_DELAYS_MS,
   anyRowNonTerminal,
   initialActivityCadenceState,
+  KeyedSerialQueue,
   mapActivityResponseText,
   noteActivityFetched,
   noteBridgeSubmitted,
@@ -280,6 +281,13 @@ export class HeadlessUser implements UserDriver {
   // failure here is a plain network/HTTP error, so the default (always
   // retryable, bounded to 3 attempts) is the right behaviour.
   private readonly activityPoller = new SingleFlightPoller<ObservedRow[]>();
+
+  // S29 (reverses R3, `loadtest/REVIEW.md`): serializes every
+  // nonce-consuming send THIS user issues, per chain — see `sendAndWait`'s
+  // doc and `uiCallset.ts`'s `KeyedSerialQueue` doc for the full diagnosis
+  // (captured raw rejection: "replacement transaction underpriced") and
+  // why this shape was chosen over `ChainNonceManager`.
+  private readonly chainSendQueue = new KeyedSerialQueue();
 
   // Populated by bridge() when it decodes a BridgeEvent; consumed by
   // claim() to build ClaimAssetParams. `ObservedRow` (core/types.ts) does
@@ -799,6 +807,20 @@ export class HeadlessUser implements UserDriver {
    * so viem's `prepareTransactionRequest` re-derives BOTH via a second
    * `eth_estimateGas` + `eth_getTransactionCount` (P11) plus fee derivation
    * (P12), unless `opts.gasOverride` is supplied (bridge only, finding C5).
+   *
+   * S29 (reverses `loadtest/REVIEW.md` R3): the ENTIRE body below is
+   * serialized per (this user, `chainKey`) through `chainSendQueue`
+   * (`uiCallset.ts`'s `KeyedSerialQueue` — see that class's doc for the
+   * full diagnosis and why this shape, not `ChainNonceManager`, was
+   * chosen). This is the ONLY send site in the user path, so wrapping it
+   * here is sufficient for approve, bridge, and claim alike — whichever of
+   * `bridge()`/`claim()` calls it, for whichever of this user's concurrent
+   * laps, now waits its turn per chain instead of racing viem's
+   * `eth_getTransactionCount(pending)` re-derivation against another
+   * in-flight send on the SAME EOA. Wrapping the full submit-and-wait
+   * (not just the broadcast) matches `browserUser.ts`'s `runExclusive`
+   * precedent and the same real-user framing: one wallet does not have
+   * several bridges in flight against one chain at once.
    */
   private async sendAndWait(
     chainKey: string,
@@ -808,65 +830,70 @@ export class HeadlessUser implements UserDriver {
     step: TxStepResult;
     rawReceipt: Awaited<ReturnType<PublicClient['waitForTransactionReceipt']>> | null;
   }> {
-    const runtime = this.chainRuntime(chainKey);
-    const mapped = mapTransactionRequest(txParams);
-    const submitStartedAt = this.clock.now();
+    return this.chainSendQueue.runExclusive(chainKey, async () => {
+      const runtime = this.chainRuntime(chainKey);
+      const mapped = mapTransactionRequest(txParams);
+      const submitStartedAt = this.clock.now();
 
-    let txHash: Hex | null = null;
-    try {
-      txHash = await runtime.wallet.sendTransaction({
-        to: mapped.to,
-        data: mapped.data,
-        value: mapped.value,
-        ...(opts.gasOverride !== undefined ? { gas: opts.gasOverride } : {})
-      });
-    } catch (error) {
-      const classified = classifySubmitError({ message: messageOf(error) });
-      return {
-        step: {
-          txHash: null,
-          submit: { startedAt: submitStartedAt, durationMs: this.clock.now() - submitStartedAt },
-          receipt: null,
-          error: classified
-        },
-        rawReceipt: null
-      };
-    }
+      let txHash: Hex | null = null;
+      try {
+        txHash = await runtime.wallet.sendTransaction({
+          to: mapped.to,
+          data: mapped.data,
+          value: mapped.value,
+          ...(opts.gasOverride !== undefined ? { gas: opts.gasOverride } : {})
+        });
+      } catch (error) {
+        const classified = classifySubmitError({ message: messageOf(error) });
+        return {
+          step: {
+            txHash: null,
+            submit: { startedAt: submitStartedAt, durationMs: this.clock.now() - submitStartedAt },
+            receipt: null,
+            error: classified
+          },
+          rawReceipt: null
+        };
+      }
 
-    const submitDurationMs = this.clock.now() - submitStartedAt;
-    const receiptStartedAt = this.clock.now();
-    try {
-      // R4: bound viem's own wait to the SAME budget `ring.ts` enforces via
-      // `raceOrTimeout`, rather than falling back to viem's 180 000ms
-      // default (3x the devnet `txReceiptMs`) — see
-      // `HeadlessUserOptions.receiptTimeoutMs`'s doc.
-      const receipt = await runtime.public.waitForTransactionReceipt({
-        hash: txHash,
-        ...(this.receiptTimeoutMs !== undefined ? { timeout: this.receiptTimeoutMs } : {})
-      });
-      return {
-        step: {
-          txHash,
-          submit: { startedAt: submitStartedAt, durationMs: submitDurationMs },
-          receipt: {
-            status: receipt.status === 'success' ? 'success' : 'reverted',
-            timing: { startedAt: receiptStartedAt, durationMs: this.clock.now() - receiptStartedAt }
-          }
-        },
-        rawReceipt: receipt
-      };
-    } catch (error) {
-      const classified: DriverError = classifyRpcError({ message: messageOf(error) });
-      return {
-        step: {
-          txHash,
-          submit: { startedAt: submitStartedAt, durationMs: submitDurationMs },
-          receipt: null,
-          error: classified
-        },
-        rawReceipt: null
-      };
-    }
+      const submitDurationMs = this.clock.now() - submitStartedAt;
+      const receiptStartedAt = this.clock.now();
+      try {
+        // R4: bound viem's own wait to the SAME budget `ring.ts` enforces via
+        // `raceOrTimeout`, rather than falling back to viem's 180 000ms
+        // default (3x the devnet `txReceiptMs`) — see
+        // `HeadlessUserOptions.receiptTimeoutMs`'s doc.
+        const receipt = await runtime.public.waitForTransactionReceipt({
+          hash: txHash,
+          ...(this.receiptTimeoutMs !== undefined ? { timeout: this.receiptTimeoutMs } : {})
+        });
+        return {
+          step: {
+            txHash,
+            submit: { startedAt: submitStartedAt, durationMs: submitDurationMs },
+            receipt: {
+              status: receipt.status === 'success' ? 'success' : 'reverted',
+              timing: {
+                startedAt: receiptStartedAt,
+                durationMs: this.clock.now() - receiptStartedAt
+              }
+            }
+          },
+          rawReceipt: receipt
+        };
+      } catch (error) {
+        const classified: DriverError = classifyRpcError({ message: messageOf(error) });
+        return {
+          step: {
+            txHash,
+            submit: { startedAt: submitStartedAt, durationMs: submitDurationMs },
+            receipt: null,
+            error: classified
+          },
+          rawReceipt: null
+        };
+      }
+    });
   }
 
   private decodeBridgeEvent(

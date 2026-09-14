@@ -15,6 +15,7 @@ import {
   installTimingFetch,
   isActivityFetchDue,
   isZeroAddress,
+  KeyedSerialQueue,
   mapActivityResponseText,
   NON_TERMINAL_INTERVAL_MS,
   noteActivityFetched,
@@ -419,6 +420,123 @@ describe('SingleFlightPoller (S16/A6)', () => {
     await expect(a).rejects.toBe(fatalError);
     await expect(b).rejects.toBe(fatalError);
     expect(attempts).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// KeyedSerialQueue — S29 (reverses `loadtest/REVIEW.md` R3): serializes
+// nonce-consuming sends per (user, chain). Tested here as the standalone
+// primitive `headlessUser.ts`'s `sendAndWait` wraps every call in (keyed by
+// `chainKey`, one `HeadlessUser` instance per user) — mirroring
+// `browserUser.test.ts`'s "N concurrent ... execute strictly one at a
+// time" / "a failure in one queued lap does not fail or deadlock the
+// others" pair for `runExclusive`. `headlessUser.ts` itself has no
+// unit-test harness (its I/O-heavy methods need a live/mocked viem+SDK
+// client stack no test in this file builds, per R4's note), so the queue
+// primitive it delegates to is what gets the direct lock here.
+// ---------------------------------------------------------------------------
+
+describe('KeyedSerialQueue (S29)', () => {
+  it('N concurrent runExclusive calls on the SAME key execute strictly one at a time', async () => {
+    const queue = new KeyedSerialQueue();
+    let active = 0;
+    let overlapDetected = false;
+    const order: string[] = [];
+    let releaseFirst: (() => void) | undefined;
+
+    let signalFirstEntered: () => void;
+    const firstEntered = new Promise<void>((resolve) => {
+      signalFirstEntered = resolve;
+    });
+    const firstBlocked = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+
+    const makeTurn = (label: string, blocked: Promise<void> | null) => () =>
+      queue.runExclusive('L1', async () => {
+        active += 1;
+        if (active > 1) overlapDetected = true;
+        order.push(`${label}:enter`);
+        if (label === 'first') signalFirstEntered();
+        if (blocked) await blocked;
+        order.push(`${label}:exit`);
+        active -= 1;
+        return label;
+      });
+
+    const first = makeTurn('first', firstBlocked)();
+    const second = makeTurn('second', null)();
+    const third = makeTurn('third', null)();
+
+    // Wait until the FIRST turn has genuinely started before asserting
+    // nothing else has — a broken (unserialized) queue would already have
+    // let `second`/`third` run concurrently with it.
+    await firstEntered;
+    expect(order).toEqual(['first:enter']);
+    expect(overlapDetected).toBe(false);
+
+    releaseFirst?.();
+    const results = await Promise.all([first, second, third]);
+
+    expect(results).toEqual(['first', 'second', 'third']);
+    expect(overlapDetected).toBe(false);
+    // Exactly one full enter/exit cycle per turn, never interleaved.
+    expect(order).toEqual([
+      'first:enter',
+      'first:exit',
+      'second:enter',
+      'second:exit',
+      'third:enter',
+      'third:exit'
+    ]);
+  });
+
+  it('a failure in one queued call neither fails nor deadlocks the callers queued behind it', async () => {
+    const queue = new KeyedSerialQueue();
+    const first = queue.runExclusive('L1', async () => {
+      throw new Error('boom: first send failed');
+    });
+    const second = queue.runExclusive('L1', async () => 'second-result');
+    const third = queue.runExclusive('L1', async () => 'third-result');
+
+    await expect(first).rejects.toThrow('boom: first send failed');
+    // Neither queued behind the failure nor failed BY it — each ran its own
+    // work and got its own (successful) result, per `runExclusive`'s
+    // never-rejecting side-channel design (same guarantee S25 proved for
+    // `browserUser.ts`'s `runExclusive`).
+    await expect(second).resolves.toBe('second-result');
+    await expect(third).resolves.toBe('third-result');
+  });
+
+  it('different keys proceed concurrently, not serialized against each other', async () => {
+    const queue = new KeyedSerialQueue();
+    let l1Entered = false;
+    let l2EnteredWhileL1Blocked = false;
+    let releaseL1: (() => void) | undefined;
+    const l1Blocked = new Promise<void>((resolve) => {
+      releaseL1 = resolve;
+    });
+
+    const l1 = queue.runExclusive('L1', async () => {
+      l1Entered = true;
+      await l1Blocked;
+      return 'l1-done';
+    });
+    await Promise.resolve();
+    expect(l1Entered).toBe(true);
+
+    // A different chain key must not wait behind L1's still-open turn —
+    // DESIGN §4.4's "different chains proceed concurrently" rule, mirrored
+    // here for the per-user headless send queue.
+    const l2 = queue.runExclusive('L2', async () => {
+      l2EnteredWhileL1Blocked = true;
+      return 'l2-done';
+    });
+    await expect(l2).resolves.toBe('l2-done');
+    expect(l2EnteredWhileL1Blocked).toBe(true);
+
+    releaseL1?.();
+    await expect(l1).resolves.toBe('l1-done');
   });
 });
 

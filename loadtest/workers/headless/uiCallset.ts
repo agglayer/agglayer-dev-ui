@@ -203,6 +203,82 @@ export class SingleFlightPoller<T> {
 }
 
 // ---------------------------------------------------------------------------
+// KeyedSerialQueue — S29 (plan §8; reverses `loadtest/REVIEW.md`'s R3):
+// serializes nonce-consuming sends per (user, chain).
+//
+// `headlessUser.ts`'s `sendAndWait` is the ONLY send site in the user path
+// (finding C4/R3) and, before this, had no serialization at all:
+// `maxInflightLapsPerUser` (default 3, up to 6 concurrent sends on one EOA
+// with two asset kinds interleaved, DESIGN §3.5) lets several of ONE user's
+// laps be in flight together, every one of them free to call
+// `sendAndWait` on the SAME (user, chain) wallet at the same time. Two
+// concurrent `sendTransaction` calls interleave between viem's own
+// `eth_getTransactionCount(pending)` re-derivation (finding C4:
+// `mapTransactionRequest` drops the SDK's own nonce) and the actual
+// `eth_sendRawTransaction`, so both can compute the SAME pending nonce; the
+// second broadcast then looks like a same-nonce "replacement" transaction,
+// which anvil/geth reject with the generic JSON-RPC `-32003`
+// (`TransactionRejectedRpcError`, viem's opaque "Transaction creation
+// failed." shortMessage). The real underlying text — invisible until you
+// walk viem's `.cause` chain — was captured live against the compose
+// devnet during S29's diagnosis: **`"replacement transaction
+// underpriced"`**, confirming same-wallet nonce contention rather than a
+// genuine chain/proxy rejection.
+//
+// R3 (`loadtest/REVIEW.md`) originally declined to serialize here, to keep
+// parity with a real UI wallet (which also drops the nonce, finding C4).
+// **S29 reverses that decision**: a real user does not submit several
+// concurrent bridges from one wallet — real usage is serial — so
+// serializing per (user, chain) is *more* faithful to a real user, not
+// less, the identical reasoning that already justified S25's per-page
+// `runExclusive` for browser mode. See `REVIEW.md`'s updated R3 entry and
+// `DESIGN.md` §5.3's `nonce_conflict` row for the full reversal record.
+//
+// Deliberately the SAME queue SHAPE as `workers/browser/browserUser.ts`'s
+// `runExclusive` (a FIFO queue), generalized to be keyed — NOT
+// `wallets/chainClients.ts`'s `ChainNonceManager`, and NOT the
+// single-flight/dedup collapse `SingleFlightPoller` above uses. A queue,
+// not dedup, because two queued `sendAndWait` calls are two DIFFERENT
+// sends, each of which must actually run and get its OWN result — dedup
+// would silently skip one. And per `runExclusive`'s own hard-won lesson
+// (the failure-amplification trap S24 fell into and S25 explicitly
+// avoided): one caller's rejection must never fail or wedge the callers
+// queued behind it on the same key, which is why `tails.set(key, ...)`
+// below chains through a side-channel promise that never itself rejects.
+// `ChainNonceManager` was considered and NOT reused: it hands out unique
+// nonce VALUES without serializing the surrounding send, so concurrent
+// `prepareTransactionRequest` calls would still race gas/fee derivation,
+// and a caller would have to bypass `mapTransactionRequest`'s nonce-drop
+// (finding C4, `app/`-owned — out of scope without explicit approval) to
+// actually use an assigned nonce. Neither gives the strict one-at-a-time
+// ordering this fix needs (and this file's own tests assert).
+//
+// Keyed (not one global lock) so unrelated chains for the same user
+// proceed concurrently, mirroring DESIGN §4.4's "different chains proceed
+// concurrently" for the funder's analogous per-chain nonce queue.
+// ---------------------------------------------------------------------------
+
+export class KeyedSerialQueue {
+  private readonly tails = new Map<string, Promise<void>>();
+
+  runExclusive<T>(key: string, fn: () => Promise<T>): Promise<T> {
+    const myTurn = this.tails.get(key) ?? Promise.resolve();
+    let releaseNextTurn: () => void = () => {};
+    const nextTurn = new Promise<void>((resolve) => {
+      releaseNextTurn = resolve;
+    });
+    this.tails.set(key, nextTurn);
+    return myTurn.then(async () => {
+      try {
+        return await fn();
+      } finally {
+        releaseNextTurn();
+      }
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Generic TTL memo cache — DESIGN P7 (balance, 15s), P8 (gasPrice, 15s), P9
 // (allowance — "no staleTime" but keyed including the amount string, and
 // `refetchOnMount/WindowFocus/Reconnect: false`, so in practice it is
