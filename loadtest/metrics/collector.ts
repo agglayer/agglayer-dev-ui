@@ -373,6 +373,15 @@ export interface CollectorSnapshot {
     string,
     {
       byOutcome: Partial<Record<Outcome, number>>;
+      // S30 (plans/bridge-loadtest-plan.md §7/§8): the same per-route
+      // outcome counts as `byOutcome` above, split further by `DriverMode`
+      // — the dimension S27's per-mode LAP gate could not see (a specific
+      // hop degrading in exactly one mode, e.g. S26/S29's headless-only
+      // `rpc_error`s on `L2B->L1`, was invisible in the mode-blind
+      // `byOutcome` aggregate). Mirrors `lapsByOutcomeByMode`'s per-mode
+      // split of `lapsByOutcome`, one dimension further (route AND mode
+      // instead of just mode).
+      byOutcomeByMode: Record<DriverMode, Partial<Record<Outcome, number>>>;
       phases: Partial<Record<Phase, ModeSplitStats<Stats>>>;
     }
   >;
@@ -595,6 +604,9 @@ export const createCollector = (options: CollectorOptions = {}): Collector => {
 
   const hopsByOutcome = new Map<Outcome, number>();
   const hopRouteOutcomes = new Map<string, Map<Outcome, number>>();
+  // S30: per-route outcome counts, split further by mode — see
+  // `CollectorSnapshot.hopsByRoute[route].byOutcomeByMode`'s doc above.
+  const hopRouteOutcomesByMode = new Map<string, Record<DriverMode, Map<Outcome, number>>>();
   const lapsByOutcome = emptyLapCounts();
   // S27: per-mode counterpart of `lapsByOutcome` — see its `CollectorSnapshot`
   // doc above.
@@ -868,6 +880,14 @@ export const createCollector = (options: CollectorOptions = {}): Collector => {
         () => new Map<Outcome, number>()
       );
       routeOutcomes.set(input.outcome, (routeOutcomes.get(input.outcome) ?? 0) + 1);
+
+      const routeOutcomesByMode = getOrCreate(hopRouteOutcomesByMode, input.hopRoute, () => ({
+        browser: new Map<Outcome, number>(),
+        headless: new Map<Outcome, number>()
+      }));
+      const modeOutcomes = routeOutcomesByMode[input.mode];
+      modeOutcomes.set(input.outcome, (modeOutcomes.get(input.outcome) ?? 0) + 1);
+
       writeLine('hop_end', input.userId, input.mode, {
         hopId: input.hopId,
         lapId: input.lapId,
@@ -1033,16 +1053,33 @@ export const createCollector = (options: CollectorOptions = {}): Collector => {
       top.sort((a, b) => b.count - a.count);
 
       const hopsByRouteOut: CollectorSnapshot['hopsByRoute'] = {};
-      const routeKeys = new Set<string>([...hopRouteOutcomes.keys(), ...phases.byRoute.keys()]);
+      const routeKeys = new Set<string>([
+        ...hopRouteOutcomes.keys(),
+        ...phases.byRoute.keys(),
+        ...hopRouteOutcomesByMode.keys()
+      ]);
       for (const route of routeKeys) {
         const outcomesMap = hopRouteOutcomes.get(route);
         const byOutcome: Partial<Record<Outcome, number>> = {};
         if (outcomesMap !== undefined) {
           for (const [outcome, count] of outcomesMap) byOutcome[outcome] = count;
         }
+        const outcomesByModeMap = hopRouteOutcomesByMode.get(route);
+        const byOutcomeByMode: Record<DriverMode, Partial<Record<Outcome, number>>> = {
+          browser: {},
+          headless: {}
+        };
+        if (outcomesByModeMap !== undefined) {
+          for (const mode of ['browser', 'headless'] as const) {
+            for (const [outcome, count] of outcomesByModeMap[mode]) {
+              byOutcomeByMode[mode][outcome] = count;
+            }
+          }
+        }
         const routePhaseMap = phases.byRoute.get(route);
         hopsByRouteOut[route] = {
           byOutcome,
+          byOutcomeByMode,
           phases: routePhaseMap !== undefined ? snapshotPhases(routePhaseMap) : {}
         };
       }

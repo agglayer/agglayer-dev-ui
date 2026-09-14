@@ -36,10 +36,14 @@ export default defineConfig({
   testDir: 'tests/loadtest-e2e',
   testMatch: [/.*\.spec\.ts$/],
 
-  // A single long-running spec that funds and drives real devnet wallets —
-  // never parallelize, never retry (a retry would re-fund/re-run against
-  // wallets a previous attempt already advanced, and would burn another up
-  // to ~60 minutes).
+  // Long-running specs that fund and drive real devnet wallets (S30,
+  // plans/bridge-loadtest-plan.md §7/§8 added a second one,
+  // run.fullring.spec.ts, alongside the original run.spec.ts) — never
+  // parallelize, never retry (a retry would re-fund/re-run against wallets
+  // a previous attempt already advanced, and would burn another up to
+  // ~60-100 minutes). `workers: 1` also means the two spec files run
+  // strictly one after another rather than racing each other for the one
+  // compose devnet.
   fullyParallel: false,
   workers: 1,
   retries: 0,

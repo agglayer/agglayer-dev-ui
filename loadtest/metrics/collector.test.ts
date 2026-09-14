@@ -518,6 +518,62 @@ describe('collector — hop/lap outcomes', () => {
     expect(snapshot.hopsByRoute['L2A->L2B'].byOutcome).toStrictEqual({ hop_completed_manual: 1 });
   });
 
+  // S30 (plans/bridge-loadtest-plan.md §7/§8): `byOutcomeByMode` is what
+  // lets `metrics/report.ts` compute a per-(route, mode) attempted/
+  // completed figure instead of only the mode-blind per-route aggregate
+  // above — a specific hop degrading in exactly one mode (S26/S29's
+  // headless-only `rpc_error`s on `L2B->L1`) must be visible even when the
+  // OTHER mode's hops on that SAME route keep the route aggregate healthy.
+  it('aggregates hopsByRoute[route].byOutcomeByMode PER MODE, independently of byOutcome', () => {
+    const collector = createCollector();
+    collector.hopEnd({
+      userId: 'u1',
+      mode: 'browser',
+      hopId: 'h1',
+      lapId: 'l1',
+      hopRoute: 'L2B->L1',
+      outcome: 'hop_completed_manual'
+    });
+    collector.hopEnd({
+      userId: 'u2',
+      mode: 'browser',
+      hopId: 'h2',
+      lapId: 'l2',
+      hopRoute: 'L2B->L1',
+      outcome: 'hop_completed_manual'
+    });
+    collector.hopEnd({
+      userId: 'u3',
+      mode: 'headless',
+      hopId: 'h3',
+      lapId: 'l3',
+      hopRoute: 'L2B->L1',
+      outcome: 'hop_completed_manual'
+    });
+    collector.hopEnd({
+      userId: 'u4',
+      mode: 'headless',
+      hopId: 'h4',
+      lapId: 'l4',
+      hopRoute: 'L2B->L1',
+      outcome: 'rpc_error'
+    });
+
+    const snapshot = collector.snapshot();
+    // The mode-blind aggregate stays healthy (3 of 4 completed)...
+    expect(snapshot.hopsByRoute['L2B->L1'].byOutcome).toStrictEqual({
+      hop_completed_manual: 3,
+      rpc_error: 1
+    });
+    // ...but the per-mode split reveals headless is the ONLY mode with the
+    // failure, at a much worse local rate (0 of 1) than the aggregate
+    // suggests.
+    expect(snapshot.hopsByRoute['L2B->L1'].byOutcomeByMode).toStrictEqual({
+      browser: { hop_completed_manual: 2 },
+      headless: { hop_completed_manual: 1, rpc_error: 1 }
+    });
+  });
+
   it('aggregates lap outcomes', () => {
     const collector = createCollector();
     collector.lapEnd({ userId: 'u1', mode: 'headless', lapId: 'l1', outcome: 'LAP_DONE' });

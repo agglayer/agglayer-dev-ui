@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import type { LoadtestAsset, LoadtestChain, LoadtestConfig } from '../config/schema';
+import type { Outcome } from '../core/types';
 import type { DriverMode } from '../core/userDriver';
 import type {
   CollectorSnapshot,
@@ -23,6 +24,8 @@ import type {
   ModeSplitStats,
   Stats
 } from './collector';
+
+import { isSuccessOutcome } from '../core/types';
 
 export const RESULTS_SCHEMA_VERSION = 1;
 
@@ -91,7 +94,26 @@ export interface ResultsJson {
   achieved: AchievedLoad;
   hops: {
     byOutcome: Partial<Record<string, number>>;
-    byRoute: Record<string, { byOutcome: Partial<Record<string, number>>; phases: unknown }>;
+    byRoute: Record<
+      string,
+      {
+        byOutcome: Partial<Record<string, number>>;
+        byOutcomeByMode: Record<DriverMode, Partial<Record<string, number>>>;
+        phases: unknown;
+      }
+    >;
+    // S30 (plans/bridge-loadtest-plan.md §7/§8): the per-route counterpart
+    // of `laps.byMode` above — "of the hops a mode ATTEMPTED on this
+    // route, how many actually COMPLETED". This is the dimension S27 left
+    // ungated: its e2e's 2-hop ring structurally never exercised
+    // `L2A->L2B`/`L2B->L1`, and even on a route both modes DO exercise, a
+    // hop degrading in exactly one mode (S26's headless-only `rpc_error`s
+    // on `L2B->L1`, later fixed by S29) was invisible in the per-mode LAP
+    // gate as long as the OTHER mode's hops kept that mode's own lap
+    // completion rate above the floor. `attempted`/`completed`/
+    // `completionRate` have the exact same "never a false 0%" semantics as
+    // `LapReliability` (see its doc below).
+    byRouteMode: Record<string, Record<DriverMode, HopReliability>>;
   };
   laps: {
     byOutcome: Record<string, number>;
@@ -271,6 +293,54 @@ export const lapReliabilityByMode = (
 });
 
 // ---------------------------------------------------------------------------
+// S30 (plans/bridge-loadtest-plan.md §7/§8): per-route, per-mode hop
+// reliability — closes the structural blind spot S27 left. S27's gate
+// answers "did each MODE complete at least half its LAPS" on whatever ring
+// the e2e happens to run; it cannot see a single ROUTE degrading in a
+// single MODE (S26/S29: headless-only `rpc_error`s concentrated on
+// `L2B->L1`, invisible in the aggregate `hopsByOutcome` and in the
+// mode-blind `hopsByRoute[route].byOutcome`) and, on a shortened ring, it
+// cannot see a route at all. `attempted` counts every hop that reached
+// `hopEnd` on that (route, mode) pair; `completed` counts only the
+// `isSuccessOutcome` outcomes (`hop_completed_auto/manual/escalated/raced`
+// — core/types.ts's `SuccessOutcome`, not just the two "happy path" ones a
+// reader might guess); `completionRate` is `null`, never a false `0`, when
+// a (route, mode) pair had zero hops reach `hopEnd` — same "never fill in
+// a zero for absent data" rule DESIGN §5.5 invariant 5 already applies to
+// `LapReliability` above.
+// ---------------------------------------------------------------------------
+
+export interface HopReliability {
+  attempted: number;
+  completed: number;
+  completionRate: number | null;
+}
+
+const hopReliabilityForOutcomes = (byOutcome: Partial<Record<Outcome, number>>): HopReliability => {
+  let attempted = 0;
+  let completed = 0;
+  for (const [outcome, count] of Object.entries(byOutcome) as [Outcome, number | undefined][]) {
+    const n = count ?? 0;
+    attempted += n;
+    if (isSuccessOutcome(outcome)) completed += n;
+  }
+  return { attempted, completed, completionRate: attempted > 0 ? completed / attempted : null };
+};
+
+export const hopReliabilityByRouteMode = (
+  hopsByRoute: CollectorSnapshot['hopsByRoute']
+): Record<string, Record<DriverMode, HopReliability>> => {
+  const out: Record<string, Record<DriverMode, HopReliability>> = {};
+  for (const [route, data] of Object.entries(hopsByRoute)) {
+    out[route] = {
+      browser: hopReliabilityForOutcomes(data.byOutcomeByMode.browser),
+      headless: hopReliabilityForOutcomes(data.byOutcomeByMode.headless)
+    };
+  }
+  return out;
+};
+
+// ---------------------------------------------------------------------------
 // `results.json` assembly
 // ---------------------------------------------------------------------------
 
@@ -297,7 +367,8 @@ export const buildResultsJson = (params: {
     achieved: achievedFromSnapshot(snapshot, config),
     hops: {
       byOutcome: snapshot.hopsByOutcome,
-      byRoute: snapshot.hopsByRoute
+      byRoute: snapshot.hopsByRoute,
+      byRouteMode: hopReliabilityByRouteMode(snapshot.hopsByRoute)
     },
     laps: {
       byOutcome: snapshot.lapsByOutcome,
@@ -486,6 +557,40 @@ const renderHopOutcomes = (results: ResultsJson): string => {
   rows.push(['**all routes**', ...outcomes.map((o) => String(results.hops.byOutcome[o] ?? 0))]);
 
   return mdTable(['route', ...outcomes], rows);
+};
+
+/**
+ * S30 (plans/bridge-loadtest-plan.md §7/§8): per-route, per-mode hop
+ * reliability — see `HopReliability`/`hopReliabilityByRouteMode`'s doc in
+ * this file for what `attempted`/`completed`/`completionRate` mean and why
+ * this exists alongside (not instead of) `renderHopOutcomes` above and
+ * `renderLapReliabilityByMode`: a mode collapsing on ONE route can hide
+ * behind both — the aggregate route table above is mode-blind, and the
+ * per-mode LAP table above can stay above its floor as long as a route
+ * that mode ISN'T degrading on keeps completing.
+ */
+const renderHopReliabilityByRouteMode = (results: ResultsJson): string => {
+  const routes = Object.keys(results.hops.byRouteMode).sort();
+  if (routes.length === 0) return 'No hops recorded.';
+
+  const rows = routes.flatMap((route) =>
+    (['browser', 'headless'] as const).map((mode) => {
+      const r = results.hops.byRouteMode[route][mode];
+      return [
+        route,
+        mode,
+        String(r.attempted),
+        String(r.completed),
+        r.completionRate === null ? 'n/a (0 attempted)' : `${(r.completionRate * 100).toFixed(1)}%`
+      ];
+    })
+  );
+
+  return [
+    "**Per-route x per-mode hop reliability (S30, plans/bridge-loadtest-plan.md §7/§8)** — `attempted` is every hop that reached a final outcome on that (route, mode) pair, `completed` counts only a `hop_completed_*` (success) outcome. This is the gate that closes S27's structural blind spot: a hop degrading in exactly one mode on one route (S26/S29's headless-only `rpc_error`s on `L2B->L1`) is visible here even when both the route-aggregate table above and the per-mode lap table stay healthy overall:",
+    '',
+    mdTable(['route', 'mode', 'attempted', 'completed', 'completionRate'], rows)
+  ].join('\n');
 };
 
 const isModeSplit = (value: unknown): value is ModeSplitStats<Stats> =>
@@ -834,7 +939,10 @@ export const renderSummaryMd = (results: ResultsJson, config: LoadtestConfig): s
     header,
     ['## Configuration', renderConfiguration(config)].join('\n\n'),
     ['## Throughput', renderThroughput(results)].join('\n\n'),
-    ['## Hop outcomes', renderHopOutcomes(results)].join('\n\n'),
+    [
+      '## Hop outcomes',
+      [renderHopOutcomes(results), '', renderHopReliabilityByRouteMode(results)].join('\n')
+    ].join('\n\n'),
     ['## Phase latencies', renderPhaseLatencies(results)].join('\n\n'),
     ['## Endpoint latencies', renderEndpointLatencies(results)].join('\n\n'),
     ['## Gate stalls', renderGateStalls(results)].join('\n\n'),

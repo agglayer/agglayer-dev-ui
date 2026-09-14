@@ -24,13 +24,25 @@ jobs:
   loadtest-e2e:
     runs-on: ubuntu-latest
     # Budget: devnet bring-up mirrors e2e.yaml's (~24s warm, ~65s cold CI
-    # runner); tests/loadtest-e2e/run.spec.ts itself sets its own 75-minute
-    # Playwright test timeout (see its doc comment: healthy-devnet runs
-    # finish in minutes, but the manual-claim hop's own timeout budget
-    # alone is 15 minutes, and a stuck lap can occupy up to lapMs=60
-    # minutes before the tool itself gives up). 100 minutes pads over that
-    # plus install/build time.
-    timeout-minutes: 100
+    # runner). `playwright.loadtest.config.ts`'s `testMatch` picks up EVERY
+    # `*.spec.ts` under `tests/loadtest-e2e/` and (`fullyParallel: false,
+    # workers: 1`) runs them strictly one after another, so this budget
+    # must cover BOTH specs' worst cases, not just one:
+    #   - run.spec.ts sets its own 75-minute Playwright test timeout
+    #     (healthy-devnet runs finish in minutes, but a stuck lap can
+    #     occupy up to its derived lapMs budget before the tool itself
+    #     gives up).
+    #   - run.fullring.spec.ts (S30, plans/bridge-loadtest-plan.md §7/§8)
+    #     sets its own 100-minute Playwright test timeout — it runs the
+    #     tool's UNSHORTENED 3-hop ring specifically to gate the
+    #     `L2A->L2B`/`L2B->L1` hops run.spec.ts's shortened ring can never
+    #     see; healthy-devnet runs of its exact config took ~15-18 minutes
+    #     in this session's measurements, but its own doc comment budgets
+    #     conservatively for a stuck hop the same way run.spec.ts does.
+    # 220 minutes pads over both worst cases plus install/build time —
+    # raised from 100 when run.fullring.spec.ts was added; well within
+    # GitHub's default 360-minute job cap.
+    timeout-minutes: 220
     env:
       CI: true
       # Same rationale as e2e.yaml: every value below is either a

@@ -498,6 +498,87 @@ describe('renderSummaryMd — every DESIGN §6.3 section is present', () => {
     expect(summaryMd).toMatch(/\|\s*headless\s*\|\s*2\s*\|\s*0\s*\|\s*0\.0%\s*\|/);
   });
 
+  it('S30 (plans/bridge-loadtest-plan.md §7/§8): reports attempted-vs-completed hops PER ROUTE x PER MODE', () => {
+    const config = buildDevnetConfig();
+    const collector = createCollector();
+    // L2B->L1: browser completes both its hops; headless completes 1 of 2
+    // — the exact shape of S26/S29's pre-fix headless-only degradation on
+    // this route, invisible in the mode-blind `hops.byRoute` aggregate.
+    collector.hopEnd({
+      userId: 'b1',
+      mode: 'browser',
+      hopId: 'h1',
+      lapId: 'l1',
+      hopRoute: 'L2B->L1',
+      outcome: 'hop_completed_manual'
+    });
+    collector.hopEnd({
+      userId: 'b2',
+      mode: 'browser',
+      hopId: 'h2',
+      lapId: 'l2',
+      hopRoute: 'L2B->L1',
+      outcome: 'hop_completed_manual'
+    });
+    collector.hopEnd({
+      userId: 'h1',
+      mode: 'headless',
+      hopId: 'h3',
+      lapId: 'l3',
+      hopRoute: 'L2B->L1',
+      outcome: 'hop_completed_manual'
+    });
+    collector.hopEnd({
+      userId: 'h2',
+      mode: 'headless',
+      hopId: 'h4',
+      lapId: 'l4',
+      hopRoute: 'L2B->L1',
+      outcome: 'rpc_error'
+    });
+
+    const results = buildResultsJson({ snapshot: collector.snapshot(), config });
+    expect(results.hops.byRouteMode['L2B->L1'].browser).toStrictEqual({
+      attempted: 2,
+      completed: 2,
+      completionRate: 1
+    });
+    expect(results.hops.byRouteMode['L2B->L1'].headless).toStrictEqual({
+      attempted: 2,
+      completed: 1,
+      completionRate: 0.5
+    });
+
+    const summaryMd = renderSummaryMd(results, config);
+    expect(summaryMd).toContain('Per-route x per-mode hop reliability');
+    expect(summaryMd).toMatch(/\|\s*L2B->L1\s*\|\s*browser\s*\|\s*2\s*\|\s*2\s*\|\s*100\.0%\s*\|/);
+    expect(summaryMd).toMatch(/\|\s*L2B->L1\s*\|\s*headless\s*\|\s*2\s*\|\s*1\s*\|\s*50\.0%\s*\|/);
+  });
+
+  it('S30: a (route, mode) pair with zero hops reaching hopEnd reports completionRate n/a, never a false 0%', () => {
+    const config = buildDevnetConfig();
+    const collector = createCollector();
+    collector.hopEnd({
+      userId: 'b1',
+      mode: 'browser',
+      hopId: 'h1',
+      lapId: 'l1',
+      hopRoute: 'L2B->L1',
+      outcome: 'hop_completed_manual'
+    });
+    // headless: no hopEnd calls on this route at all.
+    const results = buildResultsJson({ snapshot: collector.snapshot(), config });
+    expect(results.hops.byRouteMode['L2B->L1'].headless).toStrictEqual({
+      attempted: 0,
+      completed: 0,
+      completionRate: null
+    });
+    const summaryMd = renderSummaryMd(results, config);
+    expect(summaryMd).toMatch(
+      /\|\s*L2B->L1\s*\|\s*headless\s*\|\s*0\s*\|\s*0\s*\|\s*n\/a \(0 attempted\)\s*\|/
+    );
+  });
+
   it('S27: a mode with zero laps reaching lapEnd reports completionRate n/a, never a false 0%', () => {
     const config = buildDevnetConfig();
     const collector = createCollector();
