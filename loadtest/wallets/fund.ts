@@ -2,7 +2,7 @@
 // See loadtest/DESIGN.md §4 for the full rationale; this file implements it
 // and settles the three [VERIFY@S05] markers (recorded back into DESIGN.md
 // §4 alongside this change).
-import type { Address, LocalAccount } from 'viem';
+import type { Address, Hex, LocalAccount } from 'viem';
 
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -361,6 +361,20 @@ const fundDevnetErc20 = async ({
 
     let funded = 0;
     let skipped = 0;
+    // Sends are fired without waiting for a receipt (ChainNonceManager's
+    // own doc: this is what keeps `fund` fast), but `run`'s pipeline calls
+    // `runPreflight` immediately after `fundWallets` resolves (runner.ts) —
+    // found live during S22's validation ladder: a 6-wallet devnet fund
+    // logged "funded 6" for this asset, and the very next preflight call
+    // read wallet u5's balance as 0 and failed, even though the transfer
+    // had actually landed (a re-run of preflight moments later saw it).
+    // Tracking the last submitted hash and awaiting its receipt before
+    // returning closes that window without giving up the "issue nonces
+    // without waiting on each send" speed this loop is built around —
+    // anvil (and any real chain) mines a sender's own nonces in order, so
+    // the last hash's receipt lands only after every earlier one in this
+    // loop already has.
+    let lastHash: Hex | undefined;
     for (const wallet of wallets) {
       const current = (await clients.public.readContract({
         address: effectiveAddress,
@@ -375,7 +389,7 @@ const fundDevnetErc20 = async ({
       const needed = topUp - current;
       const nonce = await nonceManager.nextNonce();
       try {
-        await walletClient.writeContract({
+        lastHash = await walletClient.writeContract({
           address: effectiveAddress,
           abi: erc20Abi,
           functionName: 'transfer',
@@ -389,6 +403,9 @@ const fundDevnetErc20 = async ({
           `erc20[${assetIndex}]: transfer to ${wallet.userId} failed: ${redactSecrets(error instanceof Error ? error.message : String(error))}`
         );
       }
+    }
+    if (lastHash !== undefined) {
+      await clients.public.waitForTransactionReceipt({ hash: lastHash });
     }
 
     logger(
@@ -511,6 +528,11 @@ const fundViaTransfer = async ({
     let spent = BigInt(0);
     let funded = 0;
     let skipped = 0;
+    // See the matching comment in `fundDevnetErc20` — wait for the last
+    // submitted send's receipt before returning, so a caller that checks
+    // balances right after (`run`'s pipeline calls `runPreflight`
+    // immediately after `fundWallets`) never races an unmined transfer.
+    let lastHash: Hex | undefined;
     for (const wallet of wallets) {
       const needed = perUserNeeded.get(wallet.userId) ?? BigInt(0);
       if (needed === BigInt(0)) {
@@ -519,7 +541,7 @@ const fundViaTransfer = async ({
       }
       const nonce = await nonceManager.nextNonce();
       try {
-        await walletClient.sendTransaction({ to: wallet.address, value: needed, nonce });
+        lastHash = await walletClient.sendTransaction({ to: wallet.address, value: needed, nonce });
         spent += needed;
         funded += 1;
       } catch (error) {
@@ -528,6 +550,9 @@ const fundViaTransfer = async ({
           `native funding send to "${wallet.userId}" on "${chainKey}" failed: ${redactSecrets(error instanceof Error ? error.message : String(error))}`
         );
       }
+    }
+    if (lastHash !== undefined) {
+      await clients.public.waitForTransactionReceipt({ hash: lastHash });
     }
     logger(
       `gas[${chainKey}]: funded ${funded}, already-funded ${skipped}, spent ${formatUnits(spent, 18)}`
@@ -610,6 +635,11 @@ const fundViaTransfer = async ({
 
     let funded = 0;
     let skipped = 0;
+    // See the matching comment in `fundDevnetErc20` — wait for the last
+    // submitted transfer's receipt before returning, so a caller that
+    // checks balances right after (`run`'s pipeline calls `runPreflight`
+    // immediately after `fundWallets`) never races an unmined transfer.
+    let lastHash: Hex | undefined;
     for (const wallet of wallets) {
       const needed = erc20NeededPerWallet.get(wallet.userId) ?? BigInt(0);
       if (needed === BigInt(0)) {
@@ -618,7 +648,7 @@ const fundViaTransfer = async ({
       }
       const nonce = await nonceManager.nextNonce();
       try {
-        await walletClient.writeContract({
+        lastHash = await walletClient.writeContract({
           address: asset.address as Address,
           abi: erc20Abi,
           functionName: 'transfer',
@@ -632,6 +662,9 @@ const fundViaTransfer = async ({
           `erc20[${assetIndex}]: transfer to ${wallet.userId} failed: ${redactSecrets(error instanceof Error ? error.message : String(error))}`
         );
       }
+    }
+    if (lastHash !== undefined) {
+      await ringStartClients.public.waitForTransactionReceipt({ hash: lastHash });
     }
     logger(
       `erc20[${assetIndex}]: funded ${funded}, already-funded ${skipped} (target ${topUpStr})`

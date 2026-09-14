@@ -66,7 +66,12 @@ const buildMockClientFactory = (states: Map<string, MockChainState>): ChainClien
           if (functionName === 'allowance') return BigInt(0);
           throw new Error(`unexpected readContract functionName in mock: ${functionName}`);
         }
-      )
+      ),
+      // fund.ts awaits this on the last submitted send of every funding
+      // loop before returning (found live in S22's validation ladder: a
+      // caller reading balances right after `fundWallets` resolved could
+      // race an unmined transfer) — the mock only needs to resolve.
+      waitForTransactionReceipt: vi.fn(async () => ({ status: 'success' }) as const)
     };
 
     const testClient = {
