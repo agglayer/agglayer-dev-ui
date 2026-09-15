@@ -213,9 +213,11 @@ export class SingleFlightPoller<T> {
 // laps be in flight together, every one of them free to call
 // `sendAndWait` on the SAME (user, chain) wallet at the same time. Two
 // concurrent `sendTransaction` calls interleave between viem's own
-// `eth_getTransactionCount(pending)` re-derivation (finding C4:
-// `mapTransactionRequest` drops the SDK's own nonce) and the actual
-// `eth_sendRawTransaction`, so both can compute the SAME pending nonce; the
+// `eth_getTransactionCount(pending)` re-derivation (`mapTransactionRequest`
+// deliberately still drops the SDK's own nonce even after S32 forwarded its
+// `gas` — see that function's doc comment and DESIGN.md's C4/C5 entries)
+// and the actual `eth_sendRawTransaction`, so both can compute the SAME
+// pending nonce; the
 // second broadcast then looks like a same-nonce "replacement" transaction,
 // which anvil/geth reject with the generic JSON-RPC `-32003`
 // (`TransactionRejectedRpcError`, viem's opaque "Transaction creation
@@ -226,8 +228,10 @@ export class SingleFlightPoller<T> {
 // genuine chain/proxy rejection.
 //
 // R3 (`loadtest/REVIEW.md`) originally declined to serialize here, to keep
-// parity with a real UI wallet (which also drops the nonce, finding C4).
-// **S29 reverses that decision**: a real user does not submit several
+// parity with a real UI wallet (which also drops the nonce -- deliberately,
+// both before and after S32: forwarding a build-time nonce risks a stale
+// value colliding with or gapping other sends while a human spends
+// seconds-to-minutes signing). **S29 reverses that decision**: a real user does not submit several
 // concurrent bridges from one wallet — real usage is serial — so
 // serializing per (user, chain) is *more* faithful to a real user, not
 // less, the identical reasoning that already justified S25's per-page
@@ -248,8 +252,9 @@ export class SingleFlightPoller<T> {
 // `ChainNonceManager` was considered and NOT reused: it hands out unique
 // nonce VALUES without serializing the surrounding send, so concurrent
 // `prepareTransactionRequest` calls would still race gas/fee derivation,
-// and a caller would have to bypass `mapTransactionRequest`'s nonce-drop
-// (finding C4, `app/`-owned — out of scope without explicit approval) to
+// and a caller would have to bypass `mapTransactionRequest`'s deliberate
+// nonce-drop (`app/`-owned — out of scope without explicit approval, and
+// deliberate regardless: see S32's note on why nonce stays unforwarded) to
 // actually use an assigned nonce. Neither gives the strict one-at-a-time
 // ordering this fix needs (and this file's own tests assert).
 //

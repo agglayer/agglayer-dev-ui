@@ -802,11 +802,33 @@ export class HeadlessUser implements UserDriver {
   }
 
   /**
-   * Send-and-wait for one build's `TransactionParams` — DESIGN finding C4:
-   * `mapTransactionRequest` strips the SDK's own `gas`/`nonce` (P10's pair),
-   * so viem's `prepareTransactionRequest` re-derives BOTH via a second
-   * `eth_estimateGas` + `eth_getTransactionCount` (P11) plus fee derivation
-   * (P12), unless `opts.gasOverride` is supplied (bridge only, finding C5).
+   * Send-and-wait for one build's `TransactionParams` — DESIGN finding C4,
+   * **fixed by S32**: `mapTransactionRequest` now forwards the SDK's own
+   * `gas` (as a `bigint`) when present, so the real dev-ui (which spreads
+   * `mapTransactionRequest`'s full return value straight into
+   * `sendTransaction` — `useBridgeExecution.ts`/`useClaimExecution.ts`)
+   * saves the second, redundant `eth_estimateGas` viem's
+   * `prepareTransactionRequest` used to issue (P11). `nonce` is
+   * deliberately still NOT forwarded (stale-nonce risk while a human signs
+   * at their own pace) — `eth_getTransactionCount` (P10/P11's other half)
+   * is unaffected, and fee derivation (P12) is unaffected either way.
+   *
+   * **This harness does NOT observe that saving**, and that is by design,
+   * not a regression: below, `sendAndWait` builds its own `sendTransaction`
+   * argument object field-by-field (`to`/`data`/`value` plus, for the
+   * bridge send only, `opts.gasOverride`) rather than spreading `mapped` —
+   * so `mapped.gas` (S32's new field) is never read here. Approve and claim
+   * sends therefore still cost two `eth_estimateGas` calls (one from the
+   * SDK's own builder, one from viem re-deriving it) exactly as before;
+   * bridge sends already cost only one, but via `opts.gasOverride`
+   * (`bridgeTxParams.gas` + `bridgeGasOffset`, computed independently of
+   * `mapTransactionRequest`), not because of S32. Confirmed live: an
+   * identical single-lap headless run showed the same estimateGas/send
+   * pattern before and after S32's fix (see `loadtest/DESIGN.md` §9.3 C4
+   * for the measured before/after and the live browser-mode trace that
+   * DOES show the drop). `opts.gasOverride` is also the only mechanism that
+   * gives C5 (loadtest/DESIGN.md §9.3) any headroom at all — the UI itself
+   * has no equivalent, gas-buffer decision pending — so it stays.
    *
    * S29 (reverses `loadtest/REVIEW.md` R3): the ENTIRE body below is
    * serialized per (this user, `chainKey`) through `chainSendQueue`

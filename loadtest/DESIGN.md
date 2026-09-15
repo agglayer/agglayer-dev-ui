@@ -987,7 +987,7 @@ a silent addition.
 | P8 | `eth_gasPrice` | bridge form mounted | `staleTime 15_000`, same no-refetch flags (`useGasEstimate.ts:28-32`) | `useGasEstimate.ts:33-37` | One per chain per 15 s. Note the UI's *displayed* fee uses hardcoded gas units (`app/constants/gasValues.ts`), not an estimate — no extra call |
 | P9 | `allowance` (ERC20 `eth_call`) | ERC20 selected **and** `amount > 0` (`useCheckAllowance.ts:26`) | no `staleTime`; `refetchOnMount/WindowFocus/Reconnect: false`; keyed including `amount.toString()` (`:29`) — so **each distinct amount is a fresh cache entry and a fresh call** | `useCheckAllowance.ts:35-45` | One per (chain, token, owner, spender, **amount**) |
 | P10 | `eth_getTransactionCount` + `eth_estimateGas` — **first pair**, from the SDK's tx builder | every `approve` / `bridgeAsset` / `claimAsset` build | once per build, issued in parallel (`Promise.all`) | SDK `buildApprove` / `buildBridgeAsset` / `buildClaimAsset` → `BaseContract.getNonce` + `BaseContract.estimateGas` | Replay |
-| P11 | `eth_getTransactionCount` + `eth_estimateGas` — **second pair**, from viem's `prepareTransactionRequest` | same builds | once per build | `app/utils/transaction.ts:26-38` returns only `{to, data, value}` — the SDK's `gas` and `nonce` are **dropped**, so viem re-derives them (`prepareTransactionRequest.js:21-27` default parameters include `gas` and `nonce`) | Replay — this is finding **C4** and the single largest correction to plan §2's RPC accounting |
+| P11 | `eth_getTransactionCount` — **second call, from viem's `prepareTransactionRequest`** re-deriving the nonce `mapTransactionRequest` still doesn't forward (deliberate, see C4/C5 below); **`eth_estimateGas` no longer duplicates here as of S32** (see C4 — `mapTransactionRequest` now forwards the SDK's `gas`, so viem's own default-parameter estimate is skipped) **in the real UI**, where `useBridgeExecution.ts`/`useClaimExecution.ts` spread `mapTransactionRequest`'s full return value into `sendTransaction`. **Not observed in the headless loadtest harness**: `headlessUser.ts`'s `sendAndWait` builds its own `sendTransaction` argument object field-by-field and never reads `mapped.gas`, so headless approve/claim sends still pay the second `eth_estimateGas`; headless bridge sends already skipped it before S32 too, via the pre-existing `opts.gasOverride` (`bridgeTxParams.gas` + `bridgeGasOffset`), unrelated to this fix | same builds | once per build (nonce only, post-S32) | `app/utils/transaction.ts:26-45` (`mapTransactionRequest`, post-S32) forwards `gas` when present, still omits `nonce`; `prepareTransactionRequest.js`'s default parameters include both, but only fills whichever the request didn't already supply | Replay the nonce re-derivation always. Replay the SDK-plus-viem doubled `eth_estimateGas` **only for headless approve/claim** (not bridge, not browser-mode's other two build kinds) — this is finding **C4**, fixed for the real UI by S32, deliberately NOT extended to `headlessUser.ts`'s own send call (out of S32's scope) |
 | P12 | Fee derivation for the send: an `eth_fillTransaction` attempt first (support cached per client uid), and on failure `eth_getBlockByNumber(latest)` + `eth_maxPriorityFeePerGas` (fallback `eth_gasPrice`) | same builds | once per send; EIP-1559-ness cached per client uid | `prepareTransactionRequest.js:80-101` (fill attempt), `:191-197,230-283` (block/fees/gas), `estimateMaxPriorityFeePerGas.js:18-40` | Replay through the same viem version so the fill/fallback decision matches. **[VERIFY@S08/S10] — SETTLED at S08, RECONFIRMED at S10 retry #1.** S08 confirmed live against the compose devnet's anvil (headless-trace.ndjson from a real run: 2 users, L1→L2A→L2B→L1, ETH + ERC20 laps). Every send takes the **fallback branch**: viem issues `eth_fillTransaction` first (HTTP 200, but a JSON-RPC-level `MethodNotFoundRpcError`/`MethodNotSupportedRpcError` — anvil does not implement `eth_fillTransaction`; the HTTP status alone does not show this, only the JSON-RPC error body does), catches it, sets `supportsFillTransaction.set(client.uid, false)`, and falls through to `eth_getBlockByNumber('latest')` + `eth_maxPriorityFeePerGas` (which succeeds — anvil is EIP-1559 — so the `eth_gasPrice` fallback is never reached). The `eth_fillTransaction` attempt is cached **per viem client uid**, i.e. per (chain, wallet-client-instance): the first send on a given chain for a given user pays for the wasted `eth_fillTransaction` round-trip, every subsequent send on that same chain+user skips straight to `eth_getBlockByNumber`+`eth_maxPriorityFeePerGas`. Confirmed identical on L1 (`l1rpc`) and L2A (`l2rpc-001`) sends. **S10 confirmed the browser build (same pinned viem version, driven through the real UI via Playwright) takes the identical branch**: the S10 acceptance run's `accept-collector-snapshot.json` (`loadtest-results/s10-2026-09-11T11-06-30-206Z/`) records `rpc/{l1rpc,l2rpc-001,l2rpc-002}/eth_fillTransaction` alongside `eth_getBlockByNumber` and `eth_maxPriorityFeePerGas` for every chain, with `eth_gasPrice` present separately only from `useGasEstimate.ts`'s own 15s-cadence UI call (P8), never as a fee-derivation fallback — i.e. `eth_gasPrice` is never reached as a fallback in either mode. As predicted, the decision is purely a function of what anvil supports, not of which caller invokes `sendTransaction`. |
 | P13 | `eth_sendRawTransaction`, then `eth_getTransactionReceipt` polling | every approve / bridge / claim | wagmi `useSendTransaction` then viem `waitForTransactionReceipt` (`useBridgeExecution.ts:119-121,161`, `useClaimExecution.ts:166-180`) | as cited | Replay; poll interval must match viem's default for the chain |
 | P14 | `isClaimed` (`eth_call` on the destination bridge) | manual claim: **once** before building (`useClaimExecution.ts:97-100`); on **any** non-user-rejection throw, **up to 3 more times** with `0 / 400 / 1000 ms` backoff, stopping at the first `true` (`:244-258`) | as described | `useClaimExecution.ts:94-100,244-258` | Replay both — the retry loop is finding **C3** |
@@ -1038,26 +1038,83 @@ Reported, not silently corrected. Each is falsifiable at the cited line.
   by up to 3 `eth_call`s per failed claim — which matters precisely under the
   concurrency a load test creates.
 - **C4 — every tx build costs *two* `eth_estimateGas` and *two*
-  `eth_getTransactionCount`, plus fee-derivation calls.**
-  `app/utils/transaction.ts:26-38` (`mapTransactionRequest`) returns only
-  `{to, data, value}`, discarding the `gas` and `nonce` the SDK just computed
-  (`buildBridgeAsset`/`buildClaimAsset`/`buildApprove` each do
-  `Promise.all([getNonce, estimateGas])`); viem's `prepareTransactionRequest`
-  then re-derives both because they are in its default parameter set. Plan §2
-  lists one pair. **This is the largest single correction to the plan's RPC
-  accounting** and S08/S10's parity diff must show the doubled pair in both
-  modes.
-- **C5 — the `+300000` gas offset cannot be applied in browser mode.** Direct
-  consequence of C4: the UI drops the SDK's `gas`, so no offset the SDK
-  computes survives to the wire, and there is no UI surface that sets a gas
-  limit. The headless worker can and does apply
-  `gas.bridgeGasOffset`. Therefore `bridgeGasOffset` is a **declared,
-  documented divergence** (the only one, §1.1): browser users may see
-  `OutOfGas` reverts on same-block `forceUpdateGlobalExitRoot` bridges that
-  headless users do not. Those are classified `tx_revert` and reported per
-  mode so the asymmetry is visible rather than mysterious. Widening the plan's
-  scope to add a UI gas-limit override is **not** proposed here — it is flagged
-  for the plan owner.
+  `eth_getTransactionCount`, plus fee-derivation calls.** **FIXED by S32
+  (2026-09-15).** `app/utils/transaction.ts:26-38` (`mapTransactionRequest`)
+  used to return only `{to, data, value}`, discarding the `gas` and `nonce`
+  the SDK just computed (`buildBridgeAsset`/`buildClaimAsset`/`buildApprove`
+  each do `Promise.all([getNonce, estimateGas])`); viem's
+  `prepareTransactionRequest` then re-derived both because they are in its
+  default parameter set. Plan §2 lists one pair — **this was the largest
+  single correction to the plan's RPC accounting**, and S08/S10's parity diff
+  showed the doubled pair in both modes. S32 now forwards the SDK's `gas`
+  (a `bigint`, conditional on presence — see the `mapTransactionRequest`
+  diff) so viem's `prepareTransactionRequest` no longer needs to re-estimate
+  it; `nonce` is **deliberately still not forwarded** (see C5's note below
+  and the code comment at `transaction.ts`). See §9.1 P11 for the measured
+  before/after `eth_estimateGas` count.
+
+  **Measured, live against the compose devnet (2026-09-15):** a single-lap
+  headless run's L1 anvil logs, compared byte-for-byte before/after the
+  fix with the devnet reset between them, show the identical
+  `eth_getTransactionCount, eth_estimateGas, eth_getTransactionCount,
+  eth_sendRawTransaction` cluster per build in BOTH states for headless mode
+  — see the finding two paragraphs below for why (`headlessUser.ts`'s own
+  send call never reads `mapTransactionRequest`'s new `gas` field). The real
+  saving was instead confirmed **in the actually-affected code path** — a
+  live `tests/bridge/manual-claim.spec.ts` run (real browser, real wagmi
+  `useSendTransaction`, driving the real app UI) — whose L1 anvil log shows
+  **every one of its 4 builds** (top-up bridge, and the manual claim) as a
+  clean `eth_getTransactionCount, eth_estimateGas, eth_getTransactionCount,
+  eth_sendRawTransaction` cluster: **one** `eth_estimateGas` per build, down
+  from the two documented pre-fix (S08/S10's traces, P10/P11 above), with
+  `eth_getTransactionCount` still appearing twice (nonce still re-derived,
+  as expected since `nonce` is not forwarded). This is also independently
+  provable from viem's own source
+  (`viem/_cjs/actions/wallet/prepareTransactionRequest.js`): `if
+  (parameters.includes('gas') && typeof gas === 'undefined') request.gas =
+  await estimateGas(...)` — once `mapTransactionRequest` supplies a
+  `bigint` `gas`, that branch never runs.
+
+  **Finding: the headless loadtest harness itself does not exhibit this
+  saving**, and should not be expected to. `loadtest/workers/headless/
+  headlessUser.ts`'s `sendAndWait` builds its `sendTransaction` argument by
+  hand (`{ to: mapped.to, data: mapped.data, value: mapped.value,
+  ...(opts.gasOverride ...) }`) rather than spreading `mapped` — so
+  `mapped.gas` (S32's new field) is never read there. Two identical
+  single-lap ERC20 headless runs (devnet reset between them, one on the
+  pre-S32 code, one on post-S32) confirmed this empirically: **approve**
+  sends cost 2 `eth_estimateGas` calls in both states (unaffected — approve
+  passes no `opts.gasOverride`, and `sendAndWait` doesn't read `mapped.gas`
+  either), and **bridge** sends already cost only 1 in both states (already
+  forwarding gas via the pre-existing `opts.gasOverride` =
+  `bridgeTxParams.gas` + `bridgeGasOffset`, computed straight from the raw
+  SDK response, independent of `mapTransactionRequest`). Extending
+  `headlessUser.ts` to also spread `mapped.gas` for approve/claim was
+  considered and **rejected as out of S32's scope** (the plan's non-goals
+  restrict S32 to `app/utils/transaction.ts`, its tests, docs, and comments
+  only) — flagged here for a future step, not fixed now.
+- **C5 — the `+300000` gas offset cannot be applied in browser mode.** **NOT
+  fixed by C4/S32 — still open.** It was previously claimed that forwarding
+  the SDK's `gas` (C4) would close this finding. **That claim was wrong** and
+  is corrected here: the SDK's estimator is a bare, bufferless pass-through
+  (`client.estimateGas(...)` returned as-is, no headroom added — see
+  `@agglayer/sdk`'s `BaseContract.estimateGas`), so forwarding it changes
+  *which* estimate gets sent, not whether it has any margin. Forwarding is
+  arguably *staler* than the old behaviour too, since viem's own
+  `prepareTransactionRequest` re-estimates at send time, closer to actual
+  execution state, whereas the forwarded value was estimated back at build
+  time. A same-block `forceUpdateGlobalExitRoot` bridge can therefore still
+  `OutOfGas` in browser mode after S32, exactly as before it. The headless
+  worker can and does apply `gas.bridgeGasOffset` on top of its own estimate;
+  there is no equivalent UI surface, and the user has explicitly declined
+  adding a gas buffer/multiplier to the UI for now (2026-09-15 — see S32).
+  Therefore `bridgeGasOffset` remains a **declared, documented divergence**
+  (the only one, §1.1): browser users may see `OutOfGas` reverts on
+  same-block `forceUpdateGlobalExitRoot` bridges that headless users do not.
+  Those are classified `tx_revert` and reported per mode so the asymmetry is
+  visible rather than mysterious. Closing C5 would require a deliberate
+  gas-buffer decision — a product decision, not a code fix, and out of scope
+  here.
 - **C6 — `token-mappings` is not "per non-native activity row".** It is
   gated on `!isNative && !localToken` (`transactionListItem.tsx:59-63`). A
   token present in the local/custom token list produces **zero**

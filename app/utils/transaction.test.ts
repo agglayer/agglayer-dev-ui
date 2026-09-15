@@ -4,7 +4,53 @@ import type { Transaction } from '@/app/types/transaction';
 import { fetchActivity } from '@/app/services/activity';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { buildClaimAssetParams } from './transaction';
+import type { TransactionParams } from '@agglayer/sdk';
+
+import { buildClaimAssetParams, mapTransactionRequest } from './transaction';
+
+const baseTransactionParams: TransactionParams = {
+  to: '0x1111111111111111111111111111111111111111',
+  data: '0xabcdef',
+  value: '1000'
+};
+
+describe('mapTransactionRequest — gas forwarding (C4), nonce withheld (C5)', () => {
+  it('forwards a present gas as a bigint', () => {
+    const params: TransactionParams = { ...baseTransactionParams, gas: '21000' };
+
+    const request = mapTransactionRequest(params);
+
+    expect(request.gas).toBe(BigInt(21000));
+    expect(typeof request.gas).toBe('bigint');
+  });
+
+  it('omits the gas key entirely when the SDK does not supply one', () => {
+    const request = mapTransactionRequest(baseTransactionParams);
+
+    expect('gas' in request).toBe(false);
+    expect(request).not.toHaveProperty('gas');
+  });
+
+  it('never forwards nonce, even when the SDK supplies one (finding C5 stays open)', () => {
+    const params = { ...baseTransactionParams, nonce: '0x5' } as TransactionParams;
+
+    const request = mapTransactionRequest(params);
+
+    expect('nonce' in request).toBe(false);
+  });
+
+  it('still validates `to` as before', () => {
+    const params: TransactionParams = { ...baseTransactionParams, to: 'not-an-address' };
+
+    expect(() => mapTransactionRequest(params)).toThrow('Invalid transaction recipient');
+  });
+
+  it('still validates `data` as before', () => {
+    const params: TransactionParams = { ...baseTransactionParams, data: 'not-hex' };
+
+    expect(() => mapTransactionRequest(params)).toThrow('Invalid transaction data');
+  });
+});
 
 // The formula buildClaimAssetParams used to re-derive client-side before
 // review comment 3862949281 (C13) -- see @agglayer/sdk's
