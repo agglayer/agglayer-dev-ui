@@ -33,7 +33,23 @@ export const mapTransactionRequest = (params: TransactionParams) => {
   return {
     to,
     data,
-    value: toBigInt(params.value)
+    value: toBigInt(params.value),
+    // Forward the SDK's own gas estimate to skip a redundant client-side
+    // eth_estimateGas (finding C4, loadtest/DESIGN.md §9.3) -- the SDK's
+    // estimator is a bare, bufferless pass-through (see
+    // @agglayer/sdk src/native/bridge/build.ts's estimateGas), so this saves
+    // one call without changing what gets sent. Deliberately conditional so a
+    // TransactionParams without `gas` produces no `gas` key at all, matching
+    // today's behaviour exactly. `params.gas` is a string on the SDK type;
+    // viem's request wants a bigint.
+    //
+    // `nonce` is deliberately NOT forwarded here (finding C5 stays open,
+    // pending a gas-buffer decision -- forwarding gas does not fix it: a
+    // same-block forceUpdateGlobalExitRoot bridge can still OutOfGas since
+    // the SDK's estimate is bufferless and, unlike gas, a nonce fixed at
+    // build time can go stale while a human spends seconds-to-minutes
+    // signing in their wallet, colliding with or gapping other transactions).
+    ...(params.gas ? { gas: BigInt(params.gas) } : {})
   };
 };
 

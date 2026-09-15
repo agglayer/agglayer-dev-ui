@@ -21,7 +21,9 @@
     "test:e2e": "playwright test",
     "validate:config": "node ./scripts/validateConfig.mjs",
     "typecheck": "tsc --noEmit",
-    "check": "pnpm run validate:config && pnpm run lint && pnpm run typecheck && pnpm run test"
+    "check": "pnpm run validate:config && pnpm run lint && pnpm run typecheck && pnpm run test",
+    "loadtest": "tsx loadtest/cli.ts",
+    "loadtest:test": "vitest run loadtest"
   },
   "dependencies": {
     "@agglayer/sdk": "1.0.0-dev.20260907140808.d648280",
@@ -61,6 +63,7 @@
     "lint-staged": "^16.2.7",
     "prettier": "^3.7.4",
     "tailwindcss": "^4",
+    "tsx": "^4.23.13",
     "typescript": "^5",
     "vitest": "^4.1.5"
   }

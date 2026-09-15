@@ -32,6 +32,29 @@ modes (mainnet / testnet / devnet), bridge addresses, and external
 links. `scripts/validateConfig.mjs` validates its shape; run via
 `pnpm run validate:config`.
 
+`loadtest/` is a separate, standalone tool (not part of the app bundle,
+run via `pnpm loadtest <command>`) that load-tests the aggkit-proxy by
+simulating many users bridging through it, using a mix of real-browser
+(Playwright) and headless (viem + `@agglayer/sdk`) workers. See
+[`loadtest/README.md`](loadtest/README.md) and
+[`loadtest/DESIGN.md`](loadtest/DESIGN.md). It has its own generated
+config (`loadtest.config.json`) and output directory
+(`loadtest-results/`), both gitignored.
+
+## E2E runtime private-key override
+
+`app/context/e2eAccount.ts` honours a runtime override,
+`window.__AGGLAYER_E2E_PRIVATE_KEY__`, in addition to the build-time
+`NEXT_PUBLIC_E2E_PRIVATE_KEY` constant. This lets a single E2E-enabled
+build (`NEXT_PUBLIC_E2E_ENABLED=true`) serve many distinct signer keys
+without a rebuild per key — e.g. one wallet per `loadtest/` browser
+worker. It is read **only** when `IS_E2E_ENABLED` is true; production
+builds never touch that `window` property. Set it via Playwright's
+`context.addInitScript` **before** `newPage()`, since it must be present
+before the app bundle evaluates the module. An invalid value (not a
+`0x`-prefixed 32-byte hex key) throws at module load rather than
+silently falling back to the build-time key.
+
 ## Commands
 
 Read `package.json` for the canonical list. Highlights:

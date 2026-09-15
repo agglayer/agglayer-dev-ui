@@ -1,0 +1,64 @@
+{
+  "env": "testnet",
+  "uiBaseUrl": "http://127.0.0.1:3100",
+  "aggkitProxyUrl": "https://REPLACE-ME-testnet-aggkit-proxy",
+  "chains": [
+    {
+      "key": "SEPOLIA",
+      "chainId": 11155111,
+      "networkId": 0,
+      "rpcUrl": "https://ethereum-sepolia-rpc.publicnode.com",
+      "bridgeAddress": "0x528e26b25a34a4A5d0dbDa1d57D318153d2ED582",
+      "explorerUrl": "https://sepolia.etherscan.io"
+    },
+    {
+      "key": "BOKUTO",
+      "chainId": 737373,
+      "networkId": 37,
+      "rpcUrl": "https://rpc-katana-bokuto.t.conduit.xyz",
+      "bridgeAddress": "0x528e26b25a34a4A5d0dbDa1d57D318153d2ED582",
+      "explorerUrl": "https://bokuto.katanascan.com/"
+    }
+  ],
+  "ring": ["SEPOLIA", "BOKUTO", "SEPOLIA"],
+  "autoclaim": {
+    "SEPOLIA->BOKUTO": { "expected": true, "waitMs": 120000 },
+    "BOKUTO->SEPOLIA": { "expected": false }
+  },
+  "assets": [{ "kind": "eth", "amount": "0.00001", "decimals": 18 }],
+  "users": {
+    "total": 2,
+    "browser": 1,
+    "wallets": { "mnemonicRef": { "env": "LOADTEST_MNEMONIC" }, "startIndex": 0 },
+    "funder": {
+      "privateKeyRef": { "file": "/run/secrets/loadtest-sepolia-funder" },
+      "gasPerChain": { "SEPOLIA": "0.01", "BOKUTO": "0.005" },
+      "assetTopUp": "0.00004",
+      "maxTotalSpend": { "SEPOLIA": "0.2", "BOKUTO": "0.1" }
+    }
+  },
+  "load": {
+    "bridgesPerMinutePerUser": 1,
+    "durationMinutes": 5,
+    "rampUpSeconds": 30,
+    "maxInflightLapsPerUser": 1
+  },
+  "browser": {
+    "contextsPerBrowser": 1,
+    "headless": true,
+    "trace": true,
+    "recycleContextAfterLaps": 10
+  },
+  "timeouts": {
+    "txReceiptMs": 120000,
+    "appearsInActivityMs": 120000,
+    "readyToClaimMs": 1800000,
+    "claimedMs": 1800000,
+    "hopMs": 2400000,
+    "lapMs": 5400000,
+    "pageLoadMs": 60000,
+    "walletConnectMs": 30000
+  },
+  "gas": { "bridgeGasOffset": 300000 },
+  "output": { "dir": "loadtest-results/testnet-smoke", "activityLog": true }
+}
