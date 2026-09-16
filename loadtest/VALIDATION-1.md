@@ -1,5 +1,30 @@
 # VALIDATION-1 — analysis of validation run #1 and fix strategy (S15)
 
+> **RETRACTION (S35, 2026-09-16).** Finding **C1** below — "agglayer's SP1 native executor
+> crashes with SIGBUS ... permanently blocking a network" — has been root-caused by S34 to
+> **this devnet's own misconfiguration**, not an agglayer/aggkit defect: agglayer's certificate
+> orchestrator ran its real CPU-local SP1 prover (`certificate-orchestrator.prover.sp1-local`,
+> confirmed from `/etc/agglayer/config.toml`, not mock-proofs) against Docker's default **64 MB**
+> `/dev/shm`, and SIGBUS on a shared-memory write is the textbook symptom of a tmpfs too small to
+> back the mapping. Adding `shm_size: '4gb'` to the `agglayer` service (commit `4947855`)
+> eliminates the crash entirely — verified both at the exact rung that reliably wedged network 1
+> (`--users 12 --browser 4 --rate 3 --minutes 10`, zero `InError` certificates, 69 laps drained)
+> and at the full original 100-user/20-browser/20-minute scale that motivated this document (571
+> laps drained, 73 certificate-health samples, zero `in_error` at any point, zero container
+> restarts). **The "devnet capacity ceiling" this document attributes to C1 was never real** —
+> every "(c) C1" / "bucket (c)" assignment below should be read as **(b) our own devnet
+> misconfiguration**, now fixed. The fix came from the agglayer node team (Leo Gaspard, Monir
+> Hadji, Thiago Nobayashi) via Slack and was **already known on agglayer 0.5.0** — the actionable
+> upstream ask is a **kurtosis-cdk default**, not a code change. **C2–C6 below are unaffected and
+> stand** — in particular C2 (a wedged network reporting `is_synced: true`) is arguably
+> strengthened: a silent *local* misconfiguration produced exactly the silent-failure mode C2
+> warns about. **Finding A5 (§2, the harness's own single-Node-process event-loop ceiling) is a
+> separate, genuine, already-documented limit and is NOT affected by this fix** — do not read the
+> retraction below as implying that devnet capacity is now unbounded; the harness's own
+> concurrency ceiling still applies. See plan steps S34/S35 for the full evidence. The rest of
+> this document is left intact as the historical record of the original (now-corrected)
+> analysis, with inline corrections added at each affected passage.
+
 Run under analysis: `loadtest-results/20260911T175302Z/` — `run --users 100 --browser 20
 --rate 2 --minutes 20 --assets eth,erc20`, started `2026-09-11T17:53:53.987Z`, ended
 `18:31:14.721Z` (37.3 min: 20 min load + 17 min drain), `aborted: false`.
@@ -21,9 +46,12 @@ read live off the still-running devnet during this step.
 1. **aggkit-proxy is clean.** Zero errors, zero warnings, zero 4xx/5xx across the full window;
    96 927/96 927 headless and 1 628/1 645 browser `tracker/activity` calls returned 200.
 2. **The L2→L2 wall was not latency. Network 1's certificate prover crashed** (SIGBUS) on the
-   first certificate that carried load-test bridge data, and it is *still* crashing. All 534
-   `timeout_ready_to_claim` belong in bucket **(c) "the devnet was broken"**, not (b) "the
-   devnet is slow".
+   first certificate that carried load-test bridge data, and it was *still* crashing at the time
+   of this run. **[RETRACTED, S35]** All 534 `timeout_ready_to_claim` were originally assigned to
+   bucket **(c) "the devnet was broken [genuine agglayer finding]"**; S34 root-caused the crash to
+   this devnet's own undersized `/dev/shm` (fixed in commit `4947855`), so the correct bucket is
+   **(b) "our own devnet was misconfigured"** — not an agglayer defect, and not (b)'s usual
+   "the devnet is slow" either. It genuinely was broken, just by us.
 3. **The largest tool defect is trivial and embarrassing**: each user was funded exactly
    `amount × 4` of the ERC20 and the ring never returns the token, so the 5th erc20 bridge
    onward reverts. Verified live on-chain in this step.
@@ -88,20 +116,29 @@ That single fact reproduces all three previously recorded figures without invoki
 | earlier observation | re-attribution |
 |---|---|
 | **~95 s idle** | healthy: 60 s epoch + ~35 s bridge-mine / tracker-index / claim. This is the devnet's true floor and belongs in **(b)**. |
-| **~638 s "lightly loaded"** (`sanity_l2l2.log`) | one crash + one successful retry: 300 s retry delay + 60 s settle + ~60 s claim/index ≈ 420–700 s. The 5-minute retry quantum explains 638 s far better than "light load" does. **(c)**, same root cause as C1. |
-| **>900 s "under 6 concurrent users"** (12/12 `timeout_ready_to_claim`) | a persistent wedge — unbounded, not 900 s-ish. **(c)**, same root cause. |
+| **~638 s "lightly loaded"** (`sanity_l2l2.log`) | one crash + one successful retry: 300 s retry delay + 60 s settle + ~60 s claim/index ≈ 420–700 s. The 5-minute retry quantum explains 638 s far better than "light load" does. **(b)** [was **(c)**, S35: same root cause as C1, now known to be our devnet's `/dev/shm` misconfiguration, not an agglayer defect]. |
+| **>900 s "under 6 concurrent users"** (12/12 `timeout_ready_to_claim`) | a persistent wedge — unbounded, not 900 s-ish. **(b)** [was **(c)**, S35: same root cause — see above]. |
 | the 3 earlier "aggsender wedges" | **not** the LER-not-found signature: grepping both aggkit logs for `resolving root index`, `unable to replace`, `tracking_status` gives **zero hits** in this run's window. Whatever they were, the mechanism observed here is a prover crash, and it is the only one with direct evidence. |
 
 **Consequence for the headline.** The tool's finding is **not** "the proxy is fine, the devnet is
 slow". It is: **"the proxy is fine; the devnet's certificate prover crashes on real bridging
 traffic and stays crashed, and nothing in the client-visible health surface says so."**
+**[RETRACTED/revised, S35]** S34 root-caused the crash to this devnet's own undersized
+`/dev/shm` (Docker's default 64 MB, fixed by `shm_size: '4gb'`) — not an agglayer/aggkit defect.
+The corrected headline is: **"the proxy is fine; our own devnet was misconfigured and its
+certificate prover crashed as a result (now fixed); and nothing in the client-visible health
+surface would have caught it even so"** — that second half (C2) is the part that survives
+unchanged and is arguably the more valuable finding, precisely because it shows a *local*
+mistake can hide behind `is_synced: true` for the better part of an hour.
 
 ### 1.3 Bucket assignment for the 534 `timeout_ready_to_claim`
 
-**534/534 → (c).** All 534 are hop 1 (`L2A→L2B`); 531 headless, 3 browser; every one of them
-waited on a local exit root that certificate 9 was supposed to publish. Zero belong in (b).
-By extension the 1 583 `claim-proof`-gated backpressure skips (88 % of all skips) and therefore
-most of the throughput shortfall are downstream of the same cause.
+**534/534 → (b)** [was **(c)**, S35 — see the retraction note at the top of this document: the
+cause was our own devnet's undersized `/dev/shm`, not an agglayer defect]. All 534 are hop 1
+(`L2A→L2B`); 531 headless, 3 browser; every one of them waited on a local exit root that
+certificate 9 was supposed to publish. By extension the 1 583 `claim-proof`-gated backpressure
+skips (88 % of all skips) and therefore most of the throughput shortfall are downstream of the
+same cause.
 
 ---
 
@@ -394,7 +431,7 @@ offered and skips **per mode**.
 | **B2** | `activity-index` gate p50 5.1 s / p90 10.7 s / p99 39.8 s, **0** blocked ticks; 4 `timeout_appears_in_activity` (0.3 % of 1 267 hops entering the gate) | The tracker indexes a bridge in ~5 s. The 4 timeouts are the p99 tail, browser-side. Nothing to fix. |
 | **B3** | `autoclaimOverdue: 457` with `hop_completed_escalated: 392` and `unexpectedAutoclaim: 0` | The 120 s autoclaim grace window on `L1→L2A` was exceeded often at 100 concurrent users, and manual escalation covered for it every time it got the chance. This is **positive evidence the escalation design works under exactly the stress it was built for**. (Cross-referenced as a capacity datum in (c) C4.) |
 | **B4** | `claimRaceLost: 16` (all headless, all T19) | Autoclaim won between our `READY_TO_CLAIM` poll and our claim build. DESIGN treats a lost race as a **success** (`hop_completed_raced`), which is what was recorded. Working as designed. |
-| **B5** | 51 % backpressure skip rate (1 790 / 3 535) and achieved 0.87 vs requested 2.0/user/min | **Purely mechanical — no scheduler defect.** Offered load was correct in both modes: browser 717 ticks / 20 users = 35.9 per user; headless (978 + 1 790) / 80 = 34.6 per user; expected ≈ 2/min × ~18 min steady ≈ 36. Laps then never drained, so `maxInflightLapsPerUser: 3` saturated and stayed saturated. **1 583 of the 1 790 skips (88 %) had their oldest in-flight hop parked on the `claim-proof` gate** (129 on `claimed`, 78 on no gate) — which is exactly the number DESIGN §5.4 says answers "was the devnet or the tool the bottleneck". It says the devnet. *Caveat: the underlying cause is (c) C1, so this is "expected given a wedged network", not "expected on a healthy devnet".* |
+| **B5** | 51 % backpressure skip rate (1 790 / 3 535) and achieved 0.87 vs requested 2.0/user/min | **Purely mechanical — no scheduler defect.** Offered load was correct in both modes: browser 717 ticks / 20 users = 35.9 per user; headless (978 + 1 790) / 80 = 34.6 per user; expected ≈ 2/min × ~18 min steady ≈ 36. Laps then never drained, so `maxInflightLapsPerUser: 3` saturated and stayed saturated. **1 583 of the 1 790 skips (88 %) had their oldest in-flight hop parked on the `claim-proof` gate** (129 on `claimed`, 78 on no gate) — which is exactly the number DESIGN §5.4 says answers "was the devnet or the tool the bottleneck". It says the devnet. *Caveat, corrected S35: the underlying cause is **(b)**, our own devnet's `/dev/shm` misconfiguration (was labelled (c) C1; C1 is retracted — see top of document), so this is "expected given a wedged network", not "expected on a healthy devnet", and not an agglayer defect.* |
 | **B6** | `claim-proof` gate p90/p99 ≈ 904 s, sitting exactly at `readyToClaimMs = 900 000` | Arithmetic, not a measurement: a hop that times out contributes ~900 s to the gate. It is the *signature of the timeout*, not evidence about devnet latency. Do **not** raise `readyToClaimMs` in response — record the stall and its cause (DESIGN §5.4). |
 | **B7** | `ui_assertion: 129` (116 hop 0 / 13 hop 1; 71 `[bridge-success-view] expect(...).toContainText`, 45 `[bridge-success-view] locator.waitFor`, 13 others) | **Declared divergence C5 / DESIGN §9.4, not a new defect**: browser mode cannot apply `gas.bridgeGasOffset` (+300 000), so browser bridges can revert with `OutOfGas` on a same-block `forceUpdateGlobalExitRoot` where headless survives. Expect a browser-vs-headless revert asymmetry, as the plan already states. *Refinement for S16:* this run **cannot separate** C5 reverts from A5-induced browser starvation, because the assertion message records only that the success view never appeared. Have `browserUser.bridge()` capture the UI's own error text on the `waitForBridgeSuccess` failure path so the two become distinguishable — a small change inside the existing driver, no UI widening. |
 | **B8** | Anvil writable layers 2.3–3.7 GB; L1 15 % / L2B 16 % CPU post-run | Long-lived anvil nodes with full state, already state-heavy before this run (no clean restart was performed). No before-baseline exists, so nothing here is attributable to this run. |
@@ -404,7 +441,16 @@ offered and skips **per mode**.
 
 ## 4. (c) FINDINGS FOR THE AGGKIT / AGGLAYER TEAM
 
-### C1 · Blocker — agglayer's SP1 native executor crashes with SIGBUS on a real bridging certificate, permanently blocking a network
+*Note (S35, 2026-09-16): C1, originally listed here, has been **retracted** — see the note at
+the top of this document and the resolution appended to its entry below. It is reattributed to
+bucket (b), our own devnet misconfiguration, and removed from the set of findings for the
+aggkit/agglayer team. C2–C6 below remain genuine findings for that team.*
+
+### C1 · RETRACTED (S35) — believed to be an agglayer defect; root-caused by S34 to our devnet's undersized `/dev/shm`, not agglayer
+
+**The evidence below (as originally recorded) is accurate; only the attribution was wrong.**
+Read it as the historical symptom, not as a standing agglayer defect — the resolution is appended
+at the end of this entry.
 
 `agglayer` (devnet, `aggkit v0.11.0-rc8`, pessimistic-proof / `type: pp`). Network 1 (L2A).
 
@@ -436,6 +482,41 @@ certificate 9/0xfb2ec17cff451a6323e4b8f23e52078aff6b4e010d7f3c13428e5b66ac2aa39e
   wedged indefinitely.
 - **Reproduction is available now.** The devnet is still in this exact state and can be handed
   over, along with the certificate payload / SP1 witness for network 1 height 9.
+
+**Resolution (S34/S35, 2026-09-16) — RETRACTED.** The agglayer node team (Leo Gaspard, Monir
+Hadji, Thiago Nobayashi, via Slack) identified a byte-identical crash signature — same
+`signal: 7`, same `error.rs:171:29` — already known on agglayer 0.5.0, caused by the SP1
+local prover's shared-memory mapping outrunning an undersized `/dev/shm`. `grep -niE
+"shm_size|/dev/shm|tmpfs" tests/devnet/docker-compose.yml` on this repo's vendored devnet found
+**nothing**, so the `agglayer` container ran on Docker's **default 64 MB** `/dev/shm`. Confirmed
+from `/etc/agglayer/config.toml` inside the running container (not inferred): the active prover
+is `certificate-orchestrator.prover.sp1-local`, a real CPU-local SP1 prover, not mock-proofs —
+exactly the pipeline where this crash occurs. Adding `shm_size: '4gb'` to the `agglayer` service
+(commit `4947855`) — the Compose-native equivalent of the node team's Kubernetes
+`emptyDir{medium: Memory, sizeLimit: 4Gi}` fix, whose accompanying pod memory/CPU bump is GKE
+Autopilot ratio bookkeeping and does not transfer to this uncapped 62 GiB host — grew
+`/dev/shm` from **64M to 4.0G** (`docker exec devnet-agglayer-1 df -h /dev/shm`, before/after)
+and **eliminated the crash entirely**: re-running the exact rung that reliably wedged network 1
+(`--users 12 --browser 4 --rate 3 --minutes 10`) produced zero `signal: 7` and zero certificates
+going `InError` across a full run (69 laps drained, network 1 climbing cleanly through height 9
+— the exact height that crashed deterministically before — to 11/11 settled). Pushed further to
+this document's own 100-user/20-browser/20-minute configuration: **also a clean pass** — 571
+in-flight laps drained, 73 certificate-health samples across the run, `zero` `in_error` at any
+point on either network, network 1 finishing 38/38 and network 2 42/42 (pending/settled), zero
+container restarts. **This finding is not an agglayer/aggkit defect; it is a devnet
+misconfiguration, now fixed, and the actionable upstream ask is a kurtosis-cdk default
+(`/dev/shm` sized for the SP1 local prover), not a code change.** The "total blast radius" and
+"no automatic recovery path" bullets above were real *symptoms* of this misconfiguration, not
+evidence of an agglayer defect — with `shm_size` set, the certificate that used to crash
+deterministically now settles normally. **Correction to a claim made when this was first
+diagnosed:** "reproduced on an idle 62 GiB host, so not host memory" ruled out *host* RAM
+pressure but said nothing about a **fixed 64 MB tmpfs inside the container** — which is exactly
+what was starving the prover regardless of host RAM; do not repeat the original "not memory"
+claim. **What is unaffected by this fix:** the harness's own single-Node-process event-loop
+ceiling (finding A5, §2 above) is a separate, genuine, already-documented capacity limit that
+holds regardless of devnet health — do not read this retraction as removing it. **C2 directly
+below is unaffected and stands** — a silent local misconfiguration producing exactly the
+silent-failure mode C2 warns about is, if anything, a stronger argument for C2's asks.
 
 ### C2 · High — a permanently wedged network reports itself healthy
 
@@ -534,7 +615,7 @@ Nothing in S14's report is left unclassified.
 | `page.goto` abort / `observeActivity fetch timed out` | ≤5 each | **(a) A3** | browser-teardown noise during crash bursts |
 | `browser_crash` | 226 | **(a) A3** | 4 sequential PIDs, max **1** concurrent process, bursts of 40/46/58/27, respawn 4–6 s later |
 | `ui_assertion` | 129 | **(a) declared — C5 / DESIGN §9.4** | browser cannot apply `bridgeGasOffset`; **not a new defect**. Refinement: capture the UI's own error text so C5 separates from A5 (B7) |
-| `timeout_ready_to_claim` | 534 | **(c) C1** | all hop 1; network 1's LER frozen since 17:51:16Z, cert 9 InError from 17:55:48Z. **0 belong in (b)** |
+| `timeout_ready_to_claim` | 534 | **(b) C1** [was (c), retracted S35 — our devnet's `/dev/shm` misconfiguration, not an agglayer defect] | all hop 1; network 1's LER frozen since 17:51:16Z, cert 9 InError from 17:55:48Z. |
 | `bridge_event_missing` | 8 | **(a) A8** | browser only (headless 0); swallowed RPC error in `browserUser.ts:504-524` |
 | `timeout_appears_in_activity` | 4 | **(b) B2** | 4 of 1 267 gate entries = 0.3 %, p99 tail of a 5 s gate |
 | `timeout_not_claimable` | 3 | **(a) A2** | browser `claim()` returns `claimInputs: null`, `eventsFromClaim` drops the error, timeout mislabels it as a devnet outcome |
@@ -543,8 +624,8 @@ Nothing in S14's report is left unclassified.
 | `unexpectedAutoclaim` | 0 | **(b)** | `L2B→L1` (the not-expected route) never reached |
 | `console_error` | 2 039 | **(a) known/benign** | `https://icon.invalid` token-icon lookups with no outbound DNS; already excluded from the aggregate tables and covered by the S11 benign-host allowlist |
 | `hop_completed_escalated` 392 / `raced` 16 — **all headless, 0 browser** | — | **(a) A2** | browser T18 = 6 → T19/T21/T22 = 0/0/0; escalation path effectively untested in browser mode |
-| `LAP_DONE: 0`, `LAP_FAILED: 1695` | — | **(c) C1** | hop 1 was structurally impossible for the whole run |
-| 51 % backpressure skips, 0.87 vs 2.0/user/min | — | **(b) B5** (root cause **(c) C1**) | offered load was correct in both modes; 1 583/1 790 skips gated on `claim-proof`; **no scheduler defect** |
+| `LAP_DONE: 0`, `LAP_FAILED: 1695` | — | **(b) C1** [was (c), retracted S35 — see above] | hop 1 was structurally impossible for the whole run |
+| 51 % backpressure skips, 0.87 vs 2.0/user/min | — | **(b) B5** (root cause **(b) C1**, retracted S35 — devnet misconfiguration, not an agglayer defect) | offered load was correct in both modes; 1 583/1 790 skips gated on `claim-proof`; **no scheduler defect** |
 | `claim-proof` p90/p99 ≈ 904 s | — | **(b) B6** | the signature of a 900 s timeout, not a latency measurement |
 | headless `tracker/activity` 1 211 req/user | — | **(a) A6** | expected ~448; 2.7× = `maxInflightLapsPerUser` |
 | `retries: 96847/96927` | — | **(a) A7** | 35 s attempt window vs 5 s poll interval; **not** spin-polling |

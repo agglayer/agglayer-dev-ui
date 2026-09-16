@@ -312,23 +312,32 @@ tool bug.
    you need it, and if you do restore a `.env.local`, expect it to silently
    redirect the app at a dead ephemeral enclave port unless you know it's
    current. `.gitignore` now covers `.env.local*` / `.env*.bak` either way.
-2. **The devnet's network 1 can wedge — and preflight cannot see it.** The
-   agglayer SP1 native executor crashes with **SIGBUS**
-   (`CrashDetails { signal: 7 }`) on the first certificate that advances the local
-   exit root, retries every 5 minutes, and never recovers
-   (`RetryCertAfterInError=false`). While this is happening,
-   `/bridge/v1/sync-status` still reports `is_synced: true` — invisible to
-   `preflight`. The check that **does** see it:
+2. **Ensure `shm_size` is set on the `agglayer` service — otherwise network 1 can
+   wedge, and preflight cannot see it.** Docker's default 64 MB `/dev/shm` starves
+   agglayer's SP1 local prover's shared-memory mapping, and the prover crashes with
+   **SIGBUS** (`CrashDetails { signal: 7 }`) on the first certificate that advances
+   the local exit root, retries every 5 minutes, and never recovers
+   (`RetryCertAfterInError=false`). This repo's `tests/devnet/docker-compose.yml`
+   now sets `shm_size: '4gb'` on the `agglayer` service, which eliminates this
+   crash entirely (root-caused and fixed at plan step S34, confirmed via
+   `docker exec <agglayer> df -h /dev/shm`: 64M → 4.0G, zero `signal: 7` across a
+   run that reliably crashed before). **If you are on an older checkout without
+   that setting, add it** rather than treating this as expected behaviour. While
+   this is happening, `/bridge/v1/sync-status` still reports `is_synced: true` —
+   invisible to `preflight`. The check that **does** see it:
    ```bash
    curl -s http://127.0.0.1:9092/metrics | grep latest_certificate_in_error
    # also compare pending vs settled height:
    curl -s http://127.0.0.1:9092/metrics | grep 'agglayer_node_network_height'
    ```
-   Recovery: `docker compose -f tests/devnet/docker-compose.yml down && docker
+   **Fallback recovery for an already-wedged instance** (e.g. you hit this before
+   `shm_size` was set, or on an environment you don't control the compose file
+   for): `docker compose -f tests/devnet/docker-compose.yml down && docker
    compose -f tests/devnet/docker-compose.yml up -d --wait`, then re-run
-   `devnetReady`. **Run this gate before any load run** — otherwise you will measure
-   a broken devnet and misattribute every `timeout_ready_to_claim` to the tool or
-   to load.
+   `devnetReady`. **Run the certificate-health gate above before any load run** —
+   otherwise you will measure a broken devnet and misattribute every
+   `timeout_ready_to_claim` to the tool or to load. See `VALIDATION-1.md`'s C1
+   retraction note for the full root-cause writeup.
 3. **Stale wallet balances can mask funding bugs.** Low-index wallets accumulate
    tokens across repeated runs against the same devnet (one session's u0-u2 reached
    0.63 E2E after many runs). If you're specifically testing funding/budget

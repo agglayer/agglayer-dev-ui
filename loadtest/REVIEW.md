@@ -94,7 +94,11 @@ Stated plainly, per the acceptance criteria:
 6. **The devnet is wedged** (`agglayer_node_network_latest_certificate_in_error{network_id="1"} = 1`,
    SIGBUS in the SP1 native executor, deterministic across three runs). Any
    fresh end-to-end validation would measure a broken backend, so I did not
-   attempt one.
+   attempt one. **[Update, S34/S35, 2026-09-16]: this was our own devnet's
+   undersized default `/dev/shm` (Docker's 64 MB default), not an agglayer/aggkit
+   defect — `shm_size: '4gb'` on the `agglayer` service (commit `4947855`)
+   eliminates it. This limitation no longer applies to a checkout with that
+   setting; see `VALIDATION-1.md`'s C1 retraction note.**
 7. **Prettier could not be made clean** without a formatting pass, which S20's
    non-goals forbid. Reported as R13 only.
 8. **R29's tick loss is shown reachable, not shown to have fired.** The
@@ -1764,7 +1768,9 @@ described. S21 should not spend time on any of them.
    than reproduced, the testnet/mainnet path is entirely unexercised (S18
    blocked), the S14/S17 latency figures are unusable by the tool's own
    self-disqualification, aggkit's `/metrics` is unreachable, the devnet is
-   wedged, and prettier could not be made clean within S20's non-goals.
+   wedged (root-caused since to our own devnet's `/dev/shm` misconfiguration,
+   fixed S34/S35 — see §1 item 6 above), and prettier could not be made clean
+   within S20's non-goals.
 
 ---
 
