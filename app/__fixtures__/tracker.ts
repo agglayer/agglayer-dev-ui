@@ -406,6 +406,75 @@ export const l1l2RunningWithL1InfoLeafFixture: AggkitTrackingData = {
   ]
 };
 
+// SYNTHESIZED (agglayer/sdk#38): l2l2RunningFixture carried through to a
+// claim that beat the tracker to it -- once the tracker saw the bridge was
+// already claimed on the destination network, steps 3 (WaitL1SettledGER)
+// through 5 (WaitingClaim) never needed verifying, so it marks them
+// 'skipped' instead of resolving them normally. Mirrors the SDK's own
+// `tracker_l2l2_skipped.json` fixture: `error` presence/shape is NOT
+// uniform across skipped steps -- step 3 keeps the last `transient` (0)
+// error it saw before being superseded, with its own start/end dates from
+// when it was still retrying, while steps 4/5 carry no dates at all and an
+// `error_type: 3`/`'skipped'` marker instead (see the SDK's AggkitStepStatus
+// doc comment for why this asymmetry is real, not a bug).
+export const l2l2SkippedFixture: AggkitTrackingData = {
+  ...l2l2RunningFixture,
+  tracking_status: 'finished',
+  claim_status: 'claimed',
+  step_index: 6,
+  all_steps: [
+    l2l2RunningFixture.all_steps![0],
+    l2l2RunningFixture.all_steps![1],
+    l2l2RunningFixture.all_steps![2],
+    {
+      step_index: 3,
+      step_name: 'WaitL1SettledGER',
+      status: 'skipped',
+      start_date: '2026-09-16T11:26:55.110064841+02:00',
+      end_date: '2026-09-16T11:26:55.110064841+02:00',
+      error: {
+        error_type: 0,
+        error_type_string: 'transient',
+        retry_count: 1,
+        description: [
+          'L1 info tree index for GER: fetching L1 info tree leaf for GER 0x7772b4e8231ae83bb6cd34fdded6f8644e6dc7802bdafea15699bc5b2f4c91f4: do request: dial tcp: lookup http on 127.0.0.53:53: server misbehaving'
+        ]
+      }
+    },
+    {
+      step_index: 4,
+      step_name: 'WaitingGERInjection',
+      status: 'skipped',
+      end_date: '2026-09-16T11:26:55.110064841+02:00',
+      error: {
+        error_type: 3,
+        error_type_string: 'skipped',
+        retry_count: 0,
+        description: ['bridge already claimed on destination network; step left unverified']
+      }
+    },
+    {
+      step_index: 5,
+      step_name: 'WaitingClaim',
+      status: 'skipped',
+      end_date: '2026-09-16T11:26:55.110064841+02:00',
+      error: {
+        error_type: 3,
+        error_type_string: 'skipped',
+        retry_count: 0,
+        description: ['bridge already claimed on destination network; step left unverified']
+      }
+    },
+    {
+      step_index: 6,
+      step_name: 'Claimed',
+      status: 'done',
+      start_date: '2026-09-16T11:26:55.110064841+02:00',
+      end_date: '2026-09-16T11:26:55.110064841+02:00'
+    }
+  ]
+};
+
 // SYNTHESIZED, same route as l1l2RunningWithL1InfoLeafFixture but carried
 // through to `finished`: exercises WaitingL1InfoLeafAvailable's `done`
 // result shape (AggkitWaitingL1InfoLeafAvailableResult -- l1_info_tree_index)

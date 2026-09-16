@@ -12,7 +12,8 @@ import { getChainByNetworkId } from '@/app/utils/chains';
 import { cn } from '@/app/utils/common';
 import { formatDateTime } from '@/app/utils/date';
 import { getTrackerStepLabel } from '@/app/utils/trackerSteps';
-import { Loader2 } from 'lucide-react';
+import { ChevronRight, Loader2 } from 'lucide-react';
+import { useState } from 'react';
 
 import type {
   AggkitBridgeStepPath,
@@ -20,6 +21,7 @@ import type {
   AggkitCertificateData,
   AggkitPendingInclusionResult,
   AggkitStepStatus,
+  AggkitTrackerErrorStep,
   AggkitWaitingClaimResult,
   AggkitWaitingGERInjectionResult,
   AggkitWaitingGERUpdateResult,
@@ -42,14 +44,16 @@ const STATUS_LABEL_CLASSES: Record<AggkitStepStatus, string> = {
   done: 'text-green',
   inProgress: 'text-blue',
   pending: 'text-grey',
-  error: 'text-red'
+  error: 'text-red',
+  skipped: 'text-grey'
 };
 
 const STATUS_COPY: Record<AggkitStepStatus, string> = {
   pending: 'Pending',
   inProgress: 'In progress',
   done: 'Done',
-  error: 'Error'
+  error: 'Error',
+  skipped: 'Skipped'
 };
 
 // `start_date`/`end_date` ship as ISO strings (see useBridgeTracking.ts's
@@ -123,6 +127,46 @@ const UnrecognizedStepResult = () => (
     Details unavailable
   </div>
 );
+
+// A step's `error` (see AggkitBridgeStepPath's doc comment) is present both
+// when `status` is `'error'` -- the case that actually blocks the bridge --
+// and when `status` is `'skipped'` (agglayer/sdk#38): the tracker
+// short-circuited a step it no longer needed to verify, most often because
+// the bridge was already claimed by the time it got there. That `error` on a
+// skipped step is stale/incidental (the last error the step saw before being
+// superseded, or an `error_type: 3`/`'skipped'` marker) -- worth surfacing
+// for troubleshooting, not worth alarming a user over on an otherwise-healthy
+// (already-claimed) bridge. So it renders collapsed by default here, with an
+// explicit toggle to expand it -- unlike a genuine `'error'` step's alert,
+// which stays eagerly visible below.
+const SkippedStepErrorDetail = ({ error }: { error: AggkitTrackerErrorStep }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  return (
+    <div className="mt-2">
+      <button
+        type="button"
+        onClick={() => setIsExpanded((expanded) => !expanded)}
+        className="inline-flex items-center gap-1 text-xs text-grey hover:text-black"
+        data-test-id="tracker-detail-skipped-error-toggle"
+      >
+        <ChevronRight
+          className={cn('size-3.5 transition-transform', isExpanded && 'rotate-90')}
+          aria-hidden="true"
+        />
+        {isExpanded ? 'Hide error details' : 'Show error details'}
+      </button>
+      {isExpanded && (
+        <Alert
+          className="mt-2"
+          type="warning"
+          title={`${error.error_type_string} error (retry ${error.retry_count})`}
+          message={error.description[error.description.length - 1] ?? ''}
+        />
+      )}
+    </div>
+  );
+};
 
 // Per-step `result` shape depends on `step_name` (AggkitBridgeStepResult
 // union) -- see useBridgeTracking.ts / the SDK's AggkitBridgeStepPath doc
@@ -326,14 +370,17 @@ export const TrackerDetail = ({ transaction, onDemand = false }: TrackerDetailPr
                 <div className="mt-1">
                   <StepResultDetail step={step} />
                 </div>
-                {step.error && (
-                  <Alert
-                    className="mt-2"
-                    type="warning"
-                    title={`${step.error.error_type_string} error (retry ${step.error.retry_count})`}
-                    message={step.error.description[step.error.description.length - 1] ?? ''}
-                  />
-                )}
+                {step.error &&
+                  (step.status === 'skipped' ? (
+                    <SkippedStepErrorDetail error={step.error} />
+                  ) : (
+                    <Alert
+                      className="mt-2"
+                      type="warning"
+                      title={`${step.error.error_type_string} error (retry ${step.error.retry_count})`}
+                      message={step.error.description[step.error.description.length - 1] ?? ''}
+                    />
+                  ))}
               </div>
             </div>
           ))}

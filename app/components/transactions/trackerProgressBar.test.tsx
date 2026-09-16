@@ -21,6 +21,7 @@ import {
   l1l2RunningFixture,
   l1l2RunningWithL1InfoLeafFixture,
   l2l2RunningFixture,
+  l2l2SkippedFixture,
   registeredFixture
 } from '@/app/__fixtures__/tracker';
 import { useAppMode } from '@/app/context/appMode';
@@ -147,6 +148,19 @@ describe('TrackerProgressBar', () => {
 
     rerender(<TrackerProgressBar transaction={makeTransaction({ status: 'CLAIMED' })} />);
     expect(container.querySelector('[data-test-id="tracker-progress"]')).not.toBeInTheDocument();
+  });
+
+  // agglayer/sdk#38: a skipped step renders a filled grey dot (distinct from
+  // pending's hollow ring, but not red -- being skipped isn't a failure), and
+  // its connector line counts as "passed" like a done step's.
+  it('renders a filled grey dot and a passed connector for a skipped step', () => {
+    mockTracking(l2l2SkippedFixture);
+    const { container } = render(<TrackerProgressBar transaction={makeTransaction()} />);
+
+    const skippedDot = container.querySelector('[data-test-id="tracker-step-3"]');
+    expect(skippedDot).toHaveAttribute('data-step', 'WaitL1SettledGER');
+    expect(skippedDot).toHaveAttribute('data-status', 'skipped');
+    expect(skippedDot).toHaveClass('border-grey', 'bg-grey');
   });
 
   it('tooltip copy for the inProgress step names the destination chain and its status', () => {

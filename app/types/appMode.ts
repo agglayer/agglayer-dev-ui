@@ -54,6 +54,14 @@ type BaseModeConfig = {
   // Map of L2 networkId -> aggkit REST base URL (no `/bridge/v1` suffix).
   // May be empty for a mode with no aggkit backend configured yet.
   aggkitBridgeApis: Record<number, string>;
+  // Root URL of the aggkit-proxy fronting the bridge tracker (`/tracker/v1`)
+  // -- required by AggkitBridgeAggregator (agglayer/sdk!, `aggkitProxyUrl`),
+  // the same origin every aggkitBridgeApis entry already points at (one proxy
+  // fronts both `/bridge/v1` and `/tracker/v1` for a mode). '' for a mode
+  // with no aggkit backend configured, matching aggkitBridgeApis' own "empty"
+  // sentinel -- the aggregator only errors on a blank aggkitProxyUrl when a
+  // tracker call is actually made, and a mode with no backend never makes one.
+  aggkitProxyUrl: string;
 };
 
 export type DisabledAppModeConfig = BaseModeConfig & {

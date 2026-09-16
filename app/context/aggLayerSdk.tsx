@@ -75,7 +75,11 @@ export const AggkitAggregatorProvider: React.FC<PropsWithChildren> = ({ children
   const { config } = useAppMode();
 
   const aggregator = useMemo(
-    () => new AggkitBridgeAggregator({ networks: config.aggkitBridgeApis }),
+    () =>
+      new AggkitBridgeAggregator({
+        networks: config.aggkitBridgeApis,
+        aggkitProxyUrl: config.aggkitProxyUrl
+      }),
     [config]
   );
 
