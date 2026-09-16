@@ -2,7 +2,7 @@ import type * as UseBridgeTrackingModule from '@/app/hooks/useBridgeTracking';
 import type { Transaction } from '@/app/types/transaction';
 
 import '@testing-library/jest-dom/vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Full tracker timeline for the transaction details modal: renders
@@ -32,6 +32,7 @@ import {
   l1l2RunningFixture,
   l2l1FinishedFixture,
   l2l2RunningStepErrorFixture,
+  l2l2SkippedFixture,
   registeredFixture
 } from '@/app/__fixtures__/tracker';
 import { useAppMode } from '@/app/context/appMode';
@@ -211,6 +212,59 @@ describe('TrackerDetail', () => {
     expect(screen.getByText('transient error (retry 2)')).toBeInTheDocument();
     // The full 7-step timeline still renders -- a step error is not terminal.
     expect(container.querySelectorAll('[data-test-id^="tracker-detail-step-"]')).toHaveLength(7);
+  });
+
+  // agglayer/sdk#38: a 'skipped' step's error is stale/incidental (the
+  // tracker gave up verifying it, most often because the bridge was already
+  // claimed) -- unlike a genuine 'error' step's alert above, it must not be
+  // eagerly visible, only reachable via an explicit toggle.
+  describe('skipped step error disclosure (agglayer/sdk#38)', () => {
+    it('shows the Skipped status copy and hides step-level errors behind a collapsed toggle', () => {
+      mockTracking(l2l2SkippedFixture);
+      const { container } = render(<TrackerDetail transaction={makeTransaction()} />);
+
+      // 3 skipped steps (WaitL1SettledGER, WaitingGERInjection, WaitingClaim).
+      expect(screen.getAllByText('Skipped')).toHaveLength(3);
+
+      // Neither skipped step's error is visible by default...
+      expect(screen.queryByText('transient error (retry 1)')).not.toBeInTheDocument();
+      expect(screen.queryByText('skipped error (retry 0)')).not.toBeInTheDocument();
+      expect(
+        screen.queryByText('bridge already claimed on destination network; step left unverified')
+      ).not.toBeInTheDocument();
+
+      // ...but a toggle for each is offered instead.
+      const toggles = container.querySelectorAll(
+        '[data-test-id="tracker-detail-skipped-error-toggle"]'
+      );
+      expect(toggles).toHaveLength(3);
+      toggles.forEach((toggle) => expect(toggle).toHaveTextContent('Show error details'));
+    });
+
+    it('reveals a skipped step error on toggle, and hides it again on a second click', () => {
+      mockTracking(l2l2SkippedFixture);
+      const { container } = render(<TrackerDetail transaction={makeTransaction()} />);
+
+      const [firstToggle] = container.querySelectorAll(
+        '[data-test-id="tracker-detail-skipped-error-toggle"]'
+      );
+
+      fireEvent.click(firstToggle);
+      expect(firstToggle).toHaveTextContent('Hide error details');
+      expect(screen.getByText('transient error (retry 1)')).toBeInTheDocument();
+
+      fireEvent.click(firstToggle);
+      expect(firstToggle).toHaveTextContent('Show error details');
+      expect(screen.queryByText('transient error (retry 1)')).not.toBeInTheDocument();
+    });
+
+    it('renders the done Claimed step normally alongside the skipped steps', () => {
+      mockTracking(l2l2SkippedFixture);
+      const { container } = render(<TrackerDetail transaction={makeTransaction()} />);
+
+      expect(container.querySelectorAll('[data-test-id^="tracker-detail-step-"]')).toHaveLength(7);
+      expect(screen.getAllByText('Done').length).toBeGreaterThan(0);
+    });
   });
 
   // On-demand mode (transactionDetailsModal.tsx's "Show bridge steps" button
