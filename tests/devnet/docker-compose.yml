@@ -82,6 +82,14 @@ services:
     command: ['run', '--cfg', '/etc/agglayer/config.toml']
     environment:
       - RUST_BACKTRACE=1
+    # S34: the agglayer node team traced our C1 SIGBUS (signal: 7,
+    # error.rs:171:29) to an undersized /dev/shm backing the SP1 local
+    # prover's shared-memory mapping -- same signature they hit on 0.5.0,
+    # fixed there via a Kubernetes emptyDir{medium:Memory,sizeLimit:4Gi}.
+    # Docker's default is 64 MB; this is the Compose-native equivalent (the
+    # Kubernetes pod memory/CPU bumps they also applied do not transfer --
+    # this Compose service has no pod resource ceiling on this host).
+    shm_size: '4gb'
     ports:
       - '${AGGLAYER_GRPC_PORT:-4443}:4443' # gRPC
       - '${AGGLAYER_READRPC_PORT:-4444}:4444' # read RPC
