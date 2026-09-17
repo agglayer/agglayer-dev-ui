@@ -100,12 +100,15 @@ const resolveProjectIdOverride = (): string | undefined => {
  * downstream consumer keeps addressing aggkit per-network, it just never has
  * to know the whole mode is actually behind one proxy.
  */
-const buildAggkitBridgeApisMap = (
+const resolveEffectiveAggkitProxy = (
   modeConfigJson: JsonAppModeConfig,
-  nonL1NetworkIds: number[],
   aggkitProxyOverride: string | undefined
+): string | undefined => aggkitProxyOverride ?? modeConfigJson.aggkitProxy;
+
+const buildAggkitBridgeApisMap = (
+  effectiveProxy: string | undefined,
+  nonL1NetworkIds: number[]
 ): Record<number, string> => {
-  const effectiveProxy = aggkitProxyOverride ?? modeConfigJson.aggkitProxy;
   if (effectiveProxy === undefined) return {};
 
   return Object.fromEntries(nonL1NetworkIds.map((networkId) => [networkId, effectiveProxy]));
@@ -143,7 +146,13 @@ const buildModeConfig = (
 ): AppModeConfig => {
   const modeConfigJson = configJson.appModes.configs[modeKey];
   if (!modeConfigJson) {
-    return { label: modeKey, bridgeAddress: '', aggkitBridgeApis: {}, chains: [] };
+    return {
+      label: modeKey,
+      bridgeAddress: '',
+      aggkitBridgeApis: {},
+      aggkitProxyUrl: '',
+      chains: []
+    };
   }
 
   // Resolve each chain's effective bridgeAddress and etaL1Minutes/etaL2Minutes:
@@ -169,10 +178,13 @@ const buildModeConfig = (
     .filter((chain) => chain.networkId !== 0)
     .map((chain) => chain.networkId);
 
+  const effectiveProxy = resolveEffectiveAggkitProxy(modeConfigJson, aggkitProxyOverride);
+
   const base = {
     label: modeConfigJson.label,
     bridgeAddress: modeConfigJson.bridgeAddress,
-    aggkitBridgeApis: buildAggkitBridgeApisMap(modeConfigJson, nonL1NetworkIds, aggkitProxyOverride)
+    aggkitBridgeApis: buildAggkitBridgeApisMap(effectiveProxy, nonL1NetworkIds),
+    aggkitProxyUrl: effectiveProxy ?? ''
   };
 
   const enabledChains = toEnabledChains(chains);

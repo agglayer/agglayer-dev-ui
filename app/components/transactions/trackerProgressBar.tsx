@@ -17,12 +17,17 @@ interface TrackerProgressBarProps {
 
 // Dot fill per step status: done is
 // filled green, inProgress is a highlighted blue that pulses, pending is a
-// hollow ring, error is filled red.
+// hollow ring, error is filled red. skipped (agglayer/sdk#38) is a filled
+// grey dot -- distinct from pending's hollow ring so it doesn't read as
+// "not reached yet", but deliberately neutral (not red) since a skipped
+// step isn't a failure -- the bridge typically already claimed by the time
+// the tracker got there.
 export const DOT_CLASSES: Record<AggkitStepStatus, string> = {
   done: 'border-green bg-green',
   inProgress: 'border-blue bg-blue animate-pulse',
   pending: 'border-grey-light bg-transparent',
-  error: 'border-red bg-red'
+  error: 'border-red bg-red',
+  skipped: 'border-grey bg-grey'
 };
 
 // Renders the aggkit tracker's `all_steps` as a row of dots + connector
@@ -74,7 +79,13 @@ export const TrackerProgressBar = ({ transaction }: TrackerProgressBarProps) => 
           </Tooltip>
           {index < steps.length - 1 && (
             <div
-              className={cn('h-0.5 flex-1', step.status === 'done' ? 'bg-green' : 'bg-grey-light')}
+              className={cn(
+                'h-0.5 flex-1',
+                // skipped counts as "passed" for the connector too -- the
+                // tracker moved on beyond this step, it just didn't need to
+                // verify it.
+                step.status === 'done' || step.status === 'skipped' ? 'bg-green' : 'bg-grey-light'
+              )}
             />
           )}
         </div>

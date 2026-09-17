@@ -68,7 +68,10 @@ const STEP_STATUS_COPY: Record<AggkitStepStatus, string> = {
   pending: 'Pending',
   inProgress: 'In progress',
   done: 'Done',
-  error: 'Error'
+  error: 'Error',
+  // agglayer/sdk#38: the tracker short-circuited this step, most commonly
+  // because the bridge was already claimed by the time it got there.
+  skipped: 'Skipped'
 };
 
 // Tooltip body: label + status. `expected_duration` is folded in when
