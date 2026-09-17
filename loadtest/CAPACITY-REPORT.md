@@ -253,12 +253,21 @@ is uncovered. This is the residual browser gap that forwarding `gas` in `mapTran
 
 ### 5.4 `MEDIUM` — the UI reports "Transaction failed" with no diagnostic on exactly this path
 
-`app/hooks/useBridgeExecution.ts:161` handles `receipt.status === 'reverted'` by setting
+`app/hooks/useBridgeExecution.ts:161` handled `receipt.status === 'reverted'` by setting
 `error: { message: 'Bridge transaction reverted' }` — and, unlike the `catch` branch two blocks below, it
-emits **no `console.error`**. Confirmed empirically: 1,556 console errors were captured during C1 and
+emitted **no `console.error`**. Confirmed empirically: 1,556 console errors were captured during C1 and
 every one was benign external-asset noise; not a single `[bridge-execution]` line, despite 20 modal
-failures in that run. A user (and anyone reading a bug report) gets "Transaction failed" with nothing
+failures in that run. A user (and anyone reading a bug report) got "Transaction failed" with nothing
 actionable, for the single most common real failure mode in the browser path.
+
+> **✅ FIXED 2026-09-17.** All three reverted-receipt branches now log — the bridge send and the approval
+> in `useBridgeExecution.ts`, and the claim in `useClaimExecution.ts` (which had no logging on any path
+> at all). Each logs `{ txHash, blockNumber, gasUsed }` alongside a labelled message. The **hash** is the
+> part that matters: as §5.3 shows, an out-of-gas *inner* call reverts with `gasUsed` **below** the
+> limit, so `gasUsed` cannot identify it and only a `callTracer` trace of the hash can — the log exists
+> so that trace is still possible after the fact. Guarded by a mutation-proven test (deleting the
+> `console.error` fails it), and the harness now records these as `console_error` events rather than
+> losing them.
 
 ### 5.5 `MEDIUM` — one haproxy ingress with `maxconn 1024` fronts both RPC and the bridge API
 
@@ -355,8 +364,9 @@ was never the bottleneck at any load below the ingress collapse.**
    silent loss of an entire network.
 2. ~~§5.3 — apply a gas buffer on the browser bridge path.~~ **Done 2026-09-17 (S36): reverts 79 → 0,
    browser lap completion 51.5% → 91.1%.** See §5.3's fix box.
-3. §5.4 — add a `console.error` to the `receipt.status === 'reverted'` branch, and surface the revert
-   reason in the modal.
+3. ~~§5.4 — add a `console.error` to the `receipt.status === 'reverted'` branch~~ **done 2026-09-17,
+   for all three revert branches.** Surfacing the revert reason in the *modal* is still open — the log
+   makes it diagnosable to a developer, not to the user.
 4. §5.2 — treat `autoclaimOverdue` / autoclaim coverage as the primary capacity SLI. Success rate alone
    does not detect this failure.
 
