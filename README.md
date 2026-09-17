@@ -163,6 +163,17 @@ Security and ops notes:
 - Keep the E2E wallet balance minimal and treat it as disposable.
 - Never deploy with `NEXT_PUBLIC_E2E_ENABLED=true` in any public/shared environment.
 - Set only `E2E_PRIVATE_KEY` in `.env.local` for tests. Do not set `NEXT_PUBLIC_E2E_PRIVATE_KEY` directly.
+- `app/context/e2eAccount.ts` also honors a per-page runtime override,
+  `window.__AGGLAYER_E2E_PRIVATE_KEY__`, in addition to the build-time
+  `NEXT_PUBLIC_E2E_PRIVATE_KEY` -- set it via Playwright's
+  `context.addInitScript` (which runs before any app script on the page)
+  to sign with a different key per browser context without a separate
+  build, e.g. one wallet per load-test browser worker. This override is
+  **only ever read when `IS_E2E_ENABLED` is true** (`NEXT_PUBLIC_E2E_ENABLED=true`
+  at build time) -- production builds never look at
+  `window.__AGGLAYER_E2E_PRIVATE_KEY__` and are unaffected. An invalid
+  override (not a `0x`-prefixed 32-byte hex key) throws at module load
+  rather than silently falling back.
 - Testnet-mode spend accumulates over CI runs; periodically top up the E2E wallet.
 
 Required `.env.local` variables for E2E:
@@ -302,6 +313,14 @@ when chain metadata hasn't resolved yet.
 - `tracker-detail-step-<i>` — one timeline entry in the detail view
 
 Covered by `tests/bridge/tracker.spec.ts`.
+
+## Load Testing
+
+`loadtest/` is a standalone tool (not part of the app bundle) that simulates many
+users each submitting bridges at a target rate against the aggkit-proxy, using a mix
+of real-browser (Playwright) and headless (viem + SDK) workers that both replay the
+app's own traffic shape. See [`loadtest/README.md`](loadtest/README.md) for the quick
+start, CLI reference, and capacity guidance.
 
 ## Configuration
 

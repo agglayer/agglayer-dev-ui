@@ -34,6 +34,7 @@ import { useAggNative } from '@/app/context/aggLayerSdk';
 import { useAppMode } from '@/app/context/appMode';
 import { useWallet } from '@/app/context/walletContext';
 import { useSenderAccount } from '@/app/hooks/useSenderAccount';
+import { BRIDGE_GAS_BUFFER } from '@/app/utils/transaction';
 import { usePublicClient, useSendTransaction } from 'wagmi';
 
 import { useBridgeExecution } from './useBridgeExecution';
@@ -209,5 +210,83 @@ describe('useBridgeExecution — native bridge token param', () => {
     await waitFor(() => expect(result.current.state.currentStep).toBe('success'));
     expect(buildBridgeAsset).not.toHaveBeenCalled();
     expect(erc20).toHaveBeenCalledWith(ERC20_ADDRESS, FROM_CHAIN_ID);
+  });
+});
+
+// S36 / findings C5 and §5.4 of loadtest/CAPACITY-REPORT.md. Two separate
+// regressions are guarded here, both of which shipped silently once already:
+// the bridge send losing its gas headroom, and the reverted-receipt branch
+// losing its only diagnostic.
+describe('useBridgeExecution — bridge send gas buffer and revert diagnostics', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('adds BRIDGE_GAS_BUFFER to the SDK gas on the bridge send', async () => {
+    const { buildBridgeAsset, sendTransactionAsync } = setUpMocks(ZERO_ADDRESS);
+    // 164359 is a real bufferless estimate from a bridge that reverted on the
+    // devnet with an out-of-gas inner updateGlobalExitRoot.
+    buildBridgeAsset.mockResolvedValue({
+      to: BRIDGE_ADDRESS,
+      data: '0xabcdef',
+      value: undefined,
+      gas: '164359'
+    });
+    const { result } = renderHook(() => useBridgeExecution({ fromChainId: FROM_CHAIN_ID }));
+
+    await act(async () => {
+      await result.current.execute({
+        toChainId: TO_CHAIN_ID,
+        token: nativeToken,
+        amountWei: BigInt(1000),
+        needsApproval: false,
+        isNative: true
+      });
+    });
+
+    await waitFor(() => expect(result.current.state.currentStep).toBe('success'));
+    expect(sendTransactionAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ gas: BigInt(164359) + BRIDGE_GAS_BUFFER })
+    );
+    // The buffered limit must clear the largest gas a successful bridgeAsset
+    // was actually measured consuming (240,603) -- the whole point of C5.
+    const sent = sendTransactionAsync.mock.calls[0][0] as { gas: bigint };
+    expect(sent.gas).toBeGreaterThan(BigInt(240603));
+  });
+
+  it('logs the tx hash when the bridge receipt reverts, instead of failing silently', async () => {
+    const { sendTransactionAsync } = setUpMocks(ZERO_ADDRESS);
+    sendTransactionAsync.mockResolvedValue('0xdeadbeef');
+    vi.mocked(usePublicClient).mockReturnValue({
+      waitForTransactionReceipt: vi.fn().mockResolvedValue({
+        status: 'reverted',
+        blockNumber: BigInt(42),
+        gasUsed: BigInt(159792)
+      })
+    } as unknown as ReturnType<typeof usePublicClient>);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { result } = renderHook(() => useBridgeExecution({ fromChainId: FROM_CHAIN_ID }));
+
+    await act(async () => {
+      await result.current.execute({
+        toChainId: TO_CHAIN_ID,
+        token: nativeToken,
+        amountWei: BigInt(1000),
+        needsApproval: false,
+        isNative: true
+      });
+    });
+
+    await waitFor(() => expect(result.current.state.currentStep).toBe('error'));
+    // The modal's own message stays deliberately generic; the log is what
+    // makes the failure diagnosable, and the HASH is the part that matters --
+    // an out-of-gas inner call reverts with gasUsed BELOW the limit, so only a
+    // callTracer trace of this hash can identify it after the fact.
+    expect(consoleError).toHaveBeenCalledWith(
+      '[bridge-execution] bridge transaction reverted',
+      expect.objectContaining({ txHash: '0xdeadbeef' })
+    );
+    expect(result.current.state.error?.message).toBe('Bridge transaction reverted');
+    consoleError.mockRestore();
   });
 });

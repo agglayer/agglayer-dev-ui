@@ -106,6 +106,10 @@ Expected response shapes: [bridgetracker API.md](https://github.com/agglayer/agg
 
 Functional check: send one bridge per direction you support and watch the row's progress bar complete (L1→L2 and L2→L2 autoclaim; L2→L1 parks at "Ready to claim" until claimed — note upstream [agglayer/aggkit#1786](https://github.com/agglayer/aggkit/issues/1786) (OPEN): the tracker's `WaitingClaim` step routinely precedes actual claimability by seconds to tens of seconds, so the UI intentionally gates the Claim button on its own `READY_TO_CLAIM` status rather than on the tracker step).
 
+Beyond a one-off functional check, [`loadtest/README.md`](../loadtest/README.md) drives
+this same proxy with many simulated concurrent users to validate it under sustained
+load.
+
 ## 6. Reference deployment (end-to-end, reproducible)
 
 The kurtosis-cdk 2-L2 devnet deploys this whole stack (aggkit rc8, proxy+tracker, haproxy, UI wiring) from one command and is the fastest way to see a working configuration to diff yours against: [aggkit 2-L2 with bridge UI guide](https://github.com/0xPolygon/kurtosis-cdk/blob/feat/aggkit-bridge-ui-backend/docs/docs/advanced/aggkit-2l2-with-bridge-ui.md). That guide's Troubleshooting section also covers enclave reset/wallet-nonce recovery and tracker failure-mode diagnosis (including #1786 above).
