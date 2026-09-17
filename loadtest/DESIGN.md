@@ -82,9 +82,12 @@ interface UserDriver {
 ```
 
 Both implementations MUST emit the same `Phase` timers (§5.1) and the same
-`endpointClass` HTTP samples (§5.2). The only permitted behavioural divergence
-is `gas.bridgeGasOffset` (§9.4) — because the UI cannot apply it (§9.3
-finding **C4**). Any other divergence is a bug S20 should flag.
+`endpointClass` HTTP samples (§5.2). `gas.bridgeGasOffset` used to be the one
+permitted behavioural divergence, because the UI could not apply it; **S36
+closed that** — the UI's bridge send now adds the same `+300_000` as
+`BRIDGE_GAS_BUFFER` (§9.3 finding **C5**), so the two modes send identical gas
+headroom and §9.4 lists no gas divergence. Any divergence is a bug S20 should
+flag.
 
 ---
 
@@ -1093,28 +1096,46 @@ Reported, not silently corrected. Each is falsifiable at the cited line.
   considered and **rejected as out of S32's scope** (the plan's non-goals
   restrict S32 to `app/utils/transaction.ts`, its tests, docs, and comments
   only) — flagged here for a future step, not fixed now.
-- **C5 — the `+300000` gas offset cannot be applied in browser mode.** **NOT
-  fixed by C4/S32 — still open.** It was previously claimed that forwarding
-  the SDK's `gas` (C4) would close this finding. **That claim was wrong** and
-  is corrected here: the SDK's estimator is a bare, bufferless pass-through
-  (`client.estimateGas(...)` returned as-is, no headroom added — see
-  `@agglayer/sdk`'s `BaseContract.estimateGas`), so forwarding it changes
-  *which* estimate gets sent, not whether it has any margin. Forwarding is
-  arguably *staler* than the old behaviour too, since viem's own
-  `prepareTransactionRequest` re-estimates at send time, closer to actual
-  execution state, whereas the forwarded value was estimated back at build
-  time. A same-block `forceUpdateGlobalExitRoot` bridge can therefore still
-  `OutOfGas` in browser mode after S32, exactly as before it. The headless
-  worker can and does apply `gas.bridgeGasOffset` on top of its own estimate;
-  there is no equivalent UI surface, and the user has explicitly declined
-  adding a gas buffer/multiplier to the UI for now (2026-09-15 — see S32).
-  Therefore `bridgeGasOffset` remains a **declared, documented divergence**
-  (the only one, §1.1): browser users may see `OutOfGas` reverts on
-  same-block `forceUpdateGlobalExitRoot` bridges that headless users do not.
-  Those are classified `tx_revert` and reported per mode so the asymmetry is
-  visible rather than mysterious. Closing C5 would require a deliberate
-  gas-buffer decision — a product decision, not a code fix, and out of scope
-  here.
+- **C5 — the `+300000` gas offset could not be applied in browser mode.**
+  **CLOSED by S36 (2026-09-17).** Not closed by C4/S32: it was once claimed
+  that forwarding the SDK's `gas` would close this, and **that claim was
+  wrong** — the SDK's estimator is a bare, bufferless pass-through
+  (`client.estimateGas(...)` returned as-is, no headroom — see
+  `@agglayer/sdk`'s `BaseContract.estimateGas`), so forwarding it changed
+  *which* estimate got sent, not whether it had any margin.
+  **What closed it:** `app/utils/transaction.ts` now exports
+  `BRIDGE_GAS_BUFFER = 300_000n` and `mapTransactionRequest` takes an opt-in
+  `{ gasBuffer }`, which `useBridgeExecution.ts`'s **bridge send only** passes.
+  Approve and claim are deliberately left unbuffered — neither races the
+  global exit root, and neither produced a single out-of-gas revert in the
+  measurement below. `gas.bridgeGasOffset` is therefore **no longer a
+  divergence** (§1.1); a drift guard in `loadtest/config/schema.test.ts`
+  asserts the schema default and `BRIDGE_GAS_BUFFER` stay equal.
+  **The measurement that sized it** (loadtest/CAPACITY-REPORT.md §5.3;
+  browser-only, 20 users, an otherwise idle system): 46 of 1019 L1
+  `bridgeAsset` calls — **4.5%** — reverted, all with an inner
+  `updateGlobalExitRoot` frame reading `out of gas` in a `callTracer` trace,
+  while `eth_call` against the parent block succeeded. EIP-150's 63/64 rule
+  leaves the outer frame enough gas to return, so **the receipt shows a plain
+  revert with `gasUsed` at only ~97% of the limit** — a gasUsed-vs-gasLimit
+  check does not detect it. Successful calls used up to **240,603** gas while
+  the bufferless estimates that reverted carried limits of **186,507**
+  (median) / 231,281 (max), so a conventional 10–25% multiplier would not have
+  covered the gap; +300,000 matches the headless offset, which saw zero such
+  reverts across ~40,000 bridges.
+  **Verified, not just implemented** (case `S36-verify`, browser-only, 20 users,
+  parameters byte-identical to the run that exposed it): `bridgeAsset` reverts
+  **79 → 0** across all three chains, browser lap completion **51.5% → 91.1%**,
+  hop success **80.1% → 97.0%**, and the `"Transaction failed"` modal
+  assertions went **79 → 0** — a 1:1 match with the 79 reverts, which confirms
+  the diagnosis rather than merely correlating with it.
+  **Residual:** if the SDK ever stops populating `gas`, `mapTransactionRequest`
+  emits no `gas` key and viem re-estimates bufferlessly at send time, where the
+  buffer cannot apply — asserted by a test rather than assumed away. Separately,
+  10 `ui_assertion`s remain in the verification run, all
+  `[claim-tokens-button] locator.click: Timeout 30000ms` on the manual-claim
+  `L2B→L1` hop — a UI-render/harness-timing issue with no transaction behind it,
+  unrelated to C5 and already present before the fix.
 - **C6 — `token-mappings` is not "per non-native activity row".** It is
   gated on `!isNative && !localToken` (`transactionListItem.tsx:59-63`). A
   token present in the local/custom token list produces **zero**
@@ -1347,7 +1368,7 @@ Reported, not silently corrected. Each is falsifiable at the cited line.
 
 | Divergence | Browser | Headless | Why |
 |---|---|---|---|
-| `gas.bridgeGasOffset` | not applied | applied | C5 |
+| `gas.bridgeGasOffset` | applied as `BRIDGE_GAS_BUFFER` (S36) | applied | C5 — closed |
 | `page_load`, `wallet_connect` phases | measured | absent | no page |
 | `console_error` capture | yes | n/a | no console |
 | `seedTokenList` | always (custom-token seeding is how the UI selects the devnet ERC20); a transient, per-hop seeding gap still yields a small residual `token-mappings[0]` count (0.75/user observed) | config `headless.seedTokenList`, default `true` | C6 |

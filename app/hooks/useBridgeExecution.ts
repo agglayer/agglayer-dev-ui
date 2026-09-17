@@ -12,7 +12,7 @@ import { ZERO_ADDRESS } from '@/app/types/bridge';
 import { isValidEthereumAddress } from '@/app/utils/address';
 import { getNetworkId } from '@/app/utils/chains';
 import { normalize } from '@/app/utils/format';
-import { mapTransactionRequest } from '@/app/utils/transaction';
+import { BRIDGE_GAS_BUFFER, mapTransactionRequest } from '@/app/utils/transaction';
 import { useCallback, useState } from 'react';
 import { usePublicClient, useSendTransaction } from 'wagmi';
 
@@ -151,8 +151,14 @@ export const useBridgeExecution = (params: { fromChainId: number }) => {
                 forceUpdateGlobalExitRoot: true
               });
 
+        // BRIDGE_GAS_BUFFER, not a bare estimate: this send passes
+        // `forceUpdateGlobalExitRoot: true` above, so it races the global exit
+        // root and the SDK's bufferless estimate can leave the inner
+        // GlobalExitRootV2 call out of gas -- surfacing as the plain
+        // "Bridge transaction reverted" below. See BRIDGE_GAS_BUFFER's comment
+        // for the measurement (4.5% of L1 bridges, on an idle system).
         localBridgeHash = await sendTransactionAsync({
-          ...mapTransactionRequest(bridgeTx),
+          ...mapTransactionRequest(bridgeTx, { gasBuffer: BRIDGE_GAS_BUFFER }),
           account: senderAccount,
           chainId: fromChainId
         });

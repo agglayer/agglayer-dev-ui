@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
+import { BRIDGE_GAS_BUFFER } from '../../app/utils/transaction';
 import { deriveDevnetConfig } from './deriveDevnet';
 import {
   checkOperationalConstraints,
@@ -350,5 +351,17 @@ describe('checkOperationalConstraints — validate-only checks (DESIGN §2.4, §
     const config = parseLoadtestConfig(buildRawDevnetExample());
     const issues = checkOperationalConstraints(config);
     expect(issues.some((issue) => issue.startsWith('RING_MUST_START_AT_ASSET_ORIGIN'))).toBe(false);
+  });
+});
+
+// The whole point of the load test is that headless mode replays what the real
+// UI does. `gas.bridgeGasOffset` was the ONE declared divergence (DESIGN §1.1,
+// finding C5) until the UI gained its own buffer; if these two numbers drift
+// apart the divergence silently comes back, and browser users start eating the
+// out-of-gas bridgeAsset reverts again while headless runs stay clean.
+describe('gas headroom parity between the UI and the headless worker', () => {
+  it("the schema's bridgeGasOffset default equals the UI's BRIDGE_GAS_BUFFER", () => {
+    const config = parseLoadtestConfig(buildRawDevnetExample());
+    expect(BigInt(config.gas.bridgeGasOffset)).toBe(BRIDGE_GAS_BUFFER);
   });
 });
