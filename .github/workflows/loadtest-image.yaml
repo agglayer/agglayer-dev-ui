@@ -1,0 +1,134 @@
+# Builds and publishes ghcr.io/agglayer/agglayer-dev-ui-loadtest -- the
+# runnable image for loadtest/ (Dockerfile.loadtest), headless workers only.
+#
+# workflow_dispatch only, deliberately: unlike docker-publish.yaml (which
+# also fires on `release: published`), this image has no release/semver
+# lifecycle of its own yet, so there is no push/PR trigger here either --
+# publishing is a separate, explicit human action.
+#
+# Why this file lives on main while loadtest/ does not yet
+#   GitHub only lets a workflow be dispatched at all if a file with this
+#   path exists on the default branch; a dispatch for a workflow that only
+#   exists on a feature branch is rejected with
+#   "workflow loadtest-image.yaml not found on the default branch". The
+#   loadtest CLI itself (loadtest/, the `loadtest` package.json script and
+#   its `tsx` devDependency) is still in review and is NOT on main, so this
+#   workflow must be told which revision to build -- hence the required
+#   `ref` input below, which is forwarded to actions/checkout and becomes
+#   the build context. Same pattern, and same ref-vs-input distinction, as
+#   docker-publish.yaml: the ref the dispatch *event* is fired against
+#   selects which version of this workflow file runs (and must be a branch
+#   or tag, not a bare SHA), while the `ref` *input* is a plain string
+#   passed to actions/checkout and therefore also accepts a full commit SHA
+#   (resolvable thanks to `fetch-depth: 0`).
+#
+#   Once loadtest/ has merged to main, `ref: main` is a valid -- and the
+#   expected -- input, and this header can be trimmed accordingly.
+#
+# Mirrors docker-publish.yaml's auth/login/permissions pattern: GHCR login
+# via docker/login-action with the workflow's own GITHUB_TOKEN (packages:
+# write), QEMU + Buildx for a multi-arch (amd64/arm64) push.
+name: Build and Publish Loadtest Image
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: >-
+          Branch, tag, or full commit SHA carrying loadtest/ and
+          Dockerfile.loadtest, to build and publish (forwarded verbatim to
+          actions/checkout). No default on purpose: main does not carry the
+          loadtest CLI yet, so there is no safe default to fall back to.
+          See the workflow file header.
+        required: true
+        type: string
+
+concurrency:
+  # Not `cancel-in-progress`, same rationale as docker-publish.yaml: a
+  # cancelled mid-push could leave a partially written manifest/tag in
+  # GHCR. Overlapping dispatches queue and run serially instead.
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY_IMAGE: ghcr.io/agglayer/agglayer-dev-ui-loadtest
+
+jobs:
+  build-and-publish:
+    name: Build, publish, and verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout agglayer-dev-ui
+        uses: actions/checkout@v4
+        with:
+          # fetch-depth: 0 so an arbitrary SHA passed as the `ref` input is
+          # resolvable, exactly as in docker-publish.yaml.
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Assert the checked-out ref carries the loadtest CLI
+        # Fail here rather than after the push. Dockerfile.loadtest only
+        # COPYs the manifests and the repo source, all of which exist on
+        # main too, so a build from a ref without loadtest/ SUCCEEDS and
+        # yields an image whose `pnpm loadtest` does not exist -- the
+        # "Smoke test pushed image" step below would catch that, but only
+        # once a useless tag had already been written to GHCR.
+        env:
+          # Via env, not inline `${{ }}`, so the ref string can never be
+          # interpolated into this script as shell -- same convention as
+          # docker-publish.yaml's "compute image tags" step.
+          BUILD_REF: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+          if [ ! -d loadtest ] || ! node -e 'process.exit(require("./package.json").scripts?.loadtest ? 0 : 1)'; then
+            echo "::error::ref '$BUILD_REF' has no loadtest/ directory or no \"loadtest\" package.json script; pass a ref that carries the loadtest CLI" >&2
+            exit 1
+          fi
+
+      - name: Resolve build metadata
+        id: meta
+        run: |
+          set -euo pipefail
+          echo "built_sha=$(git rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        # Enables an emulated linux/arm64 build on this amd64 ubuntu-latest
+        # runner, same as docker-publish.yaml -- see that workflow's own
+        # comment for why ubuntu-latest + QEMU is used here instead of an
+        # org arm runner pool.
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.loadtest
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.REGISTRY_IMAGE }}:${{ steps.meta.outputs.built_sha }}
+
+      - name: Verify published manifest
+        run: docker buildx imagetools inspect "${{ env.REGISTRY_IMAGE }}@${{ steps.build.outputs.digest }}"
+
+      - name: Smoke test pushed image
+        run: |
+          set -euo pipefail
+          IMAGE_REF="${{ env.REGISTRY_IMAGE }}@${{ steps.build.outputs.digest }}"
+          docker run --rm "$IMAGE_REF" pnpm loadtest
