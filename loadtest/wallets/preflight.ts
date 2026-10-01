@@ -56,12 +56,23 @@ export interface PreflightAssetRow {
   allowanceRecorded: Array<{ userId: string; allowance: string }>;
 }
 
+// Gas-token identity auto-discovered from a ring chain's bridge (S06,
+// Design B). Present only for chains whose `gasTokenAddress()` is non-zero.
+export interface GasTokenIdentity {
+  chainKey: string;
+  gasTokenAddress: string;
+  gasTokenNetwork: number;
+  wethToken: string;
+}
+
 export interface PreflightResult {
   ok: boolean;
   chains: PreflightChainRow[];
   assets: PreflightAssetRow[];
   trackerHealthStatus: PreflightStatus;
   failures: PreflightFailure[];
+  // Keyed by chain key; empty for an all-ETH-gas config.
+  gasTokenChains: Record<string, GasTokenIdentity>;
   table: string;
 }
 
@@ -211,15 +222,30 @@ const checkTrackerHealth = async (
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
-// DESIGN §10: "No `bridgeMessage`/`bridgeMessageWETH` path. A ring chain
-// whose `gasTokenAddress() != 0x0` is refused ... preflight reads
-// gasTokenAddress() live on every ring chain rather than trusting the
-// devnet's expected zero address." A custom-gas-token chain is out of
-// scope for the ring's ETH-asset support (§3), so this is a hard gate, not
-// informational.
-const GAS_TOKEN_ADDRESS_ABI = [
+// DESIGN §10 originally refused any ring chain whose `gasTokenAddress() !=
+// 0x0`. S06 (Design B): preflight now auto-discovers each ring chain's gas
+// token live (no config declaration). Zero -> ETH mode (unchanged). Non-zero
+// -> gas-token mode: read `gasTokenNetwork()` and `WETHToken()` so the `eth`
+// asset can be held/bridged as the chain's WETH. `GAS_TOKEN_NOT_ETHER` is
+// kept for a chain whose gas token cannot be resolved (no data, call
+// failure, or no WETH).
+const GAS_TOKEN_BRIDGE_ABI = [
   {
     name: 'gasTokenAddress',
+    type: 'function',
+    inputs: [],
+    outputs: [{ type: 'address' }],
+    stateMutability: 'view'
+  },
+  {
+    name: 'gasTokenNetwork',
+    type: 'function',
+    inputs: [],
+    outputs: [{ type: 'uint32' }],
+    stateMutability: 'view'
+  },
+  {
+    name: 'WETHToken',
     type: 'function',
     inputs: [],
     outputs: [{ type: 'address' }],
@@ -227,20 +253,30 @@ const GAS_TOKEN_ADDRESS_ABI = [
   }
 ] as const;
 
+const callBridgeView = async (
+  clients: ReturnType<ChainClientFactory>,
+  chain: LoadtestChain,
+  functionName: 'gasTokenAddress' | 'gasTokenNetwork' | 'WETHToken'
+): Promise<string | undefined> => {
+  const data = encodeFunctionData({ abi: GAS_TOKEN_BRIDGE_ABI, functionName });
+  const { data: result } = await clients.public.call({
+    to: chain.bridgeAddress as Address,
+    data
+  });
+  return result;
+};
+
 const checkGasToken = async (
   clientFactory: ChainClientFactory,
   chain: LoadtestChain
-): Promise<{ status: PreflightStatus; failure?: PreflightFailure }> => {
+): Promise<{
+  status: PreflightStatus;
+  failure?: PreflightFailure;
+  identity?: GasTokenIdentity;
+}> => {
   try {
     const clients = clientFactory(chain);
-    const data = encodeFunctionData({
-      abi: GAS_TOKEN_ADDRESS_ABI,
-      functionName: 'gasTokenAddress'
-    });
-    const { data: result } = await clients.public.call({
-      to: chain.bridgeAddress as Address,
-      data
-    });
+    const result = await callBridgeView(clients, chain, 'gasTokenAddress');
     if (result === undefined) {
       return {
         status: 'fail',
@@ -251,16 +287,30 @@ const checkGasToken = async (
       };
     }
     const gasTokenAddress = `0x${result.slice(-40)}`.toLowerCase();
-    if (gasTokenAddress !== ZERO_ADDRESS) {
+    if (gasTokenAddress === ZERO_ADDRESS) return { status: 'pass' };
+
+    const networkResult = await callBridgeView(clients, chain, 'gasTokenNetwork');
+    const wethResult = await callBridgeView(clients, chain, 'WETHToken');
+    const wethToken =
+      wethResult === undefined ? ZERO_ADDRESS : `0x${wethResult.slice(-40)}`.toLowerCase();
+    if (networkResult === undefined || wethToken === ZERO_ADDRESS) {
       return {
         status: 'fail',
         failure: {
           code: 'GAS_TOKEN_NOT_ETHER',
-          message: `chain "${chain.key}": gasTokenAddress() is ${gasTokenAddress}, not the zero address — a custom-gas-token chain is out of scope (DESIGN §10)`
+          message: `chain "${chain.key}": gasTokenAddress() is ${gasTokenAddress} but its WETH could not be resolved (gasTokenNetwork()=${networkResult === undefined ? 'no data' : 'ok'}, WETHToken()=${wethToken}) — cannot hold the eth asset on this gas-token chain`
         }
       };
     }
-    return { status: 'pass' };
+    return {
+      status: 'pass',
+      identity: {
+        chainKey: chain.key,
+        gasTokenAddress,
+        gasTokenNetwork: Number(BigInt(networkResult)),
+        wethToken
+      }
+    };
   } catch (error) {
     return {
       status: 'fail',
@@ -409,6 +459,11 @@ const renderTable = (result: Omit<PreflightResult, 'table'>): string => {
   result.assets.forEach((asset) => {
     lines.push(`asset[${asset.assetIndex}] (${asset.kind}): ${asset.assetStatus}`);
   });
+  Object.values(result.gasTokenChains).forEach((identity) => {
+    lines.push(
+      `gas-token chain "${identity.chainKey}": gasToken=${identity.gasTokenAddress} originNetwork=${identity.gasTokenNetwork} weth=${identity.wethToken} (eth held as WETH)`
+    );
+  });
   return lines.join('\n');
 };
 
@@ -422,6 +477,7 @@ export const runPreflight = async (options: PreflightOptions): Promise<Preflight
   const failures: PreflightFailure[] = [];
 
   const chains: PreflightChainRow[] = [];
+  const gasTokenChains: Record<string, GasTokenIdentity> = {};
   for (const chain of config.chains) {
     const isRingChain = ringChainKeys.has(chain.key);
     const chainIdResult = await checkChainId(clientFactory, chain);
@@ -433,6 +489,10 @@ export const runPreflight = async (options: PreflightOptions): Promise<Preflight
     const gasTokenResult = isRingChain
       ? await checkGasToken(clientFactory, chain)
       : { status: 'skipped' as PreflightStatus };
+
+    if (gasTokenResult.identity !== undefined) {
+      gasTokenChains[chain.key] = gasTokenResult.identity;
+    }
 
     [
       chainIdResult.failure,
@@ -467,6 +527,17 @@ export const runPreflight = async (options: PreflightOptions): Promise<Preflight
       assets.push({ assetIndex, kind: asset.kind, assetStatus: 'skipped', allowanceRecorded: [] });
       continue;
     }
+    // Design B: on a gas-token chain the `eth` asset is held as WETH, which
+    // the funder cannot provide, so a ring starting there is refused rather
+    // than checked against the (wrong) native balance.
+    if (asset.kind === 'eth' && gasTokenChains[ringStartChain.key] !== undefined) {
+      failures.push({
+        code: 'RING_ETH_START_ON_GAS_TOKEN_CHAIN',
+        message: `asset[eth] on ring[0] "${ringStartChain.key}": this chain is a gas-token chain, so eth is held as WETH there and users cannot be funded with it — start the ring on an ETH-gas chain`
+      });
+      assets.push({ assetIndex, kind: asset.kind, assetStatus: 'fail', allowanceRecorded: [] });
+      continue;
+    }
     const assetResult = await checkAsset(
       clientFactory,
       ringStartChain,
@@ -492,7 +563,8 @@ export const runPreflight = async (options: PreflightOptions): Promise<Preflight
     'PREFLIGHT_BRIDGE_BYTECODE',
     'PREFLIGHT_SYNC_STATUS',
     'PREFLIGHT_TRACKER_HEALTH',
-    'GAS_TOKEN_NOT_ETHER'
+    'GAS_TOKEN_NOT_ETHER',
+    'RING_ETH_START_ON_GAS_TOKEN_CHAIN'
   ];
   failures.sort((a, b) => priorityOrder.indexOf(a.code) - priorityOrder.indexOf(b.code));
 
@@ -501,7 +573,8 @@ export const runPreflight = async (options: PreflightOptions): Promise<Preflight
     chains,
     assets,
     trackerHealthStatus: trackerHealthResult.status,
-    failures
+    failures,
+    gasTokenChains
   };
 
   return { ...partial, table: renderTable(partial) };
