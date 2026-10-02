@@ -157,6 +157,10 @@ devnet example with provenance, §2.4 this testnet example with provenance).
   latency, see [Capacity guidance](#capacity-guidance-measured)), so a wallet never
   gets its ERC20 back before the next scheduled bridge — a flat `amount x 4` default
   silently ran out mid-run in validation run #1.
+- **`run --fund` funds before it runs `preflight`** (`runner.ts:654-682`), so preflight
+  refusals that depend on discovery (`BROWSER_GAS_TOKEN_UNSUPPORTED`, `RING_ETH_START_*`)
+  fire only after money has been sent to the user wallets. Run `preflight` first and do not
+  use `run --fund` for gas-token (outpost) rings; fund with the separate `fund` command.
 - **`--i-know-this-is-mainnet`** must be passed to `fund`/`run` before either will
   spend real funder money on a config whose `env` is `mainnet` — a deliberate,
   unmissable flag rather than an env-based gate. `run` refuses **unconditionally**
@@ -186,7 +190,7 @@ devnet example with provenance, §2.4 this testnet example with provenance).
 | `preflight [<path>]` | Assert per-user gas on every ring chain, asset budget on the ring's origin chain, allowance state, both-sides `sync-status`, tracker health | `--users N` |
 | `build-ui [<path>]` | Build a standalone E2E-enabled static export (`out/`) without touching the repo's committed `config.json` | — |
 | `serve-ui [<path>]` | Serve a `build-ui` export on the config's `uiBaseUrl` until interrupted | `--out <dir>` |
-| `run` | Full pipeline: load+validate config -> preflight -> (fund if `--fund`) -> serve UI if needed -> drive workers -> write report | `--config <path>`, `--users N`, `--browser N`, `--rate Y`, `--minutes Z`, `--assets eth,erc20`, `--fund`, `--i-know-this-is-mainnet`, `--out <dir>` |
+| `run` | Full pipeline: load+validate config -> preflight -> (fund if `--fund`) -> serve UI if needed -> drive workers -> write report | `--config <path>`, `--users N`, `--browser N`, `--rate Y`, `--minutes Z`, `--assets eth,erc20`, `--fund` (see the warning in Funding & safety), `--i-know-this-is-mainnet`, `--out <dir>` |
 | `report` | Re-render `summary.md` from an existing run directory's `results.json` (byte-identical to the original) | `--dir <dir>` (required) |
 
 `--users N`, where accepted, also clamps `users.browser` down to `N` if the config's
@@ -255,6 +259,18 @@ guidance](#capacity-guidance-measured).
 still in flight at the moment draining began. `aborted: true` (headline `ABORTED
 (sigint)` or `ABORTED (fatal)`) is reserved for abnormal termination.
 
+**`NO LAPS STARTED` is not a pass.** A run that was not aborted but in which
+`achieved.lapStartsSubmitted` is `0` is headlined `NO LAPS STARTED (0 lap starts —
+nothing was exercised)` instead of `PASS`. This is what `--rate 1 --minutes 1`
+produces (see [One lap per user](#one-lap-per-user-coverage-runs-not-load)). Treat
+it as "the run proved nothing", not as a tool failure.
+
+**`gasTokenChains` (optional).** When preflight discovered one or more
+[gas-token chains](#gas-token-chains-eth-held-as-weth), `results.json` carries a
+top-level `gasTokenChains` object keyed by chain key, each value
+`{ gasTokenAddress, gasTokenNetwork, wethToken }`. It is omitted entirely when every
+ring chain uses ETH as gas, so reports for ETH-only configs are unchanged.
+
 ## Autoclaim semantics
 
 Each ring hop (`"L1->L2A"`, etc.) has a configured autoclaim expectation:
@@ -273,6 +289,137 @@ e.g. L2->L1 on this devnet).
 - The full outcome set: `hop_completed_auto`, `hop_completed_manual`,
   `hop_completed_escalated`, `hop_completed_raced` — all four are successes; only
   `timeout_*`/`internal`/etc. outcomes are failures.
+
+**What `unexpectedAutoclaim = 0` does and does not prove for an `expected: false`
+(L2 -> L1) hop.** The tool claims such a hop itself, with the user's own wallet
+(paid from that user's `gasPerChain` on the destination chain). A `0` therefore
+means only that *autoclaim was not shown to act on the hop*; it does not prove autoclaim
+did not claim it. The tool claims as soon as it first sees the hop `READY` (`core/ring.ts:751-759`),
+and `unexpectedAutoclaim` is counted only when the row is already `CLAIMED` the first time
+the tool sees it as ready (`core/ring.ts:699-705`, `applyAwaitingReady`: `!expected &&
+!claimSubmitted`). An autoclaim that loses the race to the tool's own claim is invisible
+(its transaction reverts `AlreadyClaimed` on the service's side), and a late autoclaim is not
+detected; a service claim that lands after the tool has observed `READY` shows up at best as
+`hop_completed_raced` / `claimRaceLost`. If such a hop ends `timeout_ready_to_claim` or
+`aborted_drain` it was **not reached**, which is not a pass.
+
+**A `PASS` headline is not an autoclaim pass.** The headline only says the run was
+not aborted and started at least one lap. Read `policy.autoclaimOverdue` and
+`policy.unexpectedAutoclaim` as well.
+
+## Gas-token chains (ETH held as WETH)
+
+Some Agglayer chains (e.g. outposts such as Bali 63, whose native currency is Base
+Sepolia ETH registered in the bridge as a token with origin `(63, sentinel)`) do not
+use ETH as their gas token. There, bridged L1 ETH arrives as the bridge's own
+`WETHToken()` ERC20, not as native currency, and bridging it back out is a privileged
+**burn** of that WETH. The `eth` asset keeps its identity (leaf origin
+`(networkId 0, 0x0)`) on every chain; only the form it is held in changes. This is the
+same model the dev-ui app uses with `currency.wethToken` (`config/configSchema.mjs`,
+`app/hooks/useBridgeExecution.ts`).
+
+**There is no config field for this.** `preflight` discovers it live
+(`wallets/preflight.ts`, `checkGasToken`), for every **ring** chain:
+
+| `gasTokenAddress()` on the chain's `bridgeAddress` | Result |
+|---|---|
+| zero | ETH-gas chain — unchanged behaviour (`GAS_TOKEN` column `pass`) |
+| non-zero, and `gasTokenNetwork()` + `WETHToken()` resolve (WETH non-zero) | **gas-token chain**: `pass`; identity recorded |
+| non-zero but `WETHToken()` is zero / `gasTokenNetwork()` has no data, or the call fails / returns no data | `GAS_TOKEN_NOT_ETHER` (the only remaining way to get this code) |
+
+When a gas-token chain is found, `preflight` (and the preflight step inside `run`) prints
+one extra line below the table, and `results.json` records the same under
+`gasTokenChains`:
+
+```
+gas-token chain "BALI_63": gasToken=0x0000003f0000003f0000003f0000003f0000003f originNetwork=63 weth=0x77290275947f166793b8d10428670e1fca26960a (eth held as WETH)
+```
+
+(`weth=` is the chain's own `WETHToken()`, lower-cased; the values shown are what Bali 63 returned on 2026-10-01.) The tool
+asserts nothing about the discovered values; read the line and confirm it is the chain you
+meant. Non-ring chains (e.g. the L1 in a ring that does not include it) are not probed.
+
+What changes per hop, for the `eth` asset (`runner.ts` `buildHopSpecs`,
+`workers/headless/headlessUser.ts` `bridge`):
+
+| Hop leaves | Bridge call | Arrives on the destination as |
+|---|---|---|
+| an ETH-gas chain | `bridgeAsset(token = 0x0, msg.value = amount)` (unchanged) | native ETH on an ETH-gas chain; **WETH minted** on a gas-token chain |
+| a gas-token chain | `bridgeAsset(token = WETHToken)`, `msg.value` 0, **no approval** | native ETH on an ETH-gas chain; WETH on another gas-token chain |
+
+**Leaf identity check.** For every hop that touches a gas-token chain, the `BridgeEvent`
+decoded from the bridge receipt must carry origin `(0, 0x0)` for the `eth` asset. Otherwise
+the hop fails with an error whose message starts with `ASSET_IDENTITY_MISMATCH:` (it is
+not a dedicated error class; expect it under `errors.byClass.internal`). This is the check
+that would catch the tool silently bridging the chain's gas token instead of ETH. There is
+no arrival-balance assertion: a hop still succeeds on tracker status plus `isClaimed`.
+
+**Rules and refusals**
+
+- `RING_ETH_START_ON_GAS_TOKEN_CHAIN` (`preflight`): an `eth` asset whose `ring[0]` is a
+  gas-token chain is refused. Users would have to hold WETH before the first hop and the
+  funder cannot supply it. Start the ring on an ETH-gas chain.
+- `BROWSER_GAS_TOKEN_UNSUPPORTED` (`run`, after preflight passes): `users.browser > 0`
+  together with a gas-token ring chain is refused. The browser build has no WETH currency
+  entry for such a chain, so those users would bridge the native token. Use
+  `--browser 0` (headless only). `fund` and `preflight` do not raise this code.
+- A plain ETH-gas config (no gas-token chain among the ring chains) behaves and validates
+  exactly as before; `validate` never talks to a chain, so a config containing a
+  gas-token chain passes `validate` and only meets the rules above at `preflight`/`run`.
+- Per-chain `bridgeAddress` was already supported; a gas-token chain commonly has a
+  different bridge address from the L1 (Bali 63 does). Preflight's bytecode and gas-token
+  reads use each chain's own `bridgeAddress`.
+
+**Funding.** `users.funder.gasPerChain[<key>]` / `maxTotalSpend[<key>]` always mean that
+chain's **native** currency, so for a gas-token chain they are denominated in the gas
+token (Bali 63: Base Sepolia ETH). The funder must hold that currency on that chain.
+WETH on a gas-token chain is never pre-funded: it arrives on the inbound hop.
+
+**`LocalBalanceTreeUnderflow` (LBT).** Burning WETH out of a gas-token chain decrements
+that chain's `localBalanceTree[(0, 0x0)]`, which inbound hops credit first, so a ring that
+enters the gas-token chain before leaving it is safe. The `validate` check
+`RING_MUST_START_AT_ASSET_ORIGIN` covers `erc20` assets only; for an `eth` asset a ring that
+**starts on an L2** is not checked. Its first hop bridges that L2's own native ETH, so that
+bridge's `localBalanceTree(keccak256(abi.encodePacked(uint32(0), address(0))))` (key
+`0x827b659bbda2a0bdecce2c91b8b68462545758f3eba2dbefef18e0daf84f5ccd`) must already be at
+least the bridge amount; check it with an `eth_call` before such a run. A revert that
+comes back as raw selector data (`0x14603c01`, `LocalBalanceTreeUnderflow(uint32,address,
+uint256,uint256)`) is classified `lbt_underflow` just like the decoded name.
+
+(`DESIGN.md` §10 still describes the old behaviour — "refused at `validate`". The refusal
+was never at `validate`, and it is now replaced by the discovery above.)
+
+## One lap per user: coverage runs, not load
+
+For route coverage (every route exercised once, not throughput) you want exactly one lap
+per user. The scheduler's first tick for a user fires one full period after that user is
+admitted (its token bucket starts empty), and nothing is issued at or after the offer
+window's end (`core/scheduler.ts`; the pump runs every second in `runner.ts`). So:
+
+| `--rate` | `--minutes` | `rampUpSeconds` | Laps per user |
+|---|---|---|---|
+| 1 | 1 | any | **0** — first tick lands exactly at the end; headline is `NO LAPS STARTED` |
+| 1 | 2 | 0 (any `< 60`) | **exactly 1**, for any `--users`, independent of lap latency |
+| 1 | 3 | 30 | 1 here only because of `maxInflightLapsPerUser: 1` back-pressure (2nd tick dropped as `skipped_backpressure`) |
+
+The recommended coverage profile is `load: { bridgesPerMinutePerUser: 1, durationMinutes:
+2, rampUpSeconds: 0, maxInflightLapsPerUser: 1 }` run as `--users 1 --browser 0 --rate 1
+--minutes 2`. The report will show `ticksExpected = 2 x users` against `ticksOffered =
+users`; that gap is cosmetic. Note that `--rate`/`--minutes` are applied after the schema
+parse, so `RAMP_UP_EXCEEDS_DURATION` does not guard them.
+
+**Wall clock is the drain, not `--minutes`.** After the offer window the run drains
+in-flight laps. The drain deadline is the earlier of `drainStart + hopMs` and the latest
+`hopStart + hopMs` over in-flight hops (`core/scheduler.ts`, `computeDrainDeadline`), and
+when it passes, the current hop **and every later hop of that lap** end `aborted_drain`
+(`core/ring.ts`, T29). In practice the whole lap must finish within about `hopMs` of its
+current hop's start. On testnets with slow L2 -> L1 settlement, size `hopMs` (and `lapMs`,
+which should be at least as large) to the expected lap time, or the negative-case last hop
+is the one that gets cut. `Ctrl-C` depends on the phase (`runner.ts:1088-1097,1129-1141`,
+`core/scheduler.ts:274-282`): during the offer window (`--minutes`) the first `Ctrl-C` starts a
+normal drain and a second skips the grace period and writes the report; **after the offer
+window has ended a single `Ctrl-C` aborts the run immediately** (the drain is already running, so
+`beginDrain` just sets the deadline to now). Either way the headline is `ABORTED (sigint)`.
 
 ## Capacity guidance (measured)
 
@@ -347,7 +494,9 @@ tool bug.
    That L2's LocalBalanceTree must already hold the token — the ring's first hop
    (L1 -> that L2) is what provides this. Surfaces at `eth_estimateGas`. If you
    see this, check the ring order: it must start at the asset's origin chain
-   (enforced by `validate`'s `RING_MUST_START_AT_ASSET_ORIGIN`).
+   (enforced by `validate`'s `RING_MUST_START_AT_ASSET_ORIGIN` for `erc20` assets
+   only — for `eth`, a ring starting on an L2 is not checked; see
+   [Gas-token chains](#gas-token-chains-eth-held-as-weth)).
 5. **`getByTestId` can silently match nothing in a hand-rolled Playwright page.**
    `testIdAttribute: 'data-test-id'` (this repo's convention) only applies to the
    Playwright `test`-fixture's page object. A page opened via a bare
@@ -366,12 +515,20 @@ tool bug.
    configured asset correctly** — size `--rate`/`--minutes` so every
    requested asset actually gets a turn (or check `activity.ndjson` to see
    which assets were exercised).
+   The same arithmetic means `--rate 1 --minutes 1` starts **zero** laps and
+   reads `NO LAPS STARTED` (see [One lap per user](#one-lap-per-user-coverage-runs-not-load)).
 7. **aggkit's own `/metrics` is not exposed by this compose devnet** (`404` on
    both aggkit containers' metrics ports). Only **agglayer's** `:9092` is
    reachable — use it for the certificate-health check in item 2.
 8. **`run` used to hang past `run: complete` without releasing its browser
    pool — fixed in S21 (R1)**, see the CLI reference note above. Still prefer
    waiting for the report files over the `run` PID as good practice.
+9. **Gas-token chain codes.** `GAS_TOKEN_NOT_ETHER` now means only "this ring
+   chain's `gasTokenAddress()` is non-zero but its WETH could not be resolved"
+   (a non-zero gas token alone is accepted); `RING_ETH_START_ON_GAS_TOKEN_CHAIN`
+   (`preflight`) and `BROWSER_GAS_TOKEN_UNSUPPORTED` (`run`, after preflight) are
+   refusals; `ASSET_IDENTITY_MISMATCH:` is a hop error message prefix. All four are
+   explained in [Gas-token chains](#gas-token-chains-eth-held-as-weth).
 
 ## Two dev-ui changes this branch makes
 

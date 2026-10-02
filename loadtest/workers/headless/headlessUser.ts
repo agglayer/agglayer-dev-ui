@@ -350,7 +350,10 @@ export class HeadlessUser implements UserDriver {
     return runWithFetchContext({ userId: this.userId, mode: this.mode }, async () => {
       const fromChain = this.chainByKey(hop.fromChainKey);
       const toChain = this.chainByKey(hop.toChainKey);
-      const isNative = hop.assetKind === 'eth';
+      // Design B: on a gas-token chain `eth` is held as the chain's WETH, so
+      // bridging it out burns WETH (token = WETH, no msg.value, no approval).
+      const isWethBurn = hop.assetKind === 'eth' && hop.fromWethToken !== undefined;
+      const isNative = hop.assetKind === 'eth' && !isWethBurn;
       const amountWei = parseUnits(hop.amount, hop.decimals);
 
       // P8: eth_gasPrice, 15s cache, display-only — the UI's shown fee uses
@@ -370,7 +373,9 @@ export class HeadlessUser implements UserDriver {
       // so it's a headless-only addition, cached indefinitely per chain.
       const fromTokenAddress = isNative
         ? undefined
-        : await this.resolveTokenAddress(hop, fromChain);
+        : isWethBurn
+          ? (hop.fromWethToken as Address)
+          : await this.resolveTokenAddress(hop, fromChain);
 
       // P7: balance read, 15s cache, no refetch-on-mount.
       await this.balanceCache.get(
@@ -387,7 +392,7 @@ export class HeadlessUser implements UserDriver {
       let allowance: AllowanceRead | null = null;
       let approve: TxStepResult | null = null;
 
-      if (!isNative) {
+      if (!isNative && !isWethBurn) {
         const tokenAddress = fromTokenAddress as Address;
         const allowanceStartedAt = this.clock.now();
         // P9: keyed including the amount string — a fresh cache entry (and
@@ -437,6 +442,23 @@ export class HeadlessUser implements UserDriver {
               destinationAddress: this.address,
               amount: amountWei.toString(),
               token: ZERO_ADDRESS,
+              forceUpdateGlobalExitRoot: true
+            },
+            this.address
+          );
+      } else if (isWethBurn) {
+        // The bridge's own mintable WETH is burned by `bridgeAsset`
+        // (privileged burn): `Bridge.buildBridgeAsset` with `token = WETH`
+        // sets no `value`, and no approval is needed (the dev-ui app does
+        // the same on a `wethToken` chain).
+        bridgeTxParams = await this.native
+          .bridge(fromChain.bridgeAddress, fromChain.chainId)
+          .buildBridgeAsset(
+            {
+              destinationNetwork: toChain.networkId,
+              destinationAddress: this.address,
+              amount: amountWei.toString(),
+              token: fromTokenAddress as Address,
               forceUpdateGlobalExitRoot: true
             },
             this.address
@@ -492,6 +514,19 @@ export class HeadlessUser implements UserDriver {
       }
 
       const decoded = this.decodeBridgeEvent(fromChain.bridgeAddress as Address, rawReceipt.logs);
+      // SD4: on a hop touching a gas-token chain, the leaf identity is the
+      // observable that catches a silent change of asset (e.g. bridging the
+      // gas token with token=0x0 instead of the WETH).
+      if (decoded && hop.expectedOrigin !== undefined) {
+        const matches =
+          Number(decoded.originNetwork) === hop.expectedOrigin.networkId &&
+          decoded.originAddress.toLowerCase() === hop.expectedOrigin.address.toLowerCase();
+        if (!matches) {
+          throw new Error(
+            `ASSET_IDENTITY_MISMATCH: hop ${hop.hopRoute} bridge leaf origin is (${decoded.originNetwork}, ${decoded.originAddress}), expected (${hop.expectedOrigin.networkId}, ${hop.expectedOrigin.address})`
+          );
+        }
+      }
       if (decoded) {
         this.depositInfo.set(toRowKey(bridgeStep.txHash, decoded.depositCount), {
           amount: decoded.amount,

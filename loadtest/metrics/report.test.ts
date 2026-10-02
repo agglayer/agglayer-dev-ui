@@ -215,6 +215,8 @@ describe('renderSummaryMd — every DESIGN §6.3 section is present', () => {
       sdkVersion: 'sdk1',
       host: { cores: 4, totalMemMb: 8192, platform: 'linux' }
     });
+    // A lap start must exist, else the headline is NO LAPS STARTED, not PASS.
+    collector.tick('u1', 'headless');
     collector.recordPhase({
       phase: 'bridge_submit',
       mode: 'headless',
@@ -399,6 +401,7 @@ describe('renderSummaryMd — every DESIGN §6.3 section is present', () => {
     // `duration_elapsed` is the runner's NORMAL end-of-run drain cause — a
     // run that served its full requested `--minutes` must read as PASS,
     // never ABORTED, regardless of what drained.
+    collector.tick('u1', 'headless');
     collector.runEnd({ aborted: false, abortCause: null, lapsInFlightAtStop: 4 });
     const results = buildResultsJson({ snapshot: collector.snapshot(), config });
     expect(results.run.aborted).toBe(false);
@@ -412,6 +415,7 @@ describe('renderSummaryMd — every DESIGN §6.3 section is present', () => {
   it('a normal run with nothing in flight at stop reads as a plain PASS', () => {
     const config = buildDevnetConfig();
     const collector = createCollector();
+    collector.tick('u1', 'headless');
     collector.runEnd({ aborted: false, abortCause: null, lapsInFlightAtStop: 0 });
     const results = buildResultsJson({ snapshot: collector.snapshot(), config });
     const summaryMd = renderSummaryMd(results, config);

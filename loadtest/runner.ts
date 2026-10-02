@@ -1,4 +1,4 @@
-import type { Address } from 'viem';
+import type { Address, Hex } from 'viem';
 
 // The `run` orchestrator — DESIGN's component map (§1) wired end to end:
 // load+validate → preflight → (fund) → serve UI → build the user set →
@@ -35,6 +35,7 @@ import type { DriverError, DriverMode, UserDriver } from './core/userDriver';
 import type { Collector, HostInfo, LapOutcome } from './metrics/collector';
 import type { ServeUiHandle } from './ui/serve';
 import type { DerivedWallet } from './wallets/derive';
+import type { GasTokenIdentity } from './wallets/preflight';
 
 import { createRingEngine, eventsFromBridge, eventsFromClaim, systemClock } from './core/ring';
 import { createScheduler } from './core/scheduler';
@@ -151,7 +152,13 @@ const readProcRssMb = (pid: number): number => {
   }
 };
 
-const buildHopSpecs = (config: LoadtestConfig, assetIndex: number): HopSpec[] => {
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+
+const buildHopSpecs = (
+  config: LoadtestConfig,
+  assetIndex: number,
+  gasTokenChains: Record<string, GasTokenIdentity> = {}
+): HopSpec[] => {
   const asset = config.assets[assetIndex];
   if (asset === undefined) throw new Error(`buildHopSpecs: no asset at index ${assetIndex}`);
   const chainByKey = new Map(config.chains.map((chain) => [chain.key, chain]));
@@ -171,6 +178,8 @@ const buildHopSpecs = (config: LoadtestConfig, assetIndex: number): HopSpec[] =>
     if (autoclaimEntry === undefined) {
       throw new Error(`buildHopSpecs: no autoclaim entry for hop "${hopRoute}"`);
     }
+    const fromGas = gasTokenChains[fromKey];
+    const toGas = gasTokenChains[toKey];
     hops.push({
       hopIndex: i,
       hopRoute,
@@ -181,6 +190,20 @@ const buildHopSpecs = (config: LoadtestConfig, assetIndex: number): HopSpec[] =>
       assetIndex,
       assetKind: asset.kind,
       assetAddress: asset.kind === 'erc20' ? (asset.address as Address) : undefined,
+      ...(asset.kind === 'eth' && fromGas !== undefined
+        ? { fromWethToken: fromGas.wethToken as Hex }
+        : {}),
+      ...(fromGas !== undefined || toGas !== undefined
+        ? {
+            expectedOrigin:
+              asset.kind === 'eth'
+                ? { networkId: 0, address: ZERO_ADDRESS as Hex }
+                : {
+                    networkId: asset.originNetworkId as number,
+                    address: asset.address as Hex
+                  }
+          }
+        : {}),
       amount: asset.amount,
       decimals: asset.decimals,
       autoclaim: autoclaimEntry.expected
@@ -650,6 +673,14 @@ export const runLoadTest = async (options: RunLoadTestOptions): Promise<RunLoadT
   }
   logger('preflight: all checks passed.');
 
+  // SD5: gas-token chains are headless-only — the UI build has no WETH
+  // currency entry for them, so browser users would bridge the native token.
+  if (config.users.browser > 0 && Object.keys(preflight.gasTokenChains).length > 0) {
+    throw new Error(
+      `BROWSER_GAS_TOKEN_UNSUPPORTED: users.browser=${config.users.browser} but ring chain(s) ${Object.keys(preflight.gasTokenChains).join(', ')} are gas-token chains — run headless only (--browser 0)`
+    );
+  }
+
   fs.mkdirSync(outDir, { recursive: true });
 
   // --- UI build/serve (browser mode only, and only if not already served) ---
@@ -855,7 +886,7 @@ export const runLoadTest = async (options: RunLoadTestOptions): Promise<RunLoadT
 
     const usersById = new Map(users.map((u) => [u.userId, u]));
     const hopSpecsByAssetSlot = activeAssetIndices.map((assetIndex) =>
-      buildHopSpecs(config, assetIndex)
+      buildHopSpecs(config, assetIndex, preflight.gasTokenChains)
     );
 
     collector.runStart({
@@ -1175,7 +1206,12 @@ export const runLoadTest = async (options: RunLoadTestOptions): Promise<RunLoadT
         }
       })
     );
-    const written = writeReportFiles({ dir: outDir, snapshot: collector.snapshot(), config });
+    const written = writeReportFiles({
+      dir: outDir,
+      snapshot: collector.snapshot(),
+      config,
+      gasTokenChains: preflight.gasTokenChains
+    });
 
     await disposeEverything();
 

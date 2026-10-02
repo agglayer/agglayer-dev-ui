@@ -7,7 +7,7 @@
 // preflight itself, which never calls anvil_setBalance).
 import type { Address } from 'viem';
 
-import { parseUnits } from 'viem';
+import { encodeFunctionData, parseUnits } from 'viem';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ChainClientFactory, ChainClientSet } from './chainClients';
@@ -25,6 +25,10 @@ beforeEach(() => {
 });
 
 const ZERO_ADDRESS_PADDED = `0x${'0'.repeat(64)}`;
+const WETH_TOKEN_SELECTOR = encodeFunctionData({
+  abi: [{ name: 'WETHToken', type: 'function', inputs: [], outputs: [], stateMutability: 'view' }],
+  functionName: 'WETHToken'
+});
 const NON_ZERO_GAS_TOKEN_PADDED = `0x${'0'.repeat(24)}${'ab'.repeat(20)}`;
 
 interface HappyPathOptions {
@@ -56,8 +60,13 @@ const buildHappyClientFactory = (
           if (functionName === 'allowance') return BigInt(0);
           throw new Error(`unexpected readContract in mock: ${functionName}`);
         }),
-        call: vi.fn(async () => ({
-          data: gasTokenIsNonZero ? NON_ZERO_GAS_TOKEN_PADDED : ZERO_ADDRESS_PADDED
+        // `WETHToken()` returns zero even on a gas-token chain, so the gas
+        // token cannot be resolved to a WETH and GAS_TOKEN_NOT_ETHER fires.
+        call: vi.fn(async ({ data }: { data?: string }) => ({
+          data:
+            gasTokenIsNonZero && data !== WETH_TOKEN_SELECTOR
+              ? NON_ZERO_GAS_TOKEN_PADDED
+              : ZERO_ADDRESS_PADDED
         }))
       },
       test: {},
@@ -226,7 +235,7 @@ describe('runPreflight — failure cases (DESIGN §4.5)', () => {
     );
   });
 
-  it('GAS_TOKEN_NOT_ETHER fails when a ring chain reports a non-zero gasTokenAddress() (DESIGN §10)', async () => {
+  it('GAS_TOKEN_NOT_ETHER fails when a ring chain reports a non-zero gasTokenAddress() but WETHToken() is zero (DESIGN §10)', async () => {
     const config = buildTestDevnetConfig({ usersTotal: 1 });
     const wallets = deriveWallets(config);
     const clientFactory = buildHappyClientFactory(config, { gasTokenNonZero: new Set(['L2A']) });

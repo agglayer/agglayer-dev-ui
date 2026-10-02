@@ -214,6 +214,21 @@ describe('mapActivityResponseText (DESIGN §9.2)', () => {
     expect(rows[0].rowKey).not.toBe(rows[1].rowKey);
   });
 
+  it('derives CLAIMED from the api_revision 5 shape (claim_status:"claimed", no `claimed`), rowKey/globalIndex unchanged', () => {
+    // Minimal row cut from a live capture (public addresses/hashes only).
+    const text = `{"from_address":"0x6e7b53e2f0e4dcbad1efa35d0d159b7fe399e054","bridges":[{"bridge":{"block_num":11822419,"block_pos":209,"from_address":"0x6e7B53e2f0E4DCbAd1Efa35D0D159b7FE399e054","tx_hash":"0xb993ed2cf57503088fba005edf2467da31a0954aae9df76a44b3f3d4dccbd0db","global_index":18446744073710705908,"block_timestamp":1790864928,"leaf_type":0,"origin_network":0,"origin_address":"0x0000000000000000000000000000000000000000","destination_network":82,"destination_address":"0x6e7B53e2f0E4DCbAd1Efa35D0D159b7FE399e054","amount":"10000000000000","metadata":"0x","deposit_count":1154292,"bridge_hash":"0x341849d91d8e2c666db3caff4681ced250872d7f1b684d480a7396abd9da6077","txn_sender":"0x6e7B53e2f0E4DCbAd1Efa35D0D159b7FE399e054","to_address":"0x1348947e282138d8f377b467F7D9c2EB0F335d1f"},"bridge_network_id":0,"source":"bridge","claim_status":"claimed","claim_network_id":82,"claim":{"block_num":4497171,"block_timestamp":1790865303,"tx_hash":"0x86558cdbf8411be0615373b22cca84a7701b359080aa7e7a505e7ab3c16fb9ea","global_index":"18446744073710705908","destination_network":82,"amount":"10000000000000","is_message":false},"creation_timestamp":1790864928,"last_updated_timestamp":1790932946}]}`;
+    const { rows } = mapActivityResponseText(text);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].status).toBe('CLAIMED');
+    expect(rows[0].rowKey).toBe(
+      '0xb993ed2cf57503088fba005edf2467da31a0954aae9df76a44b3f3d4dccbd0db:1154292'
+    );
+    expect(rows[0].globalIndex).toBe('18446744073710705908');
+    expect(rows[0].claimTransactionHash).toBe(
+      '0x86558cdbf8411be0615373b22cca84a7701b359080aa7e7a505e7ab3c16fb9ea'
+    );
+  });
+
   it('surfaces a top-level warnings array untouched (finding C13)', () => {
     const raw = JSON.parse(rawActivityFixture()) as Record<string, unknown>;
     raw.warnings = [{ network_id: 2, message: 'dial tcp 34.147.196.6:5577: connect: timed out' }];
