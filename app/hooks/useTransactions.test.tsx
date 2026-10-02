@@ -22,7 +22,6 @@ import { useAggkitAggregator } from '@/app/context/aggLayerSdk';
 import { useAppMode } from '@/app/context/appMode';
 import { PendingBridgesProvider, usePendingBridges } from '@/app/context/pendingBridges';
 
-import { useReadyToClaimCount } from './useReadyToClaimCount';
 import { useTransactions } from './useTransactions';
 
 const wrapper = ({ children }: { children: ReactNode }) => {
@@ -67,10 +66,11 @@ const mockFetchOk = (bridges: unknown[]) =>
     bridges: bridges.map((bridge) => ({
       bridge,
       bridge_network_id: 0,
-      claimed: 'false',
+      claim_status: 'pending',
       creation_timestamp: 0,
       last_updated_timestamp: 0
     })),
+    count: bridges.length,
     warnings: []
   });
 
@@ -107,7 +107,7 @@ const renderTransactions = (fromAddress = '0xabc') =>
       pending: usePendingBridges(),
       transactions: useTransactions({
         chainId: 1,
-        filters: { fromAddress, order: 'desc' as const },
+        filters: { fromAddress },
         enabled: true
       })
     }),
@@ -181,45 +181,152 @@ describe('useTransactions -- pending bridge placeholders', () => {
   });
 });
 
-describe('useTransactions -- activity queryKey parity with useReadyToClaimCount', () => {
+// A fake tracker: serves `bridges` (newest first) the way getActivity pages
+// them, so the tests can change what it holds between requests.
+const PAGE_SIZE = 2;
+let trackerBridges: number[] = [];
+const bridgeItem = (id: number) => ({
+  bridge: rawBridge({ tx_hash: `0xtx${id}`, deposit_count: id }),
+  bridge_network_id: 0,
+  claim_status: 'pending',
+  creation_timestamp: id,
+  last_updated_timestamp: id
+});
+const serveFromTracker = ({ pageNumber, pageSize }: { pageNumber: number; pageSize: number }) =>
+  Promise.resolve({
+    bridges: trackerBridges
+      .slice((pageNumber - 1) * pageSize, pageNumber * pageSize)
+      .map(bridgeItem),
+    count: trackerBridges.length,
+    warnings: []
+  });
+const requestedPages = () =>
+  mockGetActivity.mock.calls.map(([params]) => (params as { pageNumber: number }).pageNumber);
+const hubUIDs = (result: { current: { transactions: { transactions: Transaction[] } } }) =>
+  result.current.transactions.transactions.map((tx) => tx.hubUID);
+
+describe('useTransactions -- server-side filter and pagination', () => {
   beforeEach(() => {
     vi.mocked(useAppMode).mockReturnValue({
       mode: 'mainnet',
-      config: { aggkitBridgeApis: { 1: 'https://proxy.example', 2: 'https://proxy.example' } }
+      config: { aggkitBridgeApis: { 1: 'https://proxy.example' } }
     } as unknown as ReturnType<typeof useAppMode>);
     vi.mocked(useAggkitAggregator).mockReturnValue({
       getActivity: mockGetActivity
     } as unknown as AggkitBridgeAggregator);
+    trackerBridges = [5, 4, 3, 2, 1];
+    mockGetActivity.mockImplementation(serveFromTracker);
   });
 
   afterEach(() => {
     mockGetActivity.mockReset();
   });
 
-  // chainId used to be part of both hooks' queryKey even though
-  // fetchActivity's request/response never varies by it -- see the comment
-  // on useTransactions' queryKey. That fragmented the cache: the header
-  // badge (a different chainId than the page it badges) and the
-  // Transactions page ended up as two separate cache entries firing two
-  // fetches instead of dedupe kicking in.
-  it('dedupes into a single fetch when mounted together with different chainIds but the same mode/address', async () => {
-    mockGetActivity.mockResolvedValue({ bridges: [], warnings: [] });
-
-    const { result } = renderHook(
+  const renderPaged = (status?: Transaction['status']) =>
+    renderHook(
       () => ({
         transactions: useTransactions({
           chainId: 1,
-          filters: { fromAddress: '0xabc' },
+          filters: { fromAddress: '0xabc', status, limit: PAGE_SIZE },
           enabled: true
-        }),
-        readyToClaimCount: useReadyToClaimCount({ chainId: 2, address: '0xabc' })
+        })
       }),
       { wrapper }
     );
 
+  it('sends the status as filterBridges and requests the first page', async () => {
+    const { result } = renderPaged('READY_TO_CLAIM');
     await waitFor(() => expect(result.current.transactions.isLoading).toBe(false));
-    await waitFor(() => expect(result.current.readyToClaimCount.isSuccess).toBe(true));
 
-    expect(mockGetActivity).toHaveBeenCalledTimes(1);
+    expect(mockGetActivity).toHaveBeenCalledWith({
+      fromAddress: '0xabc',
+      includeTracking: true,
+      filterBridges: 'readyToClaim',
+      pageNumber: 1,
+      pageSize: PAGE_SIZE
+    });
+  });
+
+  it('shows the first page, with the server-side count as the total', async () => {
+    const { result } = renderPaged();
+    await waitFor(() => expect(result.current.transactions.isLoading).toBe(false));
+
+    expect(hubUIDs(result)).toEqual(['0xtx5:5', '0xtx4:4']);
+    expect(result.current.transactions.totalCount).toBe(5);
+    expect(result.current.transactions.hasNextPage).toBe(true);
+  });
+
+  it('re-requests page 1 and then only the next page when page 1 is unchanged', async () => {
+    const { result } = renderPaged();
+    await waitFor(() => expect(result.current.transactions.isLoading).toBe(false));
+    mockGetActivity.mockClear();
+
+    await act(() => result.current.transactions.fetchNextPage());
+
+    expect(requestedPages()).toEqual([1, 2]);
+    expect(hubUIDs(result)).toEqual(['0xtx5:5', '0xtx4:4', '0xtx3:3', '0xtx2:2']);
+    expect(result.current.transactions.hasNextPage).toBe(true);
+  });
+
+  it('stops offering "load more" once the last page is loaded', async () => {
+    const { result } = renderPaged();
+    await waitFor(() => expect(result.current.transactions.isLoading).toBe(false));
+
+    await act(() => result.current.transactions.fetchNextPage());
+    await act(() => result.current.transactions.fetchNextPage());
+
+    expect(hubUIDs(result)).toHaveLength(5);
+    expect(result.current.transactions.hasNextPage).toBe(false);
+  });
+
+  it('reloads every loaded page, plus the next, when a new bridge landed on page 1', async () => {
+    const { result } = renderPaged();
+    await waitFor(() => expect(result.current.transactions.isLoading).toBe(false));
+    await act(() => result.current.transactions.fetchNextPage());
+    expect(hubUIDs(result)).toHaveLength(4);
+    mockGetActivity.mockClear();
+
+    // A bridge arrives: every older one shifts down a slot.
+    trackerBridges = [6, 5, 4, 3, 2, 1];
+    await act(() => result.current.transactions.fetchNextPage());
+
+    expect(requestedPages()).toEqual([1, 2, 3]);
+    // No row twice, none missing, newest first.
+    expect(hubUIDs(result)).toEqual([
+      '0xtx6:6',
+      '0xtx5:5',
+      '0xtx4:4',
+      '0xtx3:3',
+      '0xtx2:2',
+      '0xtx1:1'
+    ]);
+    expect(result.current.transactions.totalCount).toBe(6);
+  });
+
+  it('treats a page 1 with the same total but a different bridge as changed', async () => {
+    const { result } = renderPaged();
+    await waitFor(() => expect(result.current.transactions.isLoading).toBe(false));
+    await act(() => result.current.transactions.fetchNextPage());
+    mockGetActivity.mockClear();
+
+    // One bridge arrives while another leaves the set: same count, same
+    // page size, different page 1.
+    trackerBridges = [6, 5, 3, 2, 1];
+    await act(() => result.current.transactions.fetchNextPage());
+
+    expect(requestedPages()).toEqual([1, 2, 3]);
+    expect(hubUIDs(result)).toEqual(['0xtx6:6', '0xtx5:5', '0xtx3:3', '0xtx2:2', '0xtx1:1']);
+  });
+
+  it('keeps the loaded pages and surfaces an error when loading more fails', async () => {
+    const { result } = renderPaged();
+    await waitFor(() => expect(result.current.transactions.isLoading).toBe(false));
+
+    mockGetActivity.mockRejectedValueOnce(new Error('boom'));
+    await act(() => result.current.transactions.fetchNextPage());
+
+    expect(hubUIDs(result)).toEqual(['0xtx5:5', '0xtx4:4']);
+    expect(result.current.transactions.fetchNextPageError?.message).toBe('boom');
+    expect(result.current.transactions.error).toBeNull();
   });
 });

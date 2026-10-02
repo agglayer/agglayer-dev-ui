@@ -10,6 +10,7 @@ import { TransactionList } from '@/app/components/transactions/transactionList';
 import { Button } from '@/app/components/ui/button';
 import { Card } from '@/app/components/ui/card';
 import { Modal } from '@/app/components/ui/modal';
+import { ACTIVITY_PAGE_SIZE } from '@/app/constants/activity';
 import { useAppMode } from '@/app/context/appMode';
 import { useRefetch } from '@/app/context/refetch';
 import { useWallet } from '@/app/context/walletContext';
@@ -56,8 +57,7 @@ export const TransactionsView = () => {
       fromAddress: address,
       status: filters.status,
       updatedSince: filters.updatedSince,
-      order: 'desc' as const,
-      limit: 20
+      limit: ACTIVITY_PAGE_SIZE
     }),
     [address, filters]
   );
@@ -71,6 +71,7 @@ export const TransactionsView = () => {
     warnings,
     isLoading,
     isFetchingNextPage,
+    fetchNextPageError,
     hasNextPage,
     fetchNextPage,
     error,
@@ -100,10 +101,8 @@ export const TransactionsView = () => {
           return next;
         });
       }
-      // useReadyToClaimCount (header badge) shares this exact queryKey
-      // (['activity', mode, chainId, address], see useTransactions/
-      // useReadyToClaimCount) so refetching here also refreshes the badge --
-      // no separate invalidation needed.
+      // useTransactions' refetch also invalidates useReadyToClaimCount's
+      // query, so the header badge refreshes along with the list.
       void refetch();
     },
     [refetch, triggerAggressiveRefetch]
@@ -200,7 +199,10 @@ export const TransactionsView = () => {
           </p>
           {totalCount > 0 && (
             <p className="text-base font-semibold text-muted">
-              Total transactions: <span className="text-black">{totalCount}</span>
+              Total transactions:{' '}
+              <span className="text-black" data-test-id="transactions-total">
+                {allTransactions.length} / {totalCount}
+              </span>
             </p>
           )}
         </div>
@@ -315,6 +317,7 @@ export const TransactionsView = () => {
           isLoading={isLoading}
           isFetchingNextPage={isFetchingNextPage}
           hasNextPage={hasNextPage}
+          loadMoreError={fetchNextPageError}
           onLoadMore={() => fetchNextPage()}
           onClaim={handleClaim}
           onSelect={handleSelectTransaction}
