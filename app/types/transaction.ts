@@ -62,7 +62,6 @@ export interface TransactionFilters {
   fromAddress?: string;
   updatedSince?: number;
   status?: TransactionStatus;
-  order?: 'asc' | 'desc';
   limit?: number;
 }
 

@@ -2,14 +2,20 @@
 
 import { useAggkitAggregator } from '@/app/context/aggLayerSdk';
 import { useAppMode } from '@/app/context/appMode';
-import { fetchActivity } from '@/app/services/activity';
 import { useQuery } from '@tanstack/react-query';
 
-// Same GET /tracker/v1/activity/from/{address} call useTransactions makes,
-// selected down to a count -- deliberately the SAME queryKey (mode, address;
-// chainId is deliberately excluded, see useTransactions) so that when the
-// header badge and the Transactions page are both mounted, react-query
-// dedupes them into a single request instead of two.
+export const READY_TO_CLAIM_COUNT_KEY = ['readyToClaimCount'];
+
+// Asks the tracker for just the bridges that are ready to claim
+// (filterBridges: 'readyToClaim') and reads the total off `count`, a page of
+// size 1 being all it takes -- the old version loaded the address's whole
+// history to count it client-side. includeTracking stays off: the count
+// needs no step detail, and tracking registers every unclaimed bridge it
+// returns with the tracker.
+//
+// Its own query rather than a slice of useTransactions' list (which is now a
+// per-status, paginated cache): useTransactions.refetch invalidates this key
+// so a refresh on the Transactions page refreshes the header badge too.
 export const useReadyToClaimCount = (params: {
   chainId?: number;
   address?: string;
@@ -20,13 +26,18 @@ export const useReadyToClaimCount = (params: {
   const aggregator = useAggkitAggregator();
 
   return useQuery({
-    queryKey: ['activity', mode, address],
+    queryKey: [...READY_TO_CLAIM_COUNT_KEY, mode, address],
     enabled: enabled && Boolean(chainId && address),
     queryFn: async () => {
       if (!address) throw new Error('MISSING_PARAMS');
-      return fetchActivity({ aggregator, fromAddress: address });
+      const result = await aggregator.getActivity({
+        fromAddress: address,
+        filterBridges: 'readyToClaim',
+        pageNumber: 1,
+        pageSize: 1
+      });
+      return result.count;
     },
-    select: (data) => data.transactions.filter((tx) => tx.status === 'READY_TO_CLAIM').length,
     staleTime: 30 * 1000,
     // Poll steadily so the badge reflects deposits becoming claimable even
     // when the Transactions page (and its own, faster poll) isn't mounted.

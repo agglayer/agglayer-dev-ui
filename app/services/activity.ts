@@ -26,9 +26,12 @@ import type {
 //
 // Trade-offs versus the old aggregator-based path (accepted per product
 // decision, S-review 2026-08-28):
-//  - No pagination: `bridges` is the address's entire history in one
-//    response. useTransactions now paginates client-side over the full,
-//    already-fetched array instead of requesting successive pages.
+//  - Pagination and status filtering are server-side (SDK `pageNumber`/
+//    `pageSize`/`filterBridges`): each response is one page, newest bridge
+//    first, plus the `count` matching the filter across every page.
+//    useTransactions walks the pages on "load more" and re-validates page 1
+//    first, since pages are not a consistent snapshot -- see
+//    app/utils/activityPages.ts.
 //  - Per-network partial-failure reporting is now a `warnings` array on the
 //    response (added after this module's initial port), one entry per
 //    upstream bridge service call that failed -- replaces the old
@@ -165,19 +168,54 @@ export const toTransaction = (item: AggkitActivityItem): Transaction => {
 
 export interface ActivityResult {
   transactions: Transaction[];
+  // Total bridges matching the requested filter across EVERY page, not
+  // `transactions.length`.
+  count: number;
   warnings: AggkitActivityWarning[];
 }
+
+// Derived from getActivity's own signature: the SDK defines
+// `AggkitActivityFilter` but doesn't re-export it from its package root.
+type AggkitActivityFilter = NonNullable<
+  Parameters<AggkitBridgeAggregator['getActivity']>[0]['filterBridges']
+>;
+
+// The tracker filters on `claim_status`, so each UI status maps onto the
+// claim_status deriveStatus collapses into it. No status means no filtering.
+export const toActivityFilter = (status?: TransactionStatus): AggkitActivityFilter => {
+  switch (status) {
+    case 'CLAIMED':
+      return 'claimed';
+    case 'READY_TO_CLAIM':
+      return 'readyToClaim';
+    case 'ERROR':
+      return 'error';
+    case 'PENDING':
+      return 'pending';
+    default:
+      return 'all';
+  }
+};
 
 export const fetchActivity = async (params: {
   aggregator: AggkitBridgeAggregator;
   fromAddress: string;
+  filterBridges?: AggkitActivityFilter;
+  pageNumber?: number;
+  pageSize?: number;
 }): Promise<ActivityResult> => {
-  const { aggregator, fromAddress } = params;
+  const { aggregator, fromAddress, filterBridges, pageNumber, pageSize } = params;
   // Always requested: tracking is what useBridgeTracking/TrackerProgressBar/
   // TrackerDetail now read straight off the Transaction (see
   // app/hooks/useBridgeTracking.ts), and it's also how READY_TO_CLAIM is
   // told apart from PENDING above.
-  const result = await aggregator.getActivity({ fromAddress, includeTracking: true });
+  const result = await aggregator.getActivity({
+    fromAddress,
+    includeTracking: true,
+    filterBridges,
+    pageNumber,
+    pageSize
+  });
 
   // Every reported bridge becomes a row: the tracker already returns one
   // unified, server-side-deduped list per address, so there is nothing left
@@ -187,6 +225,7 @@ export const fetchActivity = async (params: {
   // toHubUID above for the live evidence).
   return {
     transactions: result.bridges.map(toTransaction),
+    count: result.count,
     warnings: result.warnings
   };
 };

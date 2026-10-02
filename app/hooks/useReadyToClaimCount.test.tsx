@@ -6,11 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AggkitBridgeAggregator } from '@agglayer/sdk';
 
-// Since S-review 2026-08-28, useReadyToClaimCount reads from the same
-// GET /tracker/v1/activity/from/{address} call useTransactions makes (see
-// app/services/activity.ts) -- since agglayer/sdk#30/#31, that call goes
-// through AggkitBridgeAggregator.getActivity rather than a raw fetch(), so
-// this suite mocks useAggkitAggregator directly.
+// useReadyToClaimCount calls AggkitBridgeAggregator.getActivity with
+// filterBridges: 'readyToClaim' and reads the total off `count`, so this suite
+// mocks useAggkitAggregator directly.
 vi.mock('@/app/context/appMode', () => ({
   useAppMode: vi.fn()
 }));
@@ -28,29 +26,7 @@ const wrapper = ({ children }: { children: ReactNode }) => {
   return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
 };
 
-const rawBridge = (bridgeHash: string) => ({
-  tx_hash: '0x1',
-  amount: '1',
-  block_num: 1,
-  block_pos: 0,
-  block_timestamp: 0,
-  bridge_hash: bridgeHash,
-  deposit_count: 1,
-  destination_address: '0xabc',
-  destination_network: 1,
-  global_index: '1',
-  leaf_type: 0,
-  metadata: '0x',
-  origin_address: '0x0',
-  origin_network: 0,
-  to_address: '0xabc',
-  txn_sender: '0xabc'
-});
-
 const mockGetActivity = vi.fn();
-
-const mockFetchOk = (body: { bridges: unknown[]; warnings?: unknown[] }) =>
-  mockGetActivity.mockResolvedValue({ warnings: [], ...body });
 
 describe('useReadyToClaimCount', () => {
   beforeEach(() => {
@@ -67,45 +43,24 @@ describe('useReadyToClaimCount', () => {
     mockGetActivity.mockReset();
   });
 
-  it('counts only bridges that are unclaimed and waiting on just the claim step', async () => {
-    // BREAKING (agglayer/aggkit#1830, SDK PR #1831): the old `claimed`
-    // tri-state + hand-inspected `tracking` is gone -- `claim_status` already
-    // gives this signal directly (see activity.ts's deriveStatus).
-    mockFetchOk({
-      bridges: [
-        // claimed -- not counted
-        {
-          bridge: rawBridge('0x1'),
-          bridge_network_id: 0,
-          claim_status: 'claimed',
-          creation_timestamp: 0,
-          last_updated_timestamp: 0
-        },
-        // unclaimed, ready to claim -- counted
-        {
-          bridge: rawBridge('0x2'),
-          bridge_network_id: 0,
-          claim_status: 'readyToClaim',
-          creation_timestamp: 0,
-          last_updated_timestamp: 0
-        },
-        // unclaimed, not yet ready -- not counted (PENDING, not READY_TO_CLAIM)
-        {
-          bridge: rawBridge('0x3'),
-          bridge_network_id: 0,
-          claim_status: 'pending',
-          creation_timestamp: 0,
-          last_updated_timestamp: 0
-        }
-      ]
-    });
+  it('asks the tracker for the ready-to-claim total instead of loading the whole history', async () => {
+    // The badge needs only the total: a page of size 1 filtered server-side
+    // to readyToClaim, with the answer read off `count`.
+    mockGetActivity.mockResolvedValue({ bridges: [], count: 7, warnings: [] });
 
     const { result } = renderHook(() => useReadyToClaimCount({ chainId: 1, address: '0xabc' }), {
       wrapper
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data).toBe(1);
+    expect(result.current.data).toBe(7);
     expect(result.current.isError).toBe(false);
+    expect(mockGetActivity).toHaveBeenCalledTimes(1);
+    expect(mockGetActivity).toHaveBeenCalledWith({
+      fromAddress: '0xabc',
+      filterBridges: 'readyToClaim',
+      pageNumber: 1,
+      pageSize: 1
+    });
   });
 });
