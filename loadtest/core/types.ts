@@ -315,6 +315,14 @@ export interface HopSpec {
   assetIndex: number;
   assetKind: AssetKind;
   assetAddress?: Hex;
+  // Design B (gas-token chains). Both optional and omitted on ETH-gas hops.
+  // `fromWethToken`: set iff the asset is `eth` and `fromChain` is a
+  // gas-token chain — the driver bridges out by burning this WETH
+  // (`token = fromWethToken`, no msg.value, no approval).
+  fromWethToken?: Hex;
+  // Set iff either end of the hop is a gas-token chain: the origin identity
+  // the bridge leaf must carry (`eth` -> network 0 / zero address).
+  expectedOrigin?: { networkId: number; address: Hex };
   amount: string;
   decimals: number;
   autoclaim: HopAutoclaim;

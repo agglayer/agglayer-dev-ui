@@ -830,8 +830,9 @@ Fixed section order (S07 asserts each heading is present; `report --dir`
 regenerates it **byte-identical** from `results.json`, which is S11's
 acceptance):
 
-1. `# Bridge load test — <startedAt>` — one line stating pass/abort, users,
-   rate, duration.
+1. `# Bridge load test — <startedAt>` — one line stating the verdict
+   (`ABORTED` > `NO LAPS STARTED` > `FAIL` on any `LAP_FAILED` > `INCOMPLETE` on any
+   `LAP_ABORTED` > `PASS`), users, rate, duration.
 2. `## Configuration` — env, proxy URL, ring, assets, autoclaim map, timeouts.
    Secrets shown as `env:NAME`.
 3. `## Throughput` — requested vs achieved table, plus the §5.5 identity
@@ -1177,7 +1178,9 @@ Reported, not silently corrected. Each is falsifiable at the cited line.
   (`activity.ts:147-153`) returns `ERROR` when the endpoint's `claimed`
   tri-state is `'error'`, and callers "must not read `error` as `false`"
   (`activity.ts:91-94`). Plan §3's phase list has no state for it; §3.2 T16
-  adds `activity_status_error`.
+  adds `activity_status_error`. Tracker `api_revision` 5 drops `claimed` for a
+  string `claim_status`; `deriveStatus` also maps `claim_status: "claimed"` to
+  `CLAIMED` (no other `claim_status` value is evidenced yet).
 - **C13 — the activity response can carry per-network `warnings`.**
   `activity.ts:109-120`: one entry per upstream bridge service that failed, so
   the list may be an incomplete picture for that `network_id` while the

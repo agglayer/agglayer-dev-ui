@@ -7,13 +7,13 @@
 // preflight itself, which never calls anvil_setBalance).
 import type { Address } from 'viem';
 
-import { parseUnits } from 'viem';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { encodeFunctionData, parseUnits } from 'viem';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ChainClientFactory, ChainClientSet } from './chainClients';
 
 import { deriveWallets } from './derive';
-import { runPreflight } from './preflight';
+import { runPreflight, SYNC_LAG_ENV } from './preflight';
 import { buildTestDevnetConfig, TEST_FUNDER_PRIVATE_KEY, TEST_MNEMONIC } from './testHelpers';
 
 const MNEMONIC_ENV = 'LOADTEST_TEST_MNEMONIC';
@@ -25,6 +25,10 @@ beforeEach(() => {
 });
 
 const ZERO_ADDRESS_PADDED = `0x${'0'.repeat(64)}`;
+const WETH_TOKEN_SELECTOR = encodeFunctionData({
+  abi: [{ name: 'WETHToken', type: 'function', inputs: [], outputs: [], stateMutability: 'view' }],
+  functionName: 'WETHToken'
+});
 const NON_ZERO_GAS_TOKEN_PADDED = `0x${'0'.repeat(24)}${'ab'.repeat(20)}`;
 
 interface HappyPathOptions {
@@ -56,8 +60,13 @@ const buildHappyClientFactory = (
           if (functionName === 'allowance') return BigInt(0);
           throw new Error(`unexpected readContract in mock: ${functionName}`);
         }),
-        call: vi.fn(async () => ({
-          data: gasTokenIsNonZero ? NON_ZERO_GAS_TOKEN_PADDED : ZERO_ADDRESS_PADDED
+        // `WETHToken()` returns zero even on a gas-token chain, so the gas
+        // token cannot be resolved to a WETH and GAS_TOKEN_NOT_ETHER fires.
+        call: vi.fn(async ({ data }: { data?: string }) => ({
+          data:
+            gasTokenIsNonZero && data !== WETH_TOKEN_SELECTOR
+              ? NON_ZERO_GAS_TOKEN_PADDED
+              : ZERO_ADDRESS_PADDED
         }))
       },
       test: {},
@@ -226,7 +235,7 @@ describe('runPreflight — failure cases (DESIGN §4.5)', () => {
     );
   });
 
-  it('GAS_TOKEN_NOT_ETHER fails when a ring chain reports a non-zero gasTokenAddress() (DESIGN §10)', async () => {
+  it('GAS_TOKEN_NOT_ETHER fails when a ring chain reports a non-zero gasTokenAddress() but WETHToken() is zero (DESIGN §10)', async () => {
     const config = buildTestDevnetConfig({ usersTotal: 1 });
     const wallets = deriveWallets(config);
     const clientFactory = buildHappyClientFactory(config, { gasTokenNonZero: new Set(['L2A']) });
@@ -313,4 +322,85 @@ describe('runPreflight — failure cases (DESIGN §4.5)', () => {
     expect(result.failures[0].code).toBe('PREFLIGHT_GAS');
     expect(result.failures.map((failure) => failure.code)).toContain('PREFLIGHT_CHAIN_ID');
   });
+});
+
+describe('runPreflight — opt-in sync lag tolerance (LOADTEST_PREFLIGHT_SYNC_LAG_BLOCKS)', () => {
+  const saved = process.env[SYNC_LAG_ENV];
+  afterEach(() => {
+    if (saved === undefined) delete process.env[SYNC_LAG_ENV];
+    else process.env[SYNC_LAG_ENV] = saved;
+  });
+
+  const run = async (l1: Record<string, unknown>, lagEnv?: string) => {
+    if (lagEnv === undefined) delete process.env[SYNC_LAG_ENV];
+    else process.env[SYNC_LAG_ENV] = lagEnv;
+    const config = buildTestDevnetConfig({ usersTotal: 1 });
+    const wallets = deriveWallets(config);
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/tracker/v1/health'))
+        return new Response(JSON.stringify({ status: 'ok' }), { status: 200 });
+      return new Response(
+        JSON.stringify({ l1_info: l1, l2_info: { is_synced: true, is_active: true } }),
+        { status: 200 }
+      );
+    }) as unknown as typeof fetch;
+    return runPreflight({
+      config,
+      wallets,
+      clientFactory: buildHappyClientFactory(config),
+      fetchImpl
+    });
+  };
+  const trailing = (lag: number, extra: Record<string, unknown> = {}) => ({
+    is_synced: false,
+    is_active: true,
+    last_processed_block: 1000,
+    network_block: 1000 + lag,
+    ...extra
+  });
+  const codes = (r: { failures: Array<{ code: string }> }) => r.failures.map((f) => f.code);
+
+  it('unset -> strict: is_synced=false fails as before', async () => {
+    const result = await run(trailing(2));
+    expect(result.ok).toBe(false);
+    expect(codes(result)).toContain('PREFLIGHT_SYNC_STATUS');
+    expect(result.syncToleranceNotes).toStrictEqual([]);
+  });
+
+  it('lag within N passes and prints the tolerance line', async () => {
+    const result = await run(trailing(12), '20');
+    expect(result.ok).toBe(true);
+    expect(result.syncToleranceNotes.length).toBeGreaterThan(0);
+    expect(result.syncToleranceNotes[0]).toContain('l1 trails by 12 blocks (<= 20) — proceeding');
+    expect(result.table).toContain('sync tolerance: chain');
+  });
+
+  it('lag equal to N passes, lag above N fails', async () => {
+    expect((await run(trailing(20), '20')).ok).toBe(true);
+    const over = await run(trailing(21), '20');
+    expect(over.ok).toBe(false);
+    expect(codes(over)).toContain('PREFLIGHT_SYNC_STATUS');
+  });
+
+  it('missing block fields fail even with N set', async () => {
+    const result = await run({ is_synced: false, is_active: true }, '20');
+    expect(result.ok).toBe(false);
+    expect(codes(result)).toContain('PREFLIGHT_SYNC_STATUS');
+  });
+
+  it('is_active=false fails even within N', async () => {
+    const result = await run(trailing(1, { is_active: false }), '20');
+    expect(result.ok).toBe(false);
+    expect(codes(result)).toContain('PREFLIGHT_SYNC_STATUS');
+  });
+
+  it.each(['abc', '-3', '1.5'])(
+    'invalid value %s fails with PREFLIGHT_SYNC_LAG_INVALID',
+    async (bad) => {
+      const result = await run({ is_synced: true, is_active: true }, bad);
+      expect(result.ok).toBe(false);
+      expect(codes(result)).toContain('PREFLIGHT_SYNC_LAG_INVALID');
+    }
+  );
 });

@@ -91,7 +91,13 @@ interface RawActivityItem {
   // Tri-state result of the destination bridge contract's isClaimed() call:
   // "false" (confirmed unclaimed), "true" (claimed), or "error" if the check
   // itself failed -- callers must not read "error" as "false".
-  claimed: 'true' | 'false' | 'error';
+  claimed?: 'true' | 'false' | 'error';
+  // Newer tracker revisions (api_revision 5) replace `claimed` with this
+  // string. Only "claimed" is evidenced in captures (live devnet response,
+  // every row carried `claim_status: "claimed"` plus a `claim` object and no
+  // `claimed`/`tracking`); other values are not documented anywhere we can
+  // read, so anything else falls through to the unclaimed derivation.
+  claim_status?: string;
   creation_timestamp: number;
   last_updated_timestamp: number;
   errors?: Record<string, string>;
@@ -145,9 +151,9 @@ const isWaitingOnClaimOnly = (tracking: AggkitTrackingData | undefined): boolean
 // isn't already waiting on just the claim tx renders as a single PENDING
 // state instead.
 export const deriveStatus = (
-  item: Pick<RawActivityItem, 'claimed' | 'tracking' | 'errors'>
+  item: Pick<RawActivityItem, 'claimed' | 'claim_status' | 'tracking' | 'errors'>
 ): { status: TransactionStatus; statusError?: string } => {
-  if (item.claimed === 'true') return { status: 'CLAIMED' };
+  if (item.claim_status === 'claimed' || item.claimed === 'true') return { status: 'CLAIMED' };
   if (item.claimed === 'error') return { status: 'ERROR', statusError: item.errors?.claim };
   return { status: isWaitingOnClaimOnly(item.tracking) ? 'READY_TO_CLAIM' : 'PENDING' };
 };

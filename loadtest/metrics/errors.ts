@@ -20,6 +20,8 @@
 // `ring.ts` only ever *consumes* an already-classified `DriverError`
 // (`core/ring.ts` note N7), it never imports this module.
 
+import { toFunctionSelector } from 'viem';
+
 import type { ErrorClass } from '../core/types';
 
 import { redactError, redactSecrets } from '../wallets/redact';
@@ -60,6 +62,18 @@ const matchesNotReady = (endpointOrUrl: string, text: string): boolean =>
 // DESIGN §5.3: `AlreadyClaimed()`'s 4-byte selector (aggkit DESIGN §4
 // S5submit; `app/hooks/useClaimExecution.ts:228-229`).
 const ALREADY_CLAIMED_SELECTOR = '0x646cf558';
+
+// `LocalBalanceTreeUnderflow(uint32,address,uint256,uint256)` — a revert that
+// surfaces as raw selector data (no decoded name) must still classify as
+// `lbt_underflow`. Unlike `AlreadyClaimed()` it carries arguments, so it is
+// matched as a substring of the message, not as a bare 4-byte token.
+const LBT_UNDERFLOW_SELECTOR = toFunctionSelector(
+  'LocalBalanceTreeUnderflow(uint32,address,uint256,uint256)'
+).toLowerCase();
+
+const isLbtUnderflow = (message: string): boolean =>
+  message.includes('LocalBalanceTreeUnderflow') ||
+  message.toLowerCase().includes(LBT_UNDERFLOW_SELECTOR);
 
 // ---------------------------------------------------------------------------
 // Per-evidence-kind classifiers. Each is independently callable by whichever
@@ -122,7 +136,7 @@ export const classifyRevertError = (input: {
   if (input.selector?.toLowerCase() === ALREADY_CLAIMED_SELECTOR) {
     return { errorClass: 'already_claimed', message };
   }
-  if (input.message.includes('LocalBalanceTreeUnderflow')) {
+  if (isLbtUnderflow(input.message)) {
     return { errorClass: 'lbt_underflow', message };
   }
   return { errorClass: 'tx_revert', message };
@@ -163,7 +177,7 @@ const VIEM_RPC_ERROR_NEEDLES: readonly string[] = [
  */
 export const classifySubmitError = (input: { message: string }): ClassifiedError => {
   const message = redactSecrets(input.message);
-  if (input.message.includes('LocalBalanceTreeUnderflow')) {
+  if (isLbtUnderflow(input.message)) {
     return { errorClass: 'lbt_underflow', message };
   }
   if (/BrowserPool: slot \d+ has no live browser/i.test(input.message)) {
