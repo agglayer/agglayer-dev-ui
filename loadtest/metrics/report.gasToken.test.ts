@@ -50,6 +50,104 @@ describe('summary headline — zero lap starts is not a PASS', () => {
   });
 });
 
+describe('summary headline — verdict precedence (FAIL / INCOMPLETE / PASS)', () => {
+  const normalEnd = { aborted: false, abortCause: null, lapsInFlightAtStop: 0 } as const;
+
+  // Builds results from a one-lap-start run, then overwrites the lap/hop
+  // outcome counters with the shape under test (the real-run shapes below).
+  const headlineFor = (
+    laps: Partial<Record<'LAP_DONE' | 'LAP_FAILED' | 'LAP_ABORTED', number>>,
+    hops: Record<string, number>,
+    end: Parameters<ReturnType<typeof createCollector>['runEnd']>[0] = normalEnd
+  ): string => {
+    const config = buildTestDevnetConfig();
+    const collector = createCollector();
+    collector.runStart({ toolVersion: 'v1', sdkVersion: 'sdk1', host: HOST });
+    collector.tick('u1', 'headless');
+    collector.runEnd(end);
+    const results = buildResultsJson({ snapshot: collector.snapshot(), config });
+    results.laps.byOutcome = { LAP_DONE: 0, LAP_FAILED: 0, LAP_ABORTED: 0, ...laps };
+    results.hops.byOutcome = hops;
+    return renderSummaryMd(results, config).split('\n')[0];
+  };
+
+  it('all laps done reads PASS', () => {
+    const line = headlineFor({ LAP_DONE: 2 }, { hop_completed_auto: 4 });
+    expect(line).toContain(' PASS —');
+  });
+
+  it('all laps done with laps drained in flight keeps the drained suffix', () => {
+    const line = headlineFor(
+      { LAP_DONE: 2 },
+      { hop_completed_auto: 4 },
+      { ...normalEnd, lapsInFlightAtStop: 2 }
+    );
+    expect(line).toContain('PASS (drained 2 in-flight laps)');
+  });
+
+  it('a failed lap reads FAIL with the top failing hop outcomes', () => {
+    const line = headlineFor(
+      { LAP_DONE: 1, LAP_FAILED: 2 },
+      { hop_completed_auto: 5, timeout_claimed_observed: 2, revert_bridge: 1 }
+    );
+    expect(line).toContain(
+      'FAIL (2 of 3 lap(s) failed: timeout_claimed_observed x2, revert_bridge x1)'
+    );
+    expect(line).not.toContain('PASS');
+  });
+
+  it('an aborted lap (drain deadline) reads INCOMPLETE, not PASS', () => {
+    const line = headlineFor(
+      { LAP_DONE: 1, LAP_ABORTED: 1 },
+      { hop_completed_auto: 2, aborted_drain: 1 }
+    );
+    expect(line).toContain('INCOMPLETE (1 of 2 lap(s) aborted: aborted_drain x1)');
+    expect(line).not.toContain('PASS');
+  });
+
+  it('FAIL beats INCOMPLETE when both failed and aborted laps exist', () => {
+    const line = headlineFor(
+      { LAP_FAILED: 1, LAP_ABORTED: 1 },
+      { timeout_hop: 1, aborted_drain: 1 }
+    );
+    expect(line).toContain('FAIL (1 of 2 lap(s) failed');
+    expect(line).not.toContain('INCOMPLETE');
+  });
+
+  it('ABORTED (sigint) still wins over failed laps', () => {
+    const line = headlineFor(
+      { LAP_FAILED: 1 },
+      { timeout_hop: 1 },
+      { aborted: true, abortCause: 'sigint', lapsInFlightAtStop: 0 }
+    );
+    expect(line).toContain('ABORTED (sigint)');
+    expect(line).not.toContain('FAIL');
+  });
+
+  it('real run ringD-20261004T012015Z shape (1 aborted lap, aborted_drain hop) reads INCOMPLETE', () => {
+    const line = headlineFor(
+      { LAP_DONE: 0, LAP_FAILED: 0, LAP_ABORTED: 1 },
+      { hop_completed_auto: 2, aborted_drain: 1 },
+      { ...normalEnd, lapsInFlightAtStop: 1 }
+    );
+    expect(line).toContain('INCOMPLETE (1 of 1 lap(s) aborted: aborted_drain x1)');
+  });
+
+  it('real run ringA-run2-20261001T145859Z shape (1 failed lap, timeout_claimed_observed) reads FAIL', () => {
+    const line = headlineFor(
+      { LAP_FAILED: 1 },
+      { timeout_claimed_observed: 1 },
+      { ...normalEnd, lapsInFlightAtStop: 1 }
+    );
+    expect(line).toContain('FAIL (1 of 1 lap(s) failed: timeout_claimed_observed x1)');
+  });
+
+  it('zero lap starts still reads NO LAPS STARTED even with stray lap counters', () => {
+    const line = headline(() => {}, normalEnd);
+    expect(line).toContain('NO LAPS STARTED');
+  });
+});
+
 describe('results.json — discovered gas-token identities', () => {
   const snapshotOf = () => {
     const collector = createCollector();

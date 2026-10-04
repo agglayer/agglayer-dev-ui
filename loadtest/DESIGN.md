@@ -830,8 +830,9 @@ Fixed section order (S07 asserts each heading is present; `report --dir`
 regenerates it **byte-identical** from `results.json`, which is S11's
 acceptance):
 
-1. `# Bridge load test — <startedAt>` — one line stating pass/abort, users,
-   rate, duration.
+1. `# Bridge load test — <startedAt>` — one line stating the verdict
+   (`ABORTED` > `NO LAPS STARTED` > `FAIL` on any `LAP_FAILED` > `INCOMPLETE` on any
+   `LAP_ABORTED` > `PASS`), users, rate, duration.
 2. `## Configuration` — env, proxy URL, ring, assets, autoclaim map, timeouts.
    Secrets shown as `env:NAME`.
 3. `## Throughput` — requested vs achieved table, plus the §5.5 identity

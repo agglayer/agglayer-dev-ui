@@ -942,20 +942,45 @@ const renderEnvironment = (results: ResultsJson): string =>
     ]
   );
 
+// Top non-success hop outcomes as `outcome xN` (count desc, then name),
+// capped at 3 — the "why" half of a FAIL / INCOMPLETE headline.
+const topFailingHopOutcomes = (byOutcome: ResultsJson['hops']['byOutcome']): string => {
+  const failing = (Object.entries(byOutcome) as [Outcome, number | undefined][])
+    .filter(([outcome, count]) => !isSuccessOutcome(outcome) && (count ?? 0) > 0)
+    .sort(([a, an], [b, bn]) => (bn ?? 0) - (an ?? 0) || a.localeCompare(b))
+    .slice(0, 3)
+    .map(([outcome, count]) => `${outcome} x${count}`);
+  return failing.join(', ');
+};
+
 export const renderSummaryMd = (results: ResultsJson, config: LoadtestConfig): string => {
   // S11 retry defect (2): `aborted` now means ABNORMAL termination only
   // (SIGINT / fatal) — a run that served its full `--minutes` and drained
-  // normally reads as `PASS`, optionally noting how many laps were still
+  // normally is not ABORTED, optionally noting how many laps were still
   // in flight at the moment drain began.
   // A run in which no lap ever started proves nothing (e.g. `--rate 1
   // --minutes 1`: the first tick falls at `stopAt`), so it must not read PASS.
+  // PASS additionally requires that no finished lap FAILED or was ABORTED
+  // (e.g. by the drain deadline): LAP_FAILED => FAIL, else LAP_ABORTED =>
+  // INCOMPLETE (FAIL wins when both are present).
+  const lapsFailed = results.laps.byOutcome.LAP_FAILED ?? 0;
+  const lapsAborted = results.laps.byOutcome.LAP_ABORTED ?? 0;
+  const lapsFinished = (results.laps.byOutcome.LAP_DONE ?? 0) + lapsFailed + lapsAborted;
+  const lapDetail = (n: number, verb: string): string => {
+    const why = topFailingHopOutcomes(results.hops.byOutcome);
+    return `${n} of ${lapsFinished} lap(s) ${verb}${why === '' ? '' : `: ${why}`}`;
+  };
   const statusLine = results.run.aborted
     ? `ABORTED (${results.run.abortCause ?? 'unknown cause'})`
     : results.achieved.lapStartsSubmitted === 0
       ? 'NO LAPS STARTED (0 lap starts — nothing was exercised)'
-      : results.run.lapsInFlightAtStop > 0
-        ? `PASS (drained ${results.run.lapsInFlightAtStop} in-flight lap${results.run.lapsInFlightAtStop === 1 ? '' : 's'})`
-        : 'PASS';
+      : lapsFailed > 0
+        ? `FAIL (${lapDetail(lapsFailed, 'failed')})`
+        : lapsAborted > 0
+          ? `INCOMPLETE (${lapDetail(lapsAborted, 'aborted')})`
+          : results.run.lapsInFlightAtStop > 0
+            ? `PASS (drained ${results.run.lapsInFlightAtStop} in-flight lap${results.run.lapsInFlightAtStop === 1 ? '' : 's'})`
+            : 'PASS';
   // DESIGN §6.3 item 1: "one line stating pass/abort, users, rate,
   // duration" — the heading line ITSELF, not a separate line below it, so
   // §5.5 invariant 4 ("summary.md's first line") is literally satisfied.

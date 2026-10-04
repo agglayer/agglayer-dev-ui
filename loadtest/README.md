@@ -254,10 +254,16 @@ include queueing delay, not just request/response time) — see [Capacity
 guidance](#capacity-guidance-measured).
 
 **`aborted` means SIGINT/fatal only.** A run that served its full requested
-`--minutes` and then drained in-flight laps normally reads as `PASS`, e.g. `PASS
-(drained 12 in-flight laps)` — it is not marked `aborted` just because laps were
-still in flight at the moment draining began. `aborted: true` (headline `ABORTED
+`--minutes` and then drained in-flight laps normally is not marked `aborted` just
+because laps were still in flight at the moment draining began; when every finished
+lap is `LAP_DONE` it reads as `PASS`, e.g. `PASS (drained 12 in-flight laps)`. `aborted: true` (headline `ABORTED
 (sigint)` or `ABORTED (fatal)`) is reserved for abnormal termination.
+
+**`PASS` requires every finished lap to be `LAP_DONE`.** Headline precedence is
+`ABORTED (...)` > `NO LAPS STARTED` > `FAIL (n of m lap(s) failed: <top failing hop
+outcomes>)` (any `LAP_FAILED`) > `INCOMPLETE (n of m lap(s) aborted: <top hop
+outcomes>)` (any `LAP_ABORTED`, e.g. `aborted_drain` at the drain deadline) > `PASS`.
+A process exit code of 0 does not imply `PASS`; read the first line of `summary.md`.
 
 **`NO LAPS STARTED` is not a pass.** A run that was not aborted but in which
 `achieved.lapStartsSubmitted` is `0` is headlined `NO LAPS STARTED (0 lap starts —
