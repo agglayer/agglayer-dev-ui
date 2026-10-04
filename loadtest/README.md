@@ -529,6 +529,15 @@ tool bug.
    (`preflight`) and `BROWSER_GAS_TOKEN_UNSUPPORTED` (`run`, after preflight) are
    refusals; `ASSET_IDENTITY_MISMATCH:` is a hop error message prefix. All four are
    explained in [Gas-token chains](#gas-token-chains-eth-held-as-weth).
+10. **`PREFLIGHT_SYNC_STATUS` never passes against a live testnet proxy.** The
+    proxy's L1 bridge syncer trails the L1 head by its finality window (~12
+    blocks), so with continuous deposits `is_synced` is never `true`. Opt in to a
+    tolerance in blocks: `LOADTEST_PREFLIGHT_SYNC_LAG_BLOCKS=24 pnpm loadtest preflight ...`.
+    A side (`l1_info`/`l2_info`) then also passes when `is_active` is `true` and
+    `network_block - last_processed_block` is between 0 and N (missing block fields
+    or a larger lag still fail); each tolerated side prints a `sync tolerance: ...`
+    line. Unset (default `0`) keeps the strict check. A non-integer or negative
+    value fails with `PREFLIGHT_SYNC_LAG_INVALID`. Not a secret; no credentials involved.
 
 ## Two dev-ui changes this branch makes
 

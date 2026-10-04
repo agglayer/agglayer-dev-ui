@@ -73,6 +73,9 @@ export interface PreflightResult {
   failures: PreflightFailure[];
   // Keyed by chain key; empty for an all-ETH-gas config.
   gasTokenChains: Record<string, GasTokenIdentity>;
+  // One line per chain side that passed only thanks to the opt-in
+  // LOADTEST_PREFLIGHT_SYNC_LAG_BLOCKS tolerance; empty when it is unset.
+  syncToleranceNotes: string[];
   table: string;
 }
 
@@ -145,23 +148,58 @@ const checkBridgeBytecode = async (
 interface SyncStatusSide {
   is_synced?: boolean;
   is_active?: boolean;
+  last_processed_block?: number;
+  network_block?: number;
 }
 interface SyncStatusBody {
   l1_info?: SyncStatusSide;
   l2_info?: SyncStatusSide;
 }
 
+export const SYNC_LAG_ENV = 'LOADTEST_PREFLIGHT_SYNC_LAG_BLOCKS';
+
+// Opt-in tolerance (blocks) for a syncer that trails the head by its finality
+// window. Unset/empty -> 0 (strict). Anything but a non-negative integer is
+// a loud PREFLIGHT_SYNC_LAG_INVALID failure, never silently ignored.
+const parseSyncLagBlocks = (
+  raw: string | undefined
+): { lag: number; failure?: PreflightFailure } => {
+  if (raw === undefined || raw.trim() === '') return { lag: 0 };
+  if (!/^\d+$/.test(raw.trim())) {
+    return {
+      lag: 0,
+      failure: {
+        code: 'PREFLIGHT_SYNC_LAG_INVALID',
+        message: `${SYNC_LAG_ENV}=${JSON.stringify(raw)} is not a non-negative integer (blocks)`
+      }
+    };
+  }
+  return { lag: Number(raw.trim()) };
+};
+
+// Returns the tolerated lag in blocks when the side is active, not synced, and
+// within `maxLag`; undefined otherwise.
+const toleratedLag = (side: SyncStatusSide | undefined, maxLag: number): number | undefined => {
+  if (maxLag <= 0 || side?.is_active !== true) return undefined;
+  const { last_processed_block: processed, network_block: head } = side;
+  if (typeof processed !== 'number' || typeof head !== 'number') return undefined;
+  const lag = head - processed;
+  return lag >= 0 && lag <= maxLag ? lag : undefined;
+};
+
 const checkSyncStatus = async (
   fetchImpl: typeof fetch,
   proxyUrl: string,
-  chain: LoadtestChain
-): Promise<{ status: PreflightStatus; failure?: PreflightFailure }> => {
+  chain: LoadtestChain,
+  maxLagBlocks = 0
+): Promise<{ status: PreflightStatus; failure?: PreflightFailure; notes: string[] }> => {
   const url = `${proxyUrl}/bridge/v1/sync-status?network_id=${chain.networkId}`;
   try {
     const response = await fetchImpl(url);
     if (!response.ok) {
       return {
         status: 'fail',
+        notes: [],
         failure: {
           code: 'PREFLIGHT_SYNC_STATUS',
           message: `chain "${chain.key}" (network_id=${chain.networkId}): sync-status HTTP ${response.status} at ${url}`
@@ -169,21 +207,33 @@ const checkSyncStatus = async (
       };
     }
     const body = (await response.json()) as SyncStatusBody;
-    const l1Ok = body.l1_info?.is_synced === true && body.l1_info?.is_active === true;
-    const l2Ok = body.l2_info?.is_synced === true && body.l2_info?.is_active === true;
+    const notes: string[] = [];
+    const sideOk = (side: SyncStatusSide | undefined, label: 'l1' | 'l2'): boolean => {
+      if (side?.is_synced === true && side?.is_active === true) return true;
+      const lag = toleratedLag(side, maxLagBlocks);
+      if (lag === undefined) return false;
+      notes.push(
+        `sync tolerance: chain "${chain.key}" ${label} trails by ${lag} blocks (<= ${maxLagBlocks}) — proceeding`
+      );
+      return true;
+    };
+    const l1Ok = sideOk(body.l1_info, 'l1');
+    const l2Ok = sideOk(body.l2_info, 'l2');
     if (!l1Ok || !l2Ok) {
       return {
         status: 'fail',
+        notes: [],
         failure: {
           code: 'PREFLIGHT_SYNC_STATUS',
           message: `chain "${chain.key}" (network_id=${chain.networkId}): not fully synced+active: ${JSON.stringify(body)}`
         }
       };
     }
-    return { status: 'pass' };
+    return { status: 'pass', notes };
   } catch (error) {
     return {
       status: 'fail',
+      notes: [],
       failure: {
         code: 'PREFLIGHT_SYNC_STATUS',
         message: `chain "${chain.key}" (network_id=${chain.networkId}): sync-status request failed: ${redactError(error)}`
@@ -459,6 +509,7 @@ const renderTable = (result: Omit<PreflightResult, 'table'>): string => {
   result.assets.forEach((asset) => {
     lines.push(`asset[${asset.assetIndex}] (${asset.kind}): ${asset.assetStatus}`);
   });
+  result.syncToleranceNotes.forEach((note) => lines.push(note));
   Object.values(result.gasTokenChains).forEach((identity) => {
     lines.push(
       `gas-token chain "${identity.chainKey}": gasToken=${identity.gasTokenAddress} originNetwork=${identity.gasTokenNetwork} weth=${identity.wethToken} (eth held as WETH)`
@@ -478,11 +529,15 @@ export const runPreflight = async (options: PreflightOptions): Promise<Preflight
 
   const chains: PreflightChainRow[] = [];
   const gasTokenChains: Record<string, GasTokenIdentity> = {};
+  const syncToleranceNotes: string[] = [];
+  const syncLag = parseSyncLagBlocks(process.env[SYNC_LAG_ENV]);
+  if (syncLag.failure) failures.push(syncLag.failure);
   for (const chain of config.chains) {
     const isRingChain = ringChainKeys.has(chain.key);
     const chainIdResult = await checkChainId(clientFactory, chain);
     const bridgeResult = await checkBridgeBytecode(clientFactory, chain);
-    const syncResult = await checkSyncStatus(fetchImpl, config.aggkitProxyUrl, chain);
+    const syncResult = await checkSyncStatus(fetchImpl, config.aggkitProxyUrl, chain, syncLag.lag);
+    syncToleranceNotes.push(...syncResult.notes);
     const gasResult = isRingChain
       ? await checkGas(clientFactory, chain, funder?.gasPerChain[chain.key], wallets)
       : { status: 'skipped' as PreflightStatus };
@@ -561,6 +616,7 @@ export const runPreflight = async (options: PreflightOptions): Promise<Preflight
     'PREFLIGHT_ASSET',
     'PREFLIGHT_CHAIN_ID',
     'PREFLIGHT_BRIDGE_BYTECODE',
+    'PREFLIGHT_SYNC_LAG_INVALID',
     'PREFLIGHT_SYNC_STATUS',
     'PREFLIGHT_TRACKER_HEALTH',
     'GAS_TOKEN_NOT_ETHER',
@@ -574,7 +630,8 @@ export const runPreflight = async (options: PreflightOptions): Promise<Preflight
     assets,
     trackerHealthStatus: trackerHealthResult.status,
     failures,
-    gasTokenChains
+    gasTokenChains,
+    syncToleranceNotes
   };
 
   return { ...partial, table: renderTable(partial) };

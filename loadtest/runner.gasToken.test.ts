@@ -75,6 +75,7 @@ const preflightOk = (gasTokenChains: PreflightResult['gasTokenChains']): Preflig
   trackerHealthStatus: 'pass',
   failures: [],
   gasTokenChains,
+  syncToleranceNotes: [],
   table: ''
 });
 
