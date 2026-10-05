@@ -126,14 +126,14 @@ describe('TransactionsView', () => {
     vi.mocked(useEnforceCorrectChain).mockReturnValue(vi.fn());
   });
 
-  it('renders the fetched transactions and their total count', () => {
+  it('renders the fetched transactions and how many are loaded out of the total', () => {
     vi.mocked(useTransactions).mockReturnValue({
       transactions: [makeTransaction('tx-1'), makeTransaction('tx-2')],
-      totalCount: 2,
+      totalCount: 76,
       warnings: [],
       isLoading: false,
       isFetchingNextPage: false,
-      hasNextPage: false,
+      hasNextPage: true,
       fetchNextPage: vi.fn(),
       error: null,
       refetch: vi.fn(),
@@ -143,7 +143,8 @@ describe('TransactionsView', () => {
     renderView();
 
     expect(screen.getByTestId('transaction-list')).toHaveTextContent('2 transaction(s)');
-    expect(screen.getByText(/Total transactions:/)).toBeInTheDocument();
+    // Loaded rows over the server-side count across every page.
+    expect(screen.getByText(/Total transactions:/)).toHaveTextContent('Total transactions: 2 / 76');
   });
 
   it('renders the full error state when the activity fetch fails, hiding the list', () => {

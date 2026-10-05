@@ -26,7 +26,8 @@ const STATUS_OPTIONS: Array<{ label: string; value: TransactionStatus | null }> 
   { label: 'All transactions', value: null },
   { label: 'Ready to claim', value: 'READY_TO_CLAIM' },
   { label: 'Claimed', value: 'CLAIMED' },
-  { label: 'Pending', value: 'PENDING' }
+  { label: 'Pending', value: 'PENDING' },
+  { label: 'Error', value: 'ERROR' }
 ];
 
 export const TransactionFilters = ({
