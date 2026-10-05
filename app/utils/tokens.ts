@@ -1,7 +1,6 @@
 import type { Token } from '@/app/types/token';
 
 import { fromWei } from '@/app/utils/bigNumber';
-import { normalize } from '@/app/utils/format';
 import BigNumber from 'bignumber.js';
 
 export const getTokenBalance = (token: Token, rawBalance?: string | bigint | null) => {
@@ -30,8 +29,15 @@ export const portionOfBalance = (
     .toString();
 };
 
-export const getTokenLogoBySymbol = (symbol?: string | null): string | undefined => {
-  if (!symbol) return undefined;
-  const normalizedSymbol = normalize(symbol);
-  return `https://assets.polygon.technology/tokenAssets/${normalizedSymbol}.svg`;
+// A symbol isn't a stable identity (two tokens can share one), so logos are resolved by
+// chain + address instead. Sequence's token-logo CDN only accepts lowercase addresses and
+// returns 403 for unknown tokens or checksummed casing — callers already fall back to a
+// letter-avatar/placeholder on image load error, so a 403 degrades gracefully.
+export const getTokenLogoUrl = (params: {
+  chainId?: number;
+  address?: string;
+}): string | undefined => {
+  const { chainId, address } = params;
+  if (!chainId || !address) return undefined;
+  return `https://assets.sequence.info/images/tokens/medium/${chainId}/${address.toLowerCase()}.webp`;
 };
