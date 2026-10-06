@@ -7,6 +7,11 @@ export interface Token {
   logoURI?: string;
   isNative?: boolean;
   isCustom?: boolean;
+  // Set on a Token derived (not added by the user): the wrapped version, on
+  // `chainId`, of a user-added token. `sourceToken` identifies that user-added
+  // token by its origin chain + address (see app/context/token.tsx).
+  isComputed?: boolean;
+  sourceToken?: { chainId: number; address: string };
   // Only set on a native-currency Token, from AppChain.nativeCurrency.wethToken
   // -- the AggLayer bridge contract's own WETHToken address on a network
   // whose native/gas token isn't ether (see config/configSchema.mjs's

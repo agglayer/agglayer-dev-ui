@@ -18,6 +18,11 @@ const createStorageKey = (key: string): string => `${APP_PREFIX}:${key}`;
 export const STORAGE_KEYS = {
   APP_MODE: createStorageKey('appMode'),
   CUSTOM_TOKENS: createStorageKey('customTokens'),
+  // Cache of where each user-added token lives on the other networks (its
+  // wrapped address, or "not deployed yet"). Derived data, kept apart from
+  // CUSTOM_TOKENS so it can never overwrite what the user added. Scoped per
+  // app mode for the same networkId-collision reason as AUTOCLAIM_READY_AT.
+  TOKEN_MAPPINGS_CACHE: (mode: AppMode): string => createStorageKey(`tokenMappingsCache:${mode}`),
   // Map of Transaction.hubUID (`tx_hash:deposit_count`) -> epoch ms when the
   // deposit was first observed READY_TO_CLAIM, so the autoclaim grace period
   // survives refreshes. Scoped per app mode: mainnet/testnet/devnet each have

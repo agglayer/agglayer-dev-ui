@@ -25,7 +25,8 @@ export const TokenSelector = ({
   chainId,
   chainName
 }: TokenSelectorProps) => {
-  const { listTokens, customTokens, addCustomToken, removeCustomToken } = useTokens();
+  const { listTokens, customTokens, computedTokens, addCustomToken, removeCustomToken } =
+    useTokens();
   const [search, setSearch] = useState('');
   const [customTokenAddress, setCustomTokenAddress] = useState('');
   const [mode, setMode] = useState<'select' | 'manage'>('select');
@@ -85,6 +86,7 @@ export const TokenSelector = ({
             onAddCustomToken={handleAddCustomToken}
             onRemoveCustomToken={removeCustomToken}
             customTokens={customTokens}
+            computedTokens={computedTokens}
           />
         )}
       </div>

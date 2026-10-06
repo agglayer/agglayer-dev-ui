@@ -15,6 +15,7 @@ import { useWallet } from '@/app/context/walletContext';
 import { useBridge } from '@/app/hooks/useBridge';
 import { useBridgeExecution } from '@/app/hooks/useBridgeExecution';
 import { useEnforceCorrectChain } from '@/app/hooks/useEnforceCorrectChain';
+import { useWrappedTokenResolution } from '@/app/hooks/useWrappedTokenResolution';
 import { ZERO_ADDRESS } from '@/app/types/bridge';
 import { getBridgeCtaState } from '@/app/utils/bridge';
 import { getEtaMinutes } from '@/app/utils/chains';
@@ -40,6 +41,8 @@ const BridgeCardContent = () => {
   const [tokenModalOpen, setTokenModalOpen] = useState(false);
   const [destinationModalOpen, setDestinationModalOpen] = useState(false);
   const [transactionModalOpen, setTransactionModalOpen] = useState(false);
+
+  useWrappedTokenResolution({ chainId: form.fromChainId, refreshKey: tokenModalOpen });
 
   const ensureCorrectChain = useEnforceCorrectChain();
   const execution = useBridgeExecution({ fromChainId: form.fromChainId });
