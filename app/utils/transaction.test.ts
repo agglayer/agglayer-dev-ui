@@ -6,7 +6,85 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { AggkitBridgeAggregator } from '@agglayer/sdk';
 
-import { buildClaimAssetParams } from './transaction';
+import type { TransactionParams } from '@agglayer/sdk';
+
+import { BRIDGE_GAS_BUFFER, buildClaimAssetParams, mapTransactionRequest } from './transaction';
+
+const baseTransactionParams: TransactionParams = {
+  to: '0x1111111111111111111111111111111111111111',
+  data: '0xabcdef',
+  value: '1000'
+};
+
+describe('mapTransactionRequest — gas forwarding (C4), nonce withheld, gas buffer (C5)', () => {
+  it('forwards a present gas as a bigint', () => {
+    const params: TransactionParams = { ...baseTransactionParams, gas: '21000' };
+
+    const request = mapTransactionRequest(params);
+
+    expect(request.gas).toBe(BigInt(21000));
+    expect(typeof request.gas).toBe('bigint');
+  });
+
+  it('omits the gas key entirely when the SDK does not supply one', () => {
+    const request = mapTransactionRequest(baseTransactionParams);
+
+    expect('gas' in request).toBe(false);
+    expect(request).not.toHaveProperty('gas');
+  });
+
+  it('adds options.gasBuffer to the SDK gas when one is supplied (closes C5)', () => {
+    const params: TransactionParams = { ...baseTransactionParams, gas: '164359' };
+
+    const request = mapTransactionRequest(params, { gasBuffer: BRIDGE_GAS_BUFFER });
+
+    // 164,359 is a real bufferless estimate from a bridge that reverted with an
+    // out-of-gas inner updateGlobalExitRoot; buffered it clears the 240,603 gas
+    // the largest *successful* bridgeAsset actually consumed.
+    expect(request.gas).toBe(BigInt(164359) + BRIDGE_GAS_BUFFER);
+    expect(request.gas).toBeGreaterThan(BigInt(240603));
+  });
+
+  it('leaves gas untouched when no buffer is requested (approve and claim paths)', () => {
+    const params: TransactionParams = { ...baseTransactionParams, gas: '164359' };
+
+    expect(mapTransactionRequest(params).gas).toBe(BigInt(164359));
+    expect(mapTransactionRequest(params, {}).gas).toBe(BigInt(164359));
+    expect(mapTransactionRequest(params, { gasBuffer: BigInt(0) }).gas).toBe(BigInt(164359));
+  });
+
+  it('emits no gas key at all when the SDK supplies none, even with a buffer — the buffer cannot apply and viem re-estimates bufferlessly on that path', () => {
+    const request = mapTransactionRequest(baseTransactionParams, {
+      gasBuffer: BRIDGE_GAS_BUFFER
+    });
+
+    expect('gas' in request).toBe(false);
+  });
+
+  it('BRIDGE_GAS_BUFFER matches the headless worker gas.bridgeGasOffset default, so both modes now send the same headroom', () => {
+    expect(BRIDGE_GAS_BUFFER).toBe(BigInt(300_000));
+  });
+
+  it('never forwards nonce, even when the SDK supplies one', () => {
+    const params = { ...baseTransactionParams, nonce: '0x5' } as TransactionParams;
+
+    const request = mapTransactionRequest(params);
+
+    expect('nonce' in request).toBe(false);
+  });
+
+  it('still validates `to` as before', () => {
+    const params: TransactionParams = { ...baseTransactionParams, to: 'not-an-address' };
+
+    expect(() => mapTransactionRequest(params)).toThrow('Invalid transaction recipient');
+  });
+
+  it('still validates `data` as before', () => {
+    const params: TransactionParams = { ...baseTransactionParams, data: 'not-hex' };
+
+    expect(() => mapTransactionRequest(params)).toThrow('Invalid transaction data');
+  });
+});
 
 // The formula buildClaimAssetParams used to re-derive client-side before
 // review comment 3862949281 (C13) -- see @agglayer/sdk's

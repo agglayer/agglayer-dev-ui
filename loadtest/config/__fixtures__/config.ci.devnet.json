@@ -1,0 +1,7 @@
+{
+  "autoclaim": {
+    "l1_to_l2": { "expectedAutoclaim": true, "waitForAutoclaimMs": 120000 },
+    "l2_to_l1": { "expectedAutoclaim": false },
+    "l2_to_l2": { "expectedAutoclaim": true, "waitForAutoclaimMs": 300000 }
+  }
+}

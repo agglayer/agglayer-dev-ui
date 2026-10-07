@@ -180,6 +180,17 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
         const receipt = await publicClient.waitForTransactionReceipt({ hash: localClaimHash });
 
         if (receipt.status === 'reverted') {
+          // The modal shows a generic message, so log the detail -- same
+          // rationale as `useBridgeExecution`'s two reverted-receipt branches
+          // (loadtest/CAPACITY-REPORT.md §5.4). A claim that reverts on-chain
+          // AFTER being mined is not the `AlreadyClaimed()` race the catch
+          // below handles (that one reverts at estimateGas, before a send), so
+          // this is worth distinguishing in a bug report rather than losing.
+          console.error('[claim-execution] claim transaction reverted', {
+            txHash: localClaimHash,
+            blockNumber: receipt.blockNumber,
+            gasUsed: receipt.gasUsed
+          });
           const error = {
             message: 'Claim transaction reverted',
             txHash: localClaimHash,

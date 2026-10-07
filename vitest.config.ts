@@ -22,7 +22,8 @@ export default defineConfig({
     include: [
       'app/**/*.{test,spec}.{ts,tsx}',
       'src/**/*.{test,spec}.{ts,tsx}',
-      'config/**/*.{test,spec}.mjs'
+      'config/**/*.{test,spec}.mjs',
+      'loadtest/**/*.{test,spec}.ts'
     ],
     exclude: ['node_modules/**', '.next/**', 'out/**', 'tests/**']
   }
