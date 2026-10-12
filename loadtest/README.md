@@ -279,9 +279,17 @@ ring chain uses ETH as gas, so reports for ETH-only configs are unchanged.
 
 ## Autoclaim semantics
 
+> **Devnet note.** The vendored devnet runs aggkit `v0.11.0-rc17`, which removed the built-in
+> autoclaim component ([agglayer/aggkit#1901](https://github.com/agglayer/aggkit/pull/1901)), and
+> `config/config.ci.devnet.json` sets `expectedAutoclaim: false` on every route. Against the devnet every
+> hop is therefore claimed by the tool itself (`hop_completed_manual`), and `autoclaimOverdue`,
+> `unexpectedAutoclaim`, `hop_completed_auto` and `hop_completed_escalated` are all expected to be `0`
+> (`tests/loadtest-e2e/run.spec.ts` asserts this). The semantics below still apply to real environments
+> that have an autoclaimer; the "L2->L1 on this devnet" example now describes every devnet hop.
+
 Each ring hop (`"L1->L2A"`, etc.) has a configured autoclaim expectation:
 `{"expected": true, "waitMs": 120000}` or `{"expected": false}` (manual-claim-only,
-e.g. L2->L1 on this devnet).
+every hop on the rc17 devnet).
 
 - **`autoclaim_overdue`** (an expected autoclaim didn't happen inside `waitMs`) and
   **`unexpected_autoclaim`** (a hop configured `expected: false` got auto-claimed

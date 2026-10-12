@@ -25,7 +25,7 @@ implement.
 |---|---|---|
 | UI call set and cadences | `app/services/activity.ts`, `app/hooks/*.ts` (read in full at S02, see §9) | §9 is a line-cited table |
 | Devnet topology (ports, ids, addresses, keys) | `tests/devnet/summary.json` + `tests/devnet/docker-compose.yml` port env vars | never hardcode; derive |
-| Devnet autoclaim expectations | `config/config.ci.devnet.json` → `autoclaim` | maps 1:1 onto `RouteType` |
+| Devnet autoclaim expectations | `config/config.ci.devnet.json` → `autoclaim` | maps 1:1 onto `RouteType`; all `expected: false` on the rc17 devnet |
 | Autoclaim defaults when config omits a route | `app/config.ts:22-27` (`DEFAULT_AUTOCLAIM_CONFIG`) | l1→l2 60 s, l2→l1 disabled, l2→l2 120 s |
 | Testnet topology | repo `config.json` → `chains.SEPOLIA`, `chains.BOKUTO`, `appModes.configs.testnet` | **its `aggkitProxy` is a placeholder** — see §2.4 |
 | Route classification | `app/utils/autoclaim.ts:11-17` (`getRouteType`) | keyed on **recording** network, not token origin |
@@ -37,8 +37,9 @@ implement.
 
 ### 0.1 Two facts this document deliberately does **not** take from `BASELINE.md`
 
-1. `loadtest/BASELINE.md:80` records "L1→L2 Autoclaim Latency <30 s". That is
-   the **whole `claim-autoclaim.spec.ts` wall clock** (page load + connect +
+1. `loadtest/BASELINE.md:80` records "L1→L2 Autoclaim Latency <30 s" (an rc8, built-in-autoclaimer
+   figure, now historical). That is
+   the **whole `claim-autoclaim.spec.ts` (since renamed `claim-l1-to-l2.spec.ts`) wall clock** (page load + connect +
    deposit + autoclaim), not an isolated autoclaim measurement. Every timeout
    in §3.3 is sized from plan §2's measured ranges and from
    `app/constants/e2e.ts`, never from that figure.
@@ -250,7 +251,7 @@ Field provenance — every value above has a named source:
 | `chains[].networkId` | `.network_ids.{l1,l2_001,l2_002}` = 0 / 1 / 2 |
 | `chains[].rpcUrl` | `.networks.l1.rpc.via_proxy`, `.networks.l2.001.rpc.via_proxy`, `.networks.l2.002.rpc.via_proxy` (env `L1_RPC_PORT` / `L2_001_HTTP_PORT` / `L2_002_HTTP_PORT` select the direct ports 8545 / 11545 / 12545 instead — `docker-compose.yml:43,56,69`) |
 | `chains[].bridgeAddress` | `.networks.l1.contracts.bridge` and `.networks.l2.00N.contracts.sovereign_bridge` (all three identical, CREATE2 — cross-checked by `scripts/devnetReady.mjs:42`) |
-| `autoclaim.*` | `config/config.ci.devnet.json` → `autoclaim` (`l1_to_l2` true/120000, `l2_to_l2` true/300000, `l2_to_l1` false), mapped per ring hop through `getRouteType` (`app/utils/autoclaim.ts:11-17`). Routes omitted from that file fall back to `app/config.ts:22-27` |
+| `autoclaim.*` | `config/config.ci.devnet.json` → `autoclaim` (all three routes `expectedAutoclaim: false` since the devnet moved to aggkit rc17, which has no autoclaimer; it used to be `l1_to_l2` true/120000, `l2_to_l2` true/300000, `l2_to_l1` false), mapped per ring hop through `getRouteType` (`app/utils/autoclaim.ts:11-17`). Routes omitted from that file fall back to `app/config.ts:22-27` |
 | `assets[0].amount` | `app/constants/e2e.ts:140` devnet `DEFAULT_NATIVE_BRIDGE_AMOUNT = '0.001'` |
 | `assets[1].address` | `.erc20_address` = `0xe293A6b8F558422813499bb5C89B60adD8c54636` ("Agglayer E2E Token"/`E2E`, 18 dp) |
 | `assets[1].amount` | `app/constants/e2e.ts:145` `E2E_ERC20_BRIDGE_AMOUNT = '0.01'` |

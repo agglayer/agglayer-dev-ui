@@ -3,7 +3,10 @@
 // bridge address, ERC20 address, funded key) and
 // `config/config.ci.devnet.json` (the `autoclaim` map, mapped onto each ring
 // hop through the same `getRouteType` classification the app uses —
-// app/utils/autoclaim.ts:11-17). Normative worked example: DESIGN §2.3;
+// app/utils/autoclaim.ts:11-17). The compose devnet (aggkit rc17) ships no
+// autoclaimer, so config.ci.devnet.json marks every route
+// `expectedAutoclaim: false` and every derived hop is `{ expected: false }`
+// (manual claim). Normative worked example: DESIGN §2.3;
 // field provenance: DESIGN §2.3's table immediately below it.
 //
 // Never hardcodes a value that summary.json/config.ci.devnet.json can
@@ -29,7 +32,9 @@ const getRouteType = (sourceNetworkId: number, destinationNetworkId: number): Ro
 };
 
 // app/config.ts:22-27's DEFAULT_AUTOCLAIM_CONFIG — the fallback used for any
-// route config/config.ci.devnet.json's `autoclaim` block omits.
+// route config/config.ci.devnet.json's `autoclaim` block omits. (The CI devnet
+// config sets all three routes explicitly to `expectedAutoclaim: false`, so
+// these app defaults are not reached for the devnet.)
 const DEFAULT_AUTOCLAIM_CONFIG: Record<
   RouteType,
   { expectedAutoclaim: boolean; waitForAutoclaimMs?: number }

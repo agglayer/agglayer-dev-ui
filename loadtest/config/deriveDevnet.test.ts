@@ -46,14 +46,17 @@ describe('deriveDevnetConfig', () => {
     expect(parsed.ring).toStrictEqual(['L1', 'L2A', 'L2B', 'L1']);
   });
 
-  it('maps the devnet autoclaim map from config.ci.devnet.json onto every ring hop via getRouteType', () => {
+  it('maps the devnet autoclaim map from config.ci.devnet.json onto every ring hop as not expected (no autoclaimer) with no waitMs', () => {
     const { config } = deriveDevnetConfig(baseOptions());
     const parsed = parseLoadtestConfig(config);
 
     expect(parsed.autoclaim).toStrictEqual({
-      'L1->L2A': { expected: true, waitMs: 120_000 },
-      'L2A->L2B': { expected: true, waitMs: 300_000 },
+      'L1->L2A': { expected: false },
+      'L2A->L2B': { expected: false },
       'L2B->L1': { expected: false }
+    });
+    Object.values(parsed.autoclaim ?? {}).forEach((hop) => {
+      expect(hop).not.toHaveProperty('waitMs');
     });
   });
 

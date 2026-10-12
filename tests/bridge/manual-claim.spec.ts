@@ -10,22 +10,18 @@ import { expect, test } from '@playwright/test';
 
 import { BridgePage } from './models/bridge-page';
 
-// L2->L1 manual claim: config.json's
-// autoclaim.l2_to_l1.expectedAutoclaim is false -- no
-// `[[AutoClaim.Claimers]]` targets NetworkID=0 on either aggkit instance,
-// so a deposit on this route sits READY_TO_CLAIM
-// indefinitely until claimed by hand. That non-autoclaiming-by-configuration
-// property (rather than a race that a browser-driven click could lose, as
-// on the L1->L2 route -- see claim-autoclaim.spec.ts) is exactly what makes
-// this route the one place a real "click Claim tokens" UI test can be
-// written deterministically.
+// L2->L1 manual claim: the devnet's aggkit (v0.11.0-rc17+) has no autoclaim
+// component and config.ci.devnet.json sets expectedAutoclaim: false on every
+// route, so a deposit sits READY_TO_CLAIM indefinitely until claimed by hand.
+// This route is where the 60s "stays ready" window is asserted alongside the
+// real "click Claim tokens" UI flow; claim-l1-to-l2.spec.ts covers L1->L2.
 //
-// Devnet-only: the L1<->L2 pair in claim-autoclaim.spec.ts / native-bridge
-// etc. covers testnet mode; this route depends on the devnet-specific
-// autoclaim config above.
+// Devnet-only: the L1<->L2 pair in claim-l1-to-l2.spec.ts / native-bridge
+// etc. covers testnet mode; this route depends on the devnet having no
+// autoclaimer.
 test.skip(
   E2E_BACKEND_MODE !== 'devnet',
-  'L2->L1 non-autoclaiming behavior is devnet-specific config (config.json autoclaim.l2_to_l1); see the comment above.'
+  'L2->L1 manual-claim behavior assumes the devnet has no autoclaimer; see the comment above.'
 );
 
 test('L2-1→L1 native withdrawal requires a manual claim click to reach Completed', async ({
@@ -36,11 +32,16 @@ test('L2-1→L1 native withdrawal requires a manual claim click to reach Complet
   // budget: E2E_CLAIM_TIMEOUT_MS (150s, existing devnet claim-confirmation
   // budget). +60s the rest of the
   // journey (60s "stays ready" observation window included in that slack).
-  // Plus one extra E2E_CLAIM_TIMEOUT_MS + 60s budget for the L1->L2 top-up
-  // deposit below (same budget claim-autoclaim.spec.ts uses for that same
-  // round trip).
+  // Plus two extra E2E_CLAIM_TIMEOUT_MS (ready + claim) + 60s budget for the
+  // L1->L2 top-up deposit below (same budget claim-l1-to-l2.spec.ts uses for
+  // that same round trip).
   test.setTimeout(
-    E2E_PROOF_READY_TIMEOUT_MS + E2E_CLAIM_TIMEOUT_MS + 60_000 + E2E_CLAIM_TIMEOUT_MS + 60_000
+    E2E_PROOF_READY_TIMEOUT_MS +
+      E2E_CLAIM_TIMEOUT_MS +
+      60_000 +
+      E2E_CLAIM_TIMEOUT_MS +
+      E2E_CLAIM_TIMEOUT_MS +
+      60_000
   );
 
   const bridgePage = new BridgePage({ page });
@@ -104,9 +105,9 @@ test('L2-1→L1 native withdrawal requires a manual claim click to reach Complet
     )
     .toContain('Ready to claim');
 
-  // The core assertion this route exists to make: unlike L1->L2 (which a
-  // built-in autoclaimer usually beats a UI click to), this deposit must NOT
-  // auto-claim -- it should still read Ready to claim after a full minute.
+  // The core assertion this route exists to make: with no autoclaimer, this
+  // deposit must NOT auto-claim -- it should still read Ready to claim after a
+  // full minute.
   for (let elapsedMs = 0; elapsedMs < 60_000; elapsedMs += 10_000) {
     await page.waitForTimeout(10_000);
     await bridgePage.refreshActivity();
@@ -127,6 +128,9 @@ test('L2-1→L1 native withdrawal requires a manual claim click to reach Complet
   // violation: two elements resolve).
   await page.getByRole('button', { name: 'Close', exact: true }).click();
 
+  // The row flips to Completed only after the activity refetch picks up the
+  // confirmed claim (~20s on aggkit rc17), so give it the claim budget rather
+  // than expect's default 5s window (same as BridgePage.waitForReadyAndClaim).
   await bridgePage.refreshActivity();
-  await expect(status).toContainText('Completed');
+  await expect(status).toContainText('Completed', { timeout: E2E_CLAIM_TIMEOUT_MS });
 });

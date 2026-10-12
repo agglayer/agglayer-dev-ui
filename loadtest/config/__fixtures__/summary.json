@@ -1,9 +1,9 @@
 {
-  "snapshot_name": "cdk-20260902-144403",
+  "snapshot_name": "cdk-20261009-153838",
   "enclave": "cdk",
   "flavor": "anvil-aggkit",
-  "created_at": "2026-09-02T14:44:39Z",
-  "captured_at": "2026-09-02T14:44:14Z",
+  "created_at": "2026-10-09T15:39:10Z",
+  "captured_at": "2026-10-09T15:38:48Z",
   "settlement_free": true,
   "agglayer_certificates_at_capture": [
     {
@@ -113,7 +113,7 @@
       "service": "anvil-001",
       "chain_id": 271828,
       "network_id": 0,
-      "block_number_at_capture": 254,
+      "block_number_at_capture": 250,
       "rpc": {
         "internal": "http://anvil-001:8545",
         "external": "http://127.0.0.1:8545",
@@ -142,7 +142,7 @@
         },
         "aggkit": {
           "service": "aggkit-001",
-          "components": "aggsender,aggoracle,autoclaim,bridge",
+          "components": "aggsender,aggoracle,bridge",
           "rpc": {
             "internal": "http://aggkit-001:5576",
             "external": "http://127.0.0.1:11576"
@@ -164,7 +164,7 @@
         "service": "l2-anvil-002",
         "chain_id": 20202,
         "network_id": 2,
-        "block_number_at_capture": 30,
+        "block_number_at_capture": 29,
         "rpc": {
           "internal": "http://l2-anvil-002:8545",
           "external": "http://127.0.0.1:12545",
@@ -173,7 +173,7 @@
         },
         "aggkit": {
           "service": "aggkit-002",
-          "components": "aggsender,aggoracle,autoclaim,bridge",
+          "components": "aggsender,aggoracle,bridge",
           "rpc": {
             "internal": "http://aggkit-002:5576",
             "external": "http://127.0.0.1:12576"
@@ -204,7 +204,7 @@
         "private_key": "0xbcdf20249abf0ed6d944c0288fad489e33f66b3960d9e6229c1cd214ed3bbe31",
         "mnemonic_index": 0,
         "funded_on": ["l1"],
-        "balance_at_capture": "0x334902bc112e29563585bb8"
+        "balance_at_capture": "0x334902bc112e1ee05d7eed8"
       },
       {
         "address": "0xE25583099BA105D9ec0A67f5Ae86D90e50036425",
@@ -368,7 +368,7 @@
       {
         "service": "aggkit-001",
         "path_in_image": "/etc/aggkit/aggoracle.keystore",
-        "role": "aggoracle + autoclaim signer"
+        "role": "aggoracle signer"
       },
       {
         "service": "aggkit-001",
@@ -383,7 +383,7 @@
       {
         "service": "aggkit-002",
         "path_in_image": "/etc/aggkit/aggoracle.keystore",
-        "role": "aggoracle + autoclaim signer"
+        "role": "aggoracle signer"
       },
       {
         "service": "aggkit-002",
@@ -397,11 +397,11 @@
     }
   },
   "fixtures": {
-    "seeded_at": "2026-09-02T14:44:06Z",
+    "seeded_at": "2026-10-09T15:38:41Z",
     "l1_chain_id": 271828,
     "e2e_wallet": "0xE34aaF64b29273B7D567FCFc40544c014EEe9970",
     "e2e_private_key": "0x12d7de8621a77640c9241b2595ba78ce443d05e94090365ab3bb5e19df82c625",
-    "e2e_wallet_l1_native_balance_hex": "0x1a78435a166fb42463c73",
+    "e2e_wallet_l1_native_balance_hex": "0x1a78435a15d012b65573d",
     "erc20": {
       "address": "0xe293A6b8F558422813499bb5C89B60adD8c54636",
       "name": "Agglayer E2E Token",
@@ -415,74 +415,74 @@
     }
   },
   "images": {
-    "tag": "cdk-20260902-144414-b119c76e56bd",
+    "tag": "cdk-20261009-153848-a8301d050c68",
     "image_prefix": "snapshot-",
     "busybox_image": "busybox:1.36-musl",
     "self_contained": true,
-    "built_at": "2026-09-02T14:44:26Z",
+    "built_at": "2026-10-09T15:38:59Z",
     "services": {
       "anvil-001": {
-        "name": "snapshot-anvil-001:cdk-20260902-144414-b119c76e56bd",
+        "name": "snapshot-anvil-001:cdk-20261009-153848-a8301d050c68",
         "base_image": "ghcr.io/foundry-rs/foundry:v1.5.1",
-        "size": "479MB",
-        "tag": "v1.5.1-1788360503",
-        "digest": "sha256:cfbba3fcb53185f6c6fa9f15289bae267b74e639821262cd0626fc9d3c6cfe40"
+        "size": "478MB",
+        "tag": "v1.5.1-1791560572",
+        "digest": "sha256:25e716044bda4e1b3d0427da4fb5a9a2a0b9a68963b43842e778408d233cf11f"
       },
       "l2-anvil-001": {
-        "name": "snapshot-l2-anvil-001:cdk-20260902-144414-b119c76e56bd",
+        "name": "snapshot-l2-anvil-001:cdk-20261009-153848-a8301d050c68",
         "base_image": "ghcr.io/foundry-rs/foundry:v1.5.1",
         "size": "441MB",
-        "tag": "v1.5.1-1788360503",
-        "digest": "sha256:08a6a589f96f5a72e0a05170f730f49facd3e9a6aaf413a0d50900d4f1a887da"
+        "tag": "v1.5.1-1791560572",
+        "digest": "sha256:ef934f0a4d1d88e056ba044849f37292f17f653b9a754bfc158d728bf94cb12a"
       },
       "l2-anvil-002": {
-        "name": "snapshot-l2-anvil-002:cdk-20260902-144414-b119c76e56bd",
+        "name": "snapshot-l2-anvil-002:cdk-20261009-153848-a8301d050c68",
         "base_image": "ghcr.io/foundry-rs/foundry:v1.5.1",
         "size": "422MB",
-        "tag": "v1.5.1-1788360503",
-        "digest": "sha256:731e672f4900a2f2f3fbced47b32972e2af89899a4070279d7cd463e7b4aac66"
+        "tag": "v1.5.1-1791560572",
+        "digest": "sha256:be1cbe6c449589042481db8f87b592540c33beafc413f767885acca3d73a4154"
       },
       "agglayer": {
-        "name": "snapshot-agglayer:cdk-20260902-144414-b119c76e56bd",
+        "name": "snapshot-agglayer:cdk-20261009-153848-a8301d050c68",
         "base_image": "ghcr.io/agglayer/agglayer:0.6.0-rc.8",
         "size": "3.15GB",
-        "tag": "0.6.0-rc.8-1788360503",
-        "digest": "sha256:ceb548438d50f022475ed35056c9ccda0c58ec0242035a12cb5ff1354e843279"
+        "tag": "0.6.0-rc.8-1791560572",
+        "digest": "sha256:4eff544cd59179ccc100b4a9f9c10e776b716ad28ced855ccd60a24290374c8d"
       },
       "aggkit-001": {
-        "name": "snapshot-aggkit-001:cdk-20260902-144414-b119c76e56bd",
-        "base_image": "ghcr.io/agglayer/aggkit:0.11.0-rc8",
-        "size": "365MB",
-        "tag": "0.11.0-rc8-1788360503",
-        "digest": "sha256:4a981cc5fca3a2d281ed6c9ff4aef9c5ccf48f509086c06c422ce810808a8a44"
+        "name": "snapshot-aggkit-001:cdk-20261009-153848-a8301d050c68",
+        "base_image": "ghcr.io/agglayer/aggkit:0.11.0-rc17",
+        "size": "377MB",
+        "tag": "0.11.0-rc17-1791560572",
+        "digest": "sha256:d01d67781d507fb1c14fe46971d9126647a4b63fe76bb5034fa61b8cd6a1a158"
       },
       "aggkit-002": {
-        "name": "snapshot-aggkit-002:cdk-20260902-144414-b119c76e56bd",
-        "base_image": "ghcr.io/agglayer/aggkit:0.11.0-rc8",
-        "size": "365MB",
-        "tag": "0.11.0-rc8-1788360503",
-        "digest": "sha256:9b002f96acebfbe46e95b98283be54a10dc67fd5bfdfffd2eff58df3ae5dc348"
+        "name": "snapshot-aggkit-002:cdk-20261009-153848-a8301d050c68",
+        "base_image": "ghcr.io/agglayer/aggkit:0.11.0-rc17",
+        "size": "377MB",
+        "tag": "0.11.0-rc17-1791560572",
+        "digest": "sha256:902670fa5e3fdba17dcf43a7ab529c3cb0e51df831dd6e69c796abb77c63f9ec"
       },
       "aggkit-proxy-001": {
-        "name": "snapshot-aggkit-proxy-001:cdk-20260902-144414-b119c76e56bd",
-        "base_image": "ghcr.io/agglayer/aggkit:0.11.0-rc8",
-        "size": "365MB",
-        "tag": "0.11.0-rc8-1788360503",
-        "digest": "sha256:dfc9019cda81f86e3996984b8f030610db13484d1401371100b1a1efb04b9775"
+        "name": "snapshot-aggkit-proxy-001:cdk-20261009-153848-a8301d050c68",
+        "base_image": "ghcr.io/agglayer/aggkit:0.11.0-rc17",
+        "size": "377MB",
+        "tag": "0.11.0-rc17-1791560572",
+        "digest": "sha256:0b0861f8e9f2ac1eb0d662f1641b323e7ddfbe537f655c8f4a0195d8dfae416c"
       },
       "agglayer-dev-ui-proxy-002": {
-        "name": "snapshot-agglayer-dev-ui-proxy-002:cdk-20260902-144414-b119c76e56bd",
+        "name": "snapshot-agglayer-dev-ui-proxy-002:cdk-20261009-153848-a8301d050c68",
         "base_image": "europe-west2-docker.pkg.dev/prj-polygonlabs-devtools-dev/virtual/haproxy:3.2-bookworm",
         "size": "108MB",
-        "tag": "3.2-bookworm-1788360503",
-        "digest": "sha256:215f07b29e3da1cf9a4838eeadbd855932ab524bc665b4c1f3470c30da8ab639"
+        "tag": "3.2-bookworm-1791560572",
+        "digest": "sha256:ece753b70efcae5d7ef4543a9f55b84a2f2ec66f8afde9db6adab2e4179b8e09"
       },
       "agglayer-dev-ui-002": {
-        "name": "snapshot-agglayer-dev-ui-002:cdk-20260902-144414-b119c76e56bd",
+        "name": "snapshot-agglayer-dev-ui-002:cdk-20261009-153848-a8301d050c68",
         "base_image": "ghcr.io/agglayer/agglayer-dev-ui:dispatch-feat-aggkit-backend-8563dd4ba876-31732860787",
         "size": "72.2MB",
-        "tag": "dispatch-feat-aggkit-backend-8563dd4ba87-1788360503",
-        "digest": "sha256:233cb48d67fc6d9760bd059cd221100315a092b9ee75f7e91f183b67769e0f77"
+        "tag": "dispatch-feat-aggkit-backend-8563dd4ba87-1791560572",
+        "digest": "sha256:c99673027b5f31b98bf66b8d2e5734c0da1ad3f4d629d78b1ba9e44ba28d6a6d"
       }
     }
   },

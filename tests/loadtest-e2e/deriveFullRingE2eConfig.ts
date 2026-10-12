@@ -9,7 +9,8 @@ import type { LoadtestConfig } from '../../loadtest/config/schema';
 // this one does NOT shorten the ring: `deriveDevnetConfig()`'s default ring
 // IS the tool's normal `L1 -> L2A -> L2B -> L1` (3 hops), so this file only
 // needs to change the wallet start index -- everything else (chains,
-// autoclaim map, funder gas/spend per chain) is already correct for all
+// autoclaim map (all hops manual-claim on the
+// autoclaimer-less devnet), funder gas/spend per chain) is already correct for all
 // three chains because nothing is being dropped from `ring`/`chains`.
 //
 // `users.wallets.startIndex` is moved to 98000, distinct from every other

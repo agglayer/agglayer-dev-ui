@@ -1,5 +1,10 @@
 # PARITY.md — headless vs browser trace diff (S23)
 
+> **Historical (aggkit rc8).** The traces compared here were captured on the rc8 devnet, where the
+> `L1->L2A` and `L2A->L2B` hops were autoclaimed ("auto / auto / manual" and "16 auto + 8 manual"
+> below). The devnet now runs aggkit rc17 with no autoclaimer, so a fresh run claims every hop
+> manually; request-class counts in this document would differ accordingly.
+
 This document diffs the headless worker's real HTTP trace against the browser
 worker's real HAR for the same lap shape (`L1 -> L2A -> L2B -> L1`, auto /
 auto / manual, one ETH lap + one ERC20 lap per user), classes every request
