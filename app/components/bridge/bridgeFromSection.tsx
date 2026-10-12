@@ -8,7 +8,7 @@ import { BadgeImageFallback } from '@/app/components/ui/badgeImageFallback';
 import { Dropdown } from '@/app/components/ui/dropdown';
 import { ZERO_ADDRESS } from '@/app/types/bridge';
 import { normalize } from '@/app/utils/format';
-import { formatTokenBalance, getTokenLogoBySymbol, portionOfBalance } from '@/app/utils/tokens';
+import { formatTokenBalance, getTokenLogoUrl, portionOfBalance } from '@/app/utils/tokens';
 import { useMemo } from 'react';
 
 interface BridgeFromSectionProps {
@@ -77,7 +77,13 @@ export const BridgeFromSection = ({
           tokenIcon={
             selectedToken ? (
               <BadgeImageFallback
-                src={selectedToken.logoURI || getTokenLogoBySymbol(selectedToken.symbol)}
+                src={
+                  selectedToken.logoURI ||
+                  getTokenLogoUrl({
+                    chainId: selectedToken.chainId,
+                    address: selectedToken.address
+                  })
+                }
                 size="sm"
                 fallbackText={selectedToken.symbol}
               />

@@ -13,7 +13,7 @@ import { useTokenMetadata } from '@/app/hooks/useTokenMetadata';
 import { shortenAddress } from '@/app/utils/address';
 import { getChainByNetworkId } from '@/app/utils/chains';
 import { formatDateTime } from '@/app/utils/date';
-import { getTokenLogoBySymbol } from '@/app/utils/tokens';
+import { getTokenLogoUrl } from '@/app/utils/tokens';
 import { formatTransactionAmount, isNativeToken } from '@/app/utils/transaction';
 import { ExternalLink, Loader2 } from 'lucide-react';
 import { useMemo } from 'react';
@@ -65,7 +65,9 @@ export const TransactionDetailsModal = ({
     : localToken?.symbol || tokenMetadata?.symbol || '';
   const tokenLogo = isNative
     ? originChain?.nativeCurrency?.logoURI || originChain?.icon
-    : localToken?.logoURI || tokenMetadata?.logoURI || getTokenLogoBySymbol(tokenSymbol);
+    : localToken?.logoURI ||
+      tokenMetadata?.logoURI ||
+      getTokenLogoUrl({ chainId: originChain?.id, address: tx?.originTokenAddress });
   const formattedAmount = tx ? formatTransactionAmount(tx.amount, decimals) : '-';
 
   if (!tx) return null;

@@ -11,7 +11,7 @@ import { useAppMode } from '@/app/context/appMode';
 import { useTokenMetadata } from '@/app/hooks/useTokenMetadata';
 import { isValidEthereumAddress, shortenAddress } from '@/app/utils/address';
 import { getChainById } from '@/app/utils/chains';
-import { getTokenLogoBySymbol } from '@/app/utils/tokens';
+import { getTokenLogoUrl } from '@/app/utils/tokens';
 import { Trash2, ArrowLeft, ExternalLink, Loader2 } from 'lucide-react';
 import { useMemo } from 'react';
 
@@ -57,7 +57,7 @@ export const ManageTokensView: React.FC<ManageTokensViewProps> = ({
       decimals: data.decimals,
       symbol: data.symbol,
       name: data.name,
-      logoURI: data.logoURI || getTokenLogoBySymbol(data.symbol),
+      logoURI: data.logoURI || getTokenLogoUrl({ chainId, address: data.tokenAddress }),
       isCustom: true
     };
     onAddCustomToken(token);
@@ -120,7 +120,7 @@ export const ManageTokensView: React.FC<ManageTokensViewProps> = ({
         <div className="space-y-3 rounded-xl border border-border bg-surface px-3 py-3 shadow-xs">
           <div className="flex items-center gap-3">
             <BadgeImageFallback
-              src={data.logoURI || getTokenLogoBySymbol(data.symbol)}
+              src={data.logoURI || getTokenLogoUrl({ chainId, address: data.tokenAddress })}
               size="lg"
               fallbackText={data.symbol}
             />
@@ -216,7 +216,9 @@ export const ManageTokensView: React.FC<ManageTokensViewProps> = ({
           {filteredCustomTokens.length > 0 && (
             <div className="space-y-2 max-h-80 overflow-y-auto py-2">
               {filteredCustomTokens.map((token) => {
-                const tokenLogo = token.logoURI || getTokenLogoBySymbol(token.symbol);
+                const tokenLogo =
+                  token.logoURI ||
+                  getTokenLogoUrl({ chainId: token.chainId, address: token.address });
                 return (
                   <div
                     key={`${token.chainId}-${token.address}`}
