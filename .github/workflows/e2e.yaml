@@ -222,9 +222,18 @@ jobs:
         working-directory: dev-ui
         run: pnpm exec playwright test tests/e2e/preflight.spec.ts
 
+      # Custom tokens + wrapped-token resolution (tests/bridge/custom-tokens.spec.ts):
+      # adds the devnet ERC20 through the Manage tokens UI, bridges it L1->L2 and
+      # checks its wrapped version shows up when "Bridge from" is the L2. Run as
+      # its own step so a regression here is reported separately from the
+      # general bridge suite below.
+      - name: Run Playwright custom tokens tests
+        working-directory: dev-ui
+        run: pnpm exec playwright test tests/bridge/custom-tokens.spec.ts
+
       - name: Run Playwright bridge tests
         working-directory: dev-ui
-        run: pnpm exec playwright test tests/bridge
+        run: pnpm exec playwright test tests/bridge --grep-invert "custom token"
 
       # if: always() (not !cancelled()/on-failure) -- a hung devnet that
       # causes the job to be cancelled on timeout is exactly the case where
