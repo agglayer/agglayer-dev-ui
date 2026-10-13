@@ -1,5 +1,15 @@
 # Agglayer Dev UI
 
+> [!WARNING]
+> **This service is deprecated and being retired alongside agglayer-ui.**
+>
+> Per the 2026-07-23 Apps Team product review, this developer/debug UI for
+> AggLayer is being wound down as the AggLayer surface moves to Trails
+> (Sequence team, Taylan Pince).
+>
+> No new features should be added here. This repository will be archived once
+> agglayer-ui's migration to Trails is complete.
+
 The Agglayer Dev UI is a configurable, self-hosted bridging interface powered by the [Agglayer SDK](https://github.com/agglayer/sdk) and the [Bridge Hub API](https://github.com/agglayer/agglayer-bridge-hub-api).
 
 ## Quickstart
