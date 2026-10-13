@@ -62,9 +62,13 @@ import type { ActivityCadenceState } from './uiCallset';
 import { toClaimProof } from '../../../app/services/claimProof';
 import { mapTransactionRequest } from '../../../app/utils/transaction';
 import { toRowKey } from '../../core/types';
-import { classifyHttpError, classifyRpcError, classifySubmitError } from '../../metrics/errors';
+import {
+  classifyActivityWarning,
+  classifyHttpError,
+  classifyRpcError,
+  classifySubmitError
+} from '../../metrics/errors';
 import { defaultChainClientFactory } from '../../wallets/chainClients';
-import { redactSecrets } from '../../wallets/redact';
 import {
   IS_CLAIMED_RECHECK_DELAYS_MS,
   anyRowNonTerminal,
@@ -595,13 +599,15 @@ export class HeadlessUser implements UserDriver {
     // silence — recorded so a broken upstream bridge service is visible
     // rather than looking like "no rows for that network".
     for (const warning of warnings) {
+      const classified = classifyActivityWarning({
+        networkId: warning.network_id,
+        message: warning.message
+      });
       this.collector.error({
         userId: this.userId,
         mode: this.mode,
-        errorClass: 'proxy_5xx',
-        message: redactSecrets(
-          `activity_warning[network_id=${warning.network_id}]: ${warning.message}`
-        ),
+        errorClass: classified.errorClass,
+        message: classified.message,
         endpointClass: 'tracker/activity'
       });
     }

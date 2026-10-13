@@ -637,6 +637,7 @@ const outcomeFromDriverError = (error: DriverError | undefined): Outcome => {
         // Handled by the caller (T22) before it gets here.
         return 'internal';
       case 'console_error':
+      case 'activity_warning':
       case 'funding':
       case 'config':
         return 'internal';

@@ -281,6 +281,22 @@ export const classifyFundingError = (input: { message: string }): ClassifiedErro
   message: redactSecrets(input.message)
 });
 
+/**
+ * Finding C13 (S40): one entry of the optional per-network `warnings` array
+ * on a SUCCESSFUL `tracker/activity` response (e.g. "bridge service for
+ * network N is not fully synchronized, some bridges may still be missing").
+ * The request was a 200, so this is NOT `proxy_5xx`; it is its own
+ * non-failing class so a partial fan-out stays visible without inflating
+ * the 5xx count.
+ */
+export const classifyActivityWarning = (input: {
+  networkId: number | string;
+  message: string;
+}): ClassifiedError => ({
+  errorClass: 'activity_warning',
+  message: redactSecrets(`activity_warning[network_id=${input.networkId}]: ${input.message}`)
+});
+
 /** A schema/validate failure — the run never starts. */
 export const classifyConfigError = (input: { message: string }): ClassifiedError => ({
   errorClass: 'config',
@@ -312,6 +328,7 @@ export type ClassifyInput =
   | ({ source: 'ui_assertion' } & { message: string; testId?: string })
   | ({ source: 'browser_crash' } & { message?: string })
   | ({ source: 'console' } & { message: string; url?: string })
+  | ({ source: 'activity_warning' } & { networkId: number | string; message: string })
   | ({ source: 'funding' } & { message: string })
   | ({ source: 'config' } & { message: string })
   | { source: 'unknown'; error: unknown };
@@ -332,6 +349,8 @@ export const classifyError = (input: ClassifyInput): ClassifiedError => {
       return classifyBrowserCrash(input);
     case 'console':
       return classifyConsoleError(input);
+    case 'activity_warning':
+      return classifyActivityWarning(input);
     case 'funding':
       return classifyFundingError(input);
     case 'config':

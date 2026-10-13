@@ -100,7 +100,7 @@ is a validated, worked example (Sepolia <-> Bokuto):
   ],
   "ring": ["SEPOLIA", "BOKUTO", "SEPOLIA"], // closed, >= 2 hops; ring[0] must be the asset's origin chain
   "autoclaim": {
-    "SEPOLIA->BOKUTO": { "expected": true, "waitMs": 120000 },
+    "SEPOLIA->BOKUTO": { "expected": false }, // manual claim (default; see "Autoclaim semantics")
     "BOKUTO->SEPOLIA": { "expected": false } // manual claim
   },
   "assets": [{ "kind": "eth", "amount": "0.00001", "decimals": 18 }],
@@ -230,6 +230,11 @@ Each run writes `loadtest-results/<timestamp>/`:
   stalls, Autoclaim policy, Errors, Resources, Environment. Its first line is always
   the pass/abort headline (see below). `pnpm loadtest report --dir <dir>` re-renders
   it from `results.json` alone, byte-identical.
+- **Error classes.** The Errors section lists errors by class and a top-10. The
+  non-failing class `activity_warning` (the tracker answered 200 but flagged a network
+  as "not fully synchronized, some bridges may still be missing") appears in those
+  tables, not under "Suppressed", and never fails a hop: a run whose only errors are
+  `activity_warning` entries is still `PASS`.
 
 **The throughput identity.** `ticksOffered = lapStartsSubmitted + skippedBackpressure
 + ticksLostToRamp` — all four counted in the same unit (one per scheduler
@@ -279,19 +284,28 @@ ring chain uses ETH as gas, so reports for ETH-only configs are unchanged.
 
 ## Autoclaim semantics
 
-> **Devnet note.** The vendored devnet runs aggkit `v0.11.0-rc17`, which removed the built-in
-> autoclaim component ([agglayer/aggkit#1901](https://github.com/agglayer/aggkit/pull/1901)), and
-> `config/config.ci.devnet.json` sets `expectedAutoclaim: false` on every route. Against the devnet every
-> hop is therefore claimed by the tool itself (`hop_completed_manual`), and `autoclaimOverdue`,
-> `unexpectedAutoclaim`, `hop_completed_auto` and `hop_completed_escalated` are all expected to be `0`
-> (`tests/loadtest-e2e/run.spec.ts` asserts this). The semantics below still apply to real environments
-> that have an autoclaimer; the "L2->L1 on this devnet" example now describes every devnet hop.
+**Manual claim is the default.** Every route in the shipped examples and in the generated devnet config is
+`{"expected": false}`: the tool claims each hop itself, with the user's own wallet, as soon as the hop is
+`READY_TO_CLAIM` (outcome `hop_completed_manual`). The `autoclaim` map is still required by the schema (exactly
+one entry per ring hop), but autoclaim itself is **optional** per hop: `{"expected": true, "waitMs": 120000}`
+remains valid and makes the tool wait up to `waitMs` for a service-side claim before escalating to a manual one.
+Use it only against an environment that actually runs an autoclaimer.
+
+- **Devnet.** The vendored devnet runs aggkit `v0.11.0-rc17`, which removed the built-in autoclaim component
+  ([agglayer/aggkit#1901](https://github.com/agglayer/aggkit/pull/1901)); `config/config.ci.devnet.json` sets
+  `expectedAutoclaim: false` on every route. `autoclaimOverdue`, `unexpectedAutoclaim`, `hop_completed_auto` and
+  `hop_completed_escalated` are all expected to be `0` (`tests/loadtest-e2e/run.spec.ts` asserts this).
+- **Bali / testnet.** Default to `expected: false` too. Evidence from the Bali ring A run of 2026-10-06
+  (0.00001 ETH): with autoclaim expected, hop 0 (Sepolia -> BALI_82) bridged at 12:04:24Z and was claimed after
+  an `AWAITING_AUTOCLAIM` wait that ended 12:23:22Z (~16 min); hop 1 (82 -> 85, bridged 12:23:24Z) was claimed
+  ~45 min later (~13:08Z). Waiting on a service-side claim is slow and unpredictable, so the tool claims manually.
+- **`.claude/bin/loadtest.sh`.** Its `render()` forces `expected: false` and drops `waitMs` on every route
+  (aggkit rc17 has no autoclaimer), whatever the template says.
 
 Each ring hop (`"L1->L2A"`, etc.) has a configured autoclaim expectation:
-`{"expected": true, "waitMs": 120000}` or `{"expected": false}` (manual-claim-only,
-every hop on the rc17 devnet).
+`{"expected": false}` (manual claim, the default) or, optionally, `{"expected": true, "waitMs": 120000}`.
 
-- **`autoclaim_overdue`** (an expected autoclaim didn't happen inside `waitMs`) and
+- **`autoclaim_overdue`** (only possible on a hop configured `expected: true`: the autoclaim didn't happen inside `waitMs`) and
   **`unexpected_autoclaim`** (a hop configured `expected: false` got auto-claimed
   anyway) are **counters, and neither one fails a hop.**
 - An overdue autoclaim **escalates to a manual claim** and, if that succeeds, the
@@ -305,7 +319,7 @@ every hop on the rc17 devnet).
   `timeout_*`/`internal`/etc. outcomes are failures.
 
 **What `unexpectedAutoclaim = 0` does and does not prove for an `expected: false`
-(L2 -> L1) hop.** The tool claims such a hop itself, with the user's own wallet
+(manual-claim) hop.** The tool claims such a hop itself, with the user's own wallet
 (paid from that user's `gasPerChain` on the destination chain). A `0` therefore
 means only that *autoclaim was not shown to act on the hop*; it does not prove autoclaim
 did not claim it. The tool claims as soon as it first sees the hop `READY` (`core/ring.ts:751-759`),

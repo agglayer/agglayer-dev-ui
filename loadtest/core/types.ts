@@ -189,6 +189,11 @@ export type ErrorClass =
   | 'ui_assertion'
   | 'browser_crash'
   | 'console_error'
+  // Finding C13 (S40): a per-network `warnings[]` entry on a SUCCESSFUL
+  // `tracker/activity` response (upstream bridge service not fully synced).
+  // Recorded, never a hop failure, and deliberately NOT `proxy_5xx` (no 5xx
+  // occurred — the request returned 200).
+  | 'activity_warning'
   | 'funding'
   | 'config'
   // R10 (loadtest/REVIEW.md), fixed S26: a browser context's connected

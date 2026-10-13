@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  classifyActivityWarning,
   classifyBrowserCrash,
   classifyConfigError,
   classifyConsoleError,
@@ -71,6 +72,30 @@ describe('classifyHttpError — proxy_4xx / proxy_5xx', () => {
     expect(classifyHttpError({ endpointClass: 'tracker/activity', status: 502 }).errorClass).toBe(
       'proxy_5xx'
     );
+  });
+});
+
+describe('classifyActivityWarning — activity_warning (finding C13, S40)', () => {
+  const WARNING =
+    'bridge service for network 0 is not fully synchronized, some bridges may still be missing';
+
+  it('the tracker sync warning maps to activity_warning, not proxy_5xx', () => {
+    const result = classifyActivityWarning({ networkId: 0, message: WARNING });
+    expect(result.errorClass).toBe('activity_warning');
+    expect(result.message).toBe(`activity_warning[network_id=0]: ${WARNING}`);
+  });
+
+  it('dispatcher routes the warning source to activity_warning', () => {
+    expect(
+      classifyError({ source: 'activity_warning', networkId: 0, message: WARNING }).errorClass
+    ).toBe('activity_warning');
+  });
+
+  it('a genuine 502 on tracker/activity still maps to proxy_5xx', () => {
+    expect(
+      classifyHttpError({ endpointClass: 'tracker/activity', status: 502, bodyText: 'bad gateway' })
+        .errorClass
+    ).toBe('proxy_5xx');
   });
 });
 

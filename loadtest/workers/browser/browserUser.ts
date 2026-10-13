@@ -115,6 +115,7 @@ import type { BrowserPool } from './pool';
 import { shortenAddress } from '../../../app/utils/address';
 import { BridgePage } from '../../../tests/bridge/models/bridge-page';
 import {
+  classifyActivityWarning,
   classifyBrowserCrash,
   classifyRevertError,
   classifyRpcError,
@@ -735,11 +736,15 @@ export class BrowserUser implements UserDriver {
 
         const { rows, warnings } = mapActivityResponseText(text);
         for (const warning of warnings) {
+          const classified = classifyActivityWarning({
+            networkId: warning.network_id,
+            message: warning.message
+          });
           this.collector.error({
             userId: this.userId,
             mode: this.mode,
-            errorClass: 'proxy_5xx',
-            message: `activity_warning[network_id=${warning.network_id}]: ${warning.message}`,
+            errorClass: classified.errorClass,
+            message: classified.message,
             endpointClass: 'tracker/activity'
           });
         }

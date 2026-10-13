@@ -17,6 +17,7 @@ import type { LoadtestConfig } from '../config/schema';
 import { deriveDevnetConfig } from '../config/deriveDevnet';
 import { parseLoadtestConfig } from '../config/schema';
 import { createCollector } from './collector';
+import { classifyActivityWarning } from './errors';
 import {
   buildResultsJson,
   checkThroughputIdentity,
@@ -258,6 +259,51 @@ describe('renderSummaryMd — every DESIGN §6.3 section is present', () => {
       expect(index, `out of order: ${heading}`).toBeGreaterThan(lastIndex);
       lastIndex = index;
     }
+  });
+
+  // S40 (finding C13): tracker sync warnings are their own non-failing class,
+  // visible in summary.md, and never counted as proxy_5xx.
+  it('renders activity_warning as its own error class, separate from proxy_5xx, without failing the run', () => {
+    const config = buildDevnetConfig();
+    const collector = createCollector();
+    collector.runStart({
+      toolVersion: 'v1',
+      sdkVersion: 'sdk1',
+      host: { cores: 4, totalMemMb: 8192, platform: 'linux' }
+    });
+    collector.tick('u1', 'headless');
+    const classified = classifyActivityWarning({
+      networkId: 0,
+      message:
+        'bridge service for network 0 is not fully synchronized, some bridges may still be missing'
+    });
+    collector.error({
+      userId: 'u1',
+      mode: 'headless',
+      errorClass: classified.errorClass,
+      message: classified.message,
+      endpointClass: 'tracker/activity'
+    });
+    collector.hopEnd({
+      userId: 'u1',
+      mode: 'headless',
+      hopId: 'h1',
+      lapId: 'l1',
+      hopRoute: 'L1->L2A',
+      outcome: 'hop_completed_auto'
+    });
+    collector.runEnd({ aborted: false, abortCause: null });
+
+    const snapshot = collector.snapshot();
+    expect(snapshot.errors.byClass.activity_warning).toBe(1);
+    expect(snapshot.errors.byClass.proxy_5xx).toBeUndefined();
+    const results = buildResultsJson({ snapshot, config });
+    expect(results.hops.byOutcome.hop_completed_auto).toBe(1);
+
+    const summaryMd = renderSummaryMd(results, config);
+    expect(summaryMd).toContain('activity_warning');
+    expect(summaryMd).toContain('activity_warning[network_id=0]: bridge service for network 0');
+    expect(summaryMd).not.toContain('proxy_5xx');
   });
 
   // S16/A5 (VALIDATION-1.md): a report that can invalidate its own numbers

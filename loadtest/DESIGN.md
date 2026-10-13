@@ -123,7 +123,7 @@ the schema may not have defaults that are lost on write-back.
 | `chains[].nativeSymbol` | string | no | `'ETH'` | report labelling only |
 | `ring[]` | array of `chains[].key`, ≥3 entries | yes | — | closed: `ring[0] === ring[at(-1)]`; ≥2 hops; every consecutive pair distinct; every key present in `chains` |
 | `autoclaim` | record keyed `"<FROM>-><TO>"` | yes | — | **exactly** one entry per ring hop, no extras (S04 rejects both directions of mismatch) |
-| `autoclaim[hop].expected` | bool | yes | — | — |
+| `autoclaim[hop].expected` | bool | yes | — | `false` = manual claim (the default everywhere); `true` = optionally wait for a service-side autoclaim |
 | `autoclaim[hop].waitMs` | int >0 | required iff `expected` | — | grace window before escalation (§3.4) |
 | `assets[]` | array, ≥1 | yes | — | at most one `kind:'eth'`; `address` unique per `kind:'erc20'` |
 | `assets[].kind` | `'eth' \| 'erc20'` | yes | — | — |
@@ -209,8 +209,8 @@ The schema rejects any 32-byte hex literal anywhere in the document
   ],
   "ring": ["L1", "L2A", "L2B", "L1"],
   "autoclaim": {
-    "L1->L2A":  { "expected": true,  "waitMs": 120000 },
-    "L2A->L2B": { "expected": true,  "waitMs": 300000 },
+    "L1->L2A":  { "expected": false },
+    "L2A->L2B": { "expected": false },
     "L2B->L1":  { "expected": false }
   },
   "assets": [
@@ -282,7 +282,7 @@ Field provenance — every value above has a named source:
   ],
   "ring": ["SEPOLIA", "BOKUTO", "SEPOLIA"],
   "autoclaim": {
-    "SEPOLIA->BOKUTO": { "expected": true, "waitMs": 120000 },
+    "SEPOLIA->BOKUTO": { "expected": false },
     "BOKUTO->SEPOLIA": { "expected": false }
   },
   "assets": [
@@ -319,7 +319,7 @@ Field provenance:
 | `chains.SEPOLIA.*` | repo `config.json` → `chains.SEPOLIA` (`id` 11155111, `networkId` 0, `rpcUrl`, `explorerUrl`) |
 | `chains.BOKUTO.*` | repo `config.json` → `chains.BOKUTO` (`id` 737373, `networkId` 37, `rpcUrl`, `explorerUrl`) |
 | `chains[].bridgeAddress` | `config.json` → `appModes.configs.testnet.bridgeAddress` = `0x528e26b25a34a4A5d0dbDa1d57D318153d2ED582`. Neither `SEPOLIA` nor `BOKUTO` declares a per-chain override, so `buildModeConfig` (`app/config.ts:157-165`) resolves both to the mode default — the loadtest config flattens that resolution |
-| `autoclaim.*` | `config.json` → `autoclaim` (`l1_to_l2` true/120000, `l2_to_l1` false), mapped through `getRouteType`: Sepolia is `networkId 0` so `SEPOLIA->BOKUTO` is `l1_to_l2` and `BOKUTO->SEPOLIA` is `l2_to_l1` |
+| `autoclaim.*` | manual claim by default: both routes `expected: false` (the app's `config.json` → `autoclaim` has `l1_to_l2` true/120000, but the Bali ring A run of 2026-10-06 showed autoclaim taking ~16 min then ~45 min, see §3.4), mapped through `getRouteType`: Sepolia is `networkId 0` so `SEPOLIA->BOKUTO` is `l1_to_l2` and `BOKUTO->SEPOLIA` is `l2_to_l1` |
 | `assets[0].amount` | `app/constants/e2e.ts:140` testnet `DEFAULT_NATIVE_BRIDGE_AMOUNT = '0.00001'` |
 | `timeouts.*` | scaled from `app/constants/e2e.ts:151-152` testnet defaults (`120_000` bridge success, `300_000` claim) plus real-testnet settlement headroom; `readyToClaimMs`/`claimedMs` are deliberately 3× the devnet value and are **[VERIFY@S18]** — the S18 smoke run records the observed values in its report and this table is updated from them |
 | `aggkitProxyUrl` | **NOT available from the repo.** `config.json` → `appModes.configs.testnet.aggkitProxy` is the literal string `https://PLACEHOLDER-testnet-aggkit-proxy`. It must be supplied by the operator (or via the app's `NEXT_PUBLIC_AGGKIT_PROXY` override, read at `app/config.ts:65` and applied at `:108`). `config/examples/testnet.loadtest.json` therefore ships the value `https://REPLACE-ME-testnet-aggkit-proxy`, and `loadtest validate` **fails** on any host containing `PLACEHOLDER` or `REPLACE-ME` (`PROXY_URL_PLACEHOLDER`) |
@@ -455,6 +455,16 @@ back toward 600 000.
 
 ### 3.4 Autoclaim escalation and the two policy counters
 
+**Manual claim is the default; autoclaim is an optional per-hop setting.** Every
+shipped config (devnet and the Bali/testnet example) sets `expected: false`, and
+`.claude/bin/loadtest.sh` `render()` forces it (dropping `waitMs`) because aggkit
+rc17 has no autoclaimer. `expected: true` + `waitMs` remain valid in the schema and
+engine (T13/T17/T18 below) for environments that do run one. Timing datum, Bali
+ring A run of 2026-10-06 (0.00001 ETH): hop 0 (Sepolia -> BALI_82) bridged
+12:04:24Z and was claimed after an `AWAITING_AUTOCLAIM` wait ending 12:23:22Z
+(~16 min); hop 1 (82 -> 85, bridged 12:23:24Z) was claimed ~45 min later
+(~13:08Z). That latency is why manual claim is the default.
+
 The UI's own gate is mirrored exactly (`app/hooks/useAutoclaimGate.ts:22-62`,
 `app/utils/autoclaim.ts:28-38`): the grace window starts at
 **first-observed `READY_TO_CLAIM`** (`readyAt`), not at bridge submit, and
@@ -465,7 +475,7 @@ policy surprises as **fatal claim-mode violations**: this tool treats them as
 **recorded counters that do not fail the hop**, because its purpose is load
 generation with honest reporting, not a policy assertion suite:
 
-- `autoclaim_overdue` (T18) — route expected autoclaim, grace window elapsed,
+- `autoclaim_overdue` (T18) — only on a route configured `expected: true`: autoclaim was expected, grace window elapsed,
   we escalate to a manual claim so the ring keeps moving.
 - `unexpected_autoclaim` (T27) — route expected **no** autoclaim, something
   else claimed it. The hop succeeds; the counter is surfaced in `summary.md`'s
@@ -715,6 +725,7 @@ is the only signal available — and those cases are listed here explicitly.
 | `not_ready` | `/bridge/v1/l1-info-tree-index` 404/500 with the documented "not been included on the L1 Info Tree yet" body; `/bridge/v1/injected-l1-info-leaf` 404 "GER not yet injected"; `/bridge/v1/claim-proof` 404 "has not indexed" | **Not an error.** Same allowlist `tests/bridge/console-hygiene.spec.ts:66-77` already applies. Counted as a gate stall (§5.4), excluded from the error report |
 | `proxy_4xx` | any other 4xx from `{proxy}/…` | 400 = missing `network_id`; 404 = unknown network (aggkit-proxy contract, plan §2) |
 | `proxy_5xx` | any other 5xx from `{proxy}/…` | 502 = backend down |
+| `activity_warning` | **S40 (finding C13).** A per-network `warnings[]` entry on a *successful* (200) `tracker/activity` response, e.g. "bridge service for network N is not fully synchronized, some bridges may still be missing" | Recorded as `activity_warning[network_id=N]: …`; **not** `proxy_5xx` (no 5xx occurred) and never fails a hop. Appears in the error-by-class table |
 | `rpc_error` | JSON-RPC error response or transport failure on a `chains[].rpcUrl` | subdivided by JSON-RPC error code in the report |
 | `nonce_conflict` | **R3 (loadtest/REVIEW.md), added S21.** An `rpc_error`/submit-throw whose message mentions "nonce" | **Originally a deliberate decision, REVERSED by S29 (2026-09-14) — kept below for the history, not as current policy.** ~~There is no per-(user, chain) nonce serialization on the user send path (`wallets/chainClients.ts`'s `ChainNonceManager` is funder-only) — `load.maxInflightLapsPerUser` (default 3, up to 6 per user with two assets per §3.5's asset-interleaving clause) puts multiple concurrent sends on one EOA by design, matching a real user's wallet (`app/utils/transaction.ts`'s dropped-nonce parity, finding C4). A live run logged 19 nonce-too-low + 70 viem `-32003` rejections from exactly this. Chosen resolution: **keep parity** (do not serialize sends — that would diverge from the UI) and instead **attribute honestly**: a nonce-shaped message is classified separately from plain `rpc_error` (a class that reads as "the chain/proxy rejected us") rather than serializing sends.~~ **S29 finding: concentrated on the `L2B->L1` claim hop alone (not diluted across all hops as R3's "89/1985" framing implied) this was ~39% of attempts failing (33/85 and 11/29 across two full 3-hop runs) — not tolerable.** S29 walked viem's `.cause` chain on real failures and captured the actual anvil rejection text underneath the generic `-32003` shortMessage: **`"replacement transaction underpriced"`** — direct confirmation of same-EOA nonce contention, not a genuine chain/proxy rejection. **The parity argument is now judged backwards: a real user does not submit several concurrent bridges from one wallet, so serializing sends per (user, chain) is MORE faithful to real usage, not less** — the identical reasoning S25 already used to justify browser mode's per-page `runExclusive`. `workers/headless/headlessUser.ts`'s `sendAndWait` is now wrapped in a per-(user, chain) FIFO queue (`workers/headless/uiCallset.ts`'s `KeyedSerialQueue`, the same shape as `runExclusive`), so concurrent sends on one EOA/chain no longer race the nonce at all. This class is left wired in `metrics/errors.ts` (a nonce-shaped message is still theoretically possible from a genuine node-side nonce issue) but should now fire rarely to never on this hop; see `loadtest/REVIEW.md`'s updated R3 entry for the full decision record. |
 | `tx_revert` | receipt `status === 'reverted'` not otherwise classified | see the two specialisations below |
