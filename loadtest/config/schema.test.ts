@@ -65,6 +65,31 @@ describe('loadtestConfigSchema — happy path examples', () => {
   });
 });
 
+describe('loadtestConfigSchema — measurement block (S45 C2)', () => {
+  it('is absent by default: no `measurement` key appears in the parsed config (probe off)', () => {
+    const config = parseLoadtestConfig(validDevnetDoc());
+    expect(config.measurement).toBeUndefined();
+    expect('measurement' in config).toBe(false);
+  });
+
+  it('accepts measurement.stageProbeIntervalMs >= 1000 and round-trips', () => {
+    const doc = { ...validDevnetDoc(), measurement: { stageProbeIntervalMs: 5000 } };
+    const first = parseLoadtestConfig(doc);
+    expect(first.measurement).toStrictEqual({ stageProbeIntervalMs: 5000 });
+    expect(parseLoadtestConfig(JSON.parse(serializeLoadtestConfig(first)))).toStrictEqual(first);
+  });
+
+  it('rejects an interval below 1000 ms, a non-integer, a missing field and unknown keys', () => {
+    const withMeasurement = (measurement: unknown) => ({ ...validDevnetDoc(), measurement });
+    expect(() => parseLoadtestConfig(withMeasurement({ stageProbeIntervalMs: 999 }))).toThrow();
+    expect(() => parseLoadtestConfig(withMeasurement({ stageProbeIntervalMs: 1500.5 }))).toThrow();
+    expect(() => parseLoadtestConfig(withMeasurement({}))).toThrow();
+    expect(() =>
+      parseLoadtestConfig(withMeasurement({ stageProbeIntervalMs: 5000, extra: true }))
+    ).toThrow();
+  });
+});
+
 describe('loadtestConfigSchema — cross-field negatives (DESIGN §2.1)', () => {
   it('RING_NOT_CLOSED: ring[0] !== ring[last]', () => {
     const doc = validDevnetDoc();

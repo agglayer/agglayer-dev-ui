@@ -297,6 +297,16 @@ const gasSchema = z
   .strict()
   .default({ bridgeGasOffset: 300_000 });
 
+// S45 C2: optional measurement block. Absent = no stage probe, behaviour
+// unchanged. `stageProbeIntervalMs` is the poll interval of the harness-origin
+// stage probe (headless users only) and the resolution reported next to the
+// stage-latency table.
+const measurementSchema = z
+  .object({
+    stageProbeIntervalMs: z.number().int().min(1000)
+  })
+  .strict();
+
 // `YYYYMMDDTHHMMSSZ` — DESIGN §2.1's "ISO-8601 basic timestamp".
 const isoBasicTimestamp = (): string =>
   new Date()
@@ -333,6 +343,7 @@ const rawConfigSchema = z
     browser: browserSchema,
     timeouts: timeoutsSchema,
     gas: gasSchema,
+    measurement: measurementSchema.optional(),
     output: outputSchema
   })
   .strict();

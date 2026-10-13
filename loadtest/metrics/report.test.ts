@@ -52,7 +52,8 @@ const SUMMARY_HEADINGS = [
   '## Autoclaim policy',
   '## Errors',
   '## Resources',
-  '## Environment'
+  '## Environment',
+  '## Claim gas and stage latency'
 ];
 
 describe('redactConfigForReport — DESIGN §6.1 "every secretRef replaced by {ref: ...}"', () => {
@@ -836,5 +837,95 @@ describe('writeReportFiles — disk I/O wrapper', () => {
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('measurements — results.json `measurements` key and the summary section (S45 C3/C4)', () => {
+  const measured = (config: LoadtestConfig) => {
+    const collector = createCollector();
+    collector.runStart({
+      toolVersion: 'v1',
+      sdkVersion: 'sdk1',
+      host: { cores: 1, totalMemMb: 1, platform: 'linux' }
+    });
+    collector.hopMeasurement({
+      hopId: 'h1',
+      lapId: 'l1',
+      userId: 'u1',
+      mode: 'headless',
+      hopRoute: 'BALI_82->BALI_85',
+      fromNetworkId: 82,
+      toNetworkId: 85,
+      assetKind: 'eth',
+      assetIndex: 0,
+      outcome: 'hop_completed_manual',
+      depositCount: 1,
+      bridge: { txHash: '0xb', blockNumber: '1', minedObservedAt: 1000, gas: null },
+      stages: {
+        l1InfoTreeIndexAt: 2000,
+        l1InfoTreeIndex: 1,
+        injectedLeafAt: 3000,
+        injectedLeafIndex: 2,
+        claimProofAt: 3000,
+        polls: 4
+      },
+      readyObservedAt: 4000,
+      claim: {
+        txHash: '0xc',
+        blockNumber: '2',
+        sentAt: 5000,
+        minedObservedAt: 6000,
+        gas: { blockNumber: '2', gasUsed: '90000', effectiveGasPrice: '1000', l1Fee: '120' },
+        claimKind: 'eth'
+      }
+    });
+    collector.runEnd({ aborted: false, abortCause: null });
+    return buildResultsJson({ snapshot: collector.snapshot(), config });
+  };
+
+  it('adds a `measurements` block with the per-hop records, gas rows and stage rows', () => {
+    const config = parseLoadtestConfig({
+      ...JSON.parse(JSON.stringify(buildDevnetConfig())),
+      measurement: { stageProbeIntervalMs: 5000 }
+    });
+    const results = measured(config);
+
+    expect(results.measurements?.probeIntervalMs).toBe(5000);
+    expect(results.measurements?.hops).toHaveLength(1);
+    expect(results.measurements?.claimGas[0]).toMatchObject({ toNetworkId: 85, claimKind: 'eth', n: 1 });
+    expect(results.measurements?.stageLatency[0].deltas.claimProof).toStrictEqual({
+      n: 1,
+      min: 2000,
+      median: 2000,
+      max: 2000
+    });
+  });
+
+  it('renders the new section LAST, after ## Environment, leaving the existing order unchanged', () => {
+    const config = buildDevnetConfig();
+    const summary = renderSummaryMd(measured(config), config);
+
+    expect(summary.indexOf('## Claim gas and stage latency')).toBeGreaterThan(
+      summary.indexOf('## Environment')
+    );
+    expect(summary).toContain('| 85 | eth | 1 |');
+    expect(summary).toContain('T3b-T3 tracker READY lag after claim-proof | 1 / 1000 / 1000 / 1000');
+  });
+
+  it('regenerates byte-identically from results.json (the `report --dir` path)', () => {
+    const config = buildDevnetConfig();
+    const results = measured(config);
+    const original = renderSummaryMd(results, config);
+    const reloaded = JSON.parse(JSON.stringify(results)) as typeof results;
+    expect(renderSummaryMd(reloaded, reloaded.config as LoadtestConfig)).toBe(original);
+  });
+
+  it('renders "No measurements recorded." and omits the key for a run/results with no hop measurements', () => {
+    const config = buildDevnetConfig();
+    const results = buildResultsJson({ snapshot: createCollector().snapshot(), config });
+    expect('measurements' in results).toBe(false);
+    expect(renderSummaryMd(results, config)).toMatch(
+      /## Claim gas and stage latency\n\nNo measurements recorded\.\n$/
+    );
   });
 });

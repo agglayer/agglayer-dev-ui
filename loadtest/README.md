@@ -227,7 +227,8 @@ Each run writes `loadtest-results/<timestamp>/`:
   attributing to specific users/hops.
 - **`summary.md`** — the human-readable report, in this section order:
   Configuration, Throughput, Hop outcomes, Phase latencies, Endpoint latencies, Gate
-  stalls, Autoclaim policy, Errors, Resources, Environment. Its first line is always
+  stalls, Autoclaim policy, Errors, Resources, Environment, then Claim gas and stage
+  latency (see "Measurement" below). Its first line is always
   the pass/abort headline (see below). `pnpm loadtest report --dir <dir>` re-renders
   it from `results.json` alone, byte-identical.
 - **Error classes.** The Errors section lists errors by class and a top-10. The
@@ -235,6 +236,21 @@ Each run writes `loadtest-results/<timestamp>/`:
   as "not fully synchronized, some bridges may still be missing") appears in those
   tables, not under "Suppressed", and never fails a hop: a run whose only errors are
   `activity_warning` entries is still `PASS`.
+
+**Measurement (claim gas and stage latency).** Every hop writes one
+`hop_measurement` record to `activity.ndjson`, and `results.json` gets a `measurements`
+key (`probeIntervalMs`, `hops`, `claimGas`, `stageLatency`, `excludedHops`). Claim gas
+(`gasUsed`, `effectiveGasPrice`, the OP `l1Fee*` fields when the receipt carries them,
+and whether the claim deployed the wrapper token) is read from the receipt the headless
+driver already fetches: no extra RPC. The wrapper deploy is detected from the bridge's
+`NewWrappedToken(uint32,address,address,bytes)` log. The optional config block
+`measurement: { "stageProbeIntervalMs": 5000 }` (integer >= 1000, default off, headless
+users only) starts a harness-origin probe after each bridge receipt that polls
+`l1-info-tree-index`, `injected-l1-info-leaf` and `claim-proof` until the proof is
+available; probe requests land in the `harness` bucket of the endpoint tables, never the
+UI-parity numbers. `summary.md`'s `## Claim gas and stage latency` section (always last,
+"No measurements recorded." for an older `results.json`) reports n / min / true median /
+max over completed hops only; failed hops are counted beside the tables.
 
 **The throughput identity.** `ticksOffered = lapStartsSubmitted + skippedBackpressure
 + ticksLostToRamp` — all four counted in the same unit (one per scheduler

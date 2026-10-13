@@ -49,6 +49,8 @@ import type {
   AllowanceRead,
   BridgeSubmission,
   ClaimInputsResult,
+  ClaimStageProbeParams,
+  ClaimStageProbeResult,
   ClaimSubmission,
   DriverError,
   HopReadState,
@@ -69,6 +71,7 @@ import {
   classifySubmitError
 } from '../../metrics/errors';
 import { defaultChainClientFactory } from '../../wallets/chainClients';
+import { detectWrapperDeployed, extractReceiptGas } from './receiptGas';
 import {
   IS_CLAIMED_RECHECK_DELAYS_MS,
   anyRowNonTerminal,
@@ -134,6 +137,24 @@ const toSdkChainConfig = (chain: LoadtestChain) => ({
   nativeCurrency: { name: chain.nativeSymbol, symbol: chain.nativeSymbol, decimals: 18 },
   bridgeAddress: chain.bridgeAddress
 });
+
+/** `setTimeout` that resolves early (never rejects) when `signal` aborts. */
+const abortableSleep = (ms: number, signal?: AbortSignal): Promise<void> =>
+  new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve();
+      return;
+    }
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
 
 const messageOf = (error: unknown): string => {
   if (error && typeof error === 'object') {
@@ -744,7 +765,19 @@ export class HeadlessUser implements UserDriver {
       };
 
       const claimTxParams = await bridge.buildClaimAsset(claimParams, this.address);
-      const { step: claimStep } = await this.sendAndWait(toChain.key, claimTxParams);
+      const { step: claimStep, rawReceipt: claimReceipt } = await this.sendAndWait(
+        toChain.key,
+        claimTxParams
+      );
+      // Measurement (S45 C1): first claim of an ERC20 deploys the wrapper —
+      // detected from the logs already in hand (NewWrappedToken emitted by the
+      // destination bridge), no extra RPC.
+      if (claimStep.receipt?.gas !== undefined && claimReceipt) {
+        claimStep.receipt.gas.wrapperDeployed = detectWrapperDeployed(
+          toChain.bridgeAddress,
+          claimReceipt.logs
+        );
+      }
 
       // Finding C3: the post-throw retry loop. Also applied, defensively,
       // to a mined-but-reverted receipt (DESIGN T24/T25) — the live UI only
@@ -761,6 +794,102 @@ export class HeadlessUser implements UserDriver {
 
       return { isClaimedBefore, isClaimedTiming, claimInputs, claim: claimStep, isClaimedRecheck };
     });
+  }
+
+  // -------------------------------------------------------------------------
+  // probeClaimStages() — S45 C2, measurement only. NOT part of `UserDriver`;
+  // the runner calls it behind a mode guard when `measurement.
+  // stageProbeIntervalMs` is configured. Polls the three claim-path endpoints
+  // in the pinned SDK's own `getClaimInputs` order (l1-info-tree-index on the
+  // source -> injected-l1-info-leaf on the destination -> claim-proof on the
+  // source), never re-polling a stage that is already available. Every request
+  // runs under a `harness`-origin fetch context so it lands in the harness
+  // bucket of the endpoint tables, never the UI-parity numbers. Resolves
+  // (never rejects) with whatever stages were reached.
+  // -------------------------------------------------------------------------
+  async probeClaimStages(params: ClaimStageProbeParams): Promise<ClaimStageProbeResult> {
+    const { sourceNetwork, destinationNetwork, depositCount, intervalMs, deadlineAt, signal } =
+      params;
+    const result: ClaimStageProbeResult = {
+      l1InfoTreeIndexAt: null,
+      l1InfoTreeIndex: null,
+      injectedLeafAt: null,
+      injectedLeafIndex: null,
+      claimProofAt: null,
+      polls: 0
+    };
+    // L1 (network 0) has no dedicated aggkit client — route it through the
+    // other end's instance, as the SDK's own `clientForRecordingNetwork` does.
+    const clientFor = (networkId: number, other: number) =>
+      this.aggregator.clientFor(networkId === 0 ? other : networkId);
+    const sourceClient = clientFor(sourceNetwork, destinationNetwork);
+
+    return runWithFetchContext(
+      { userId: this.userId, mode: this.mode, origin: 'harness' },
+      async () => {
+        while (!signal?.aborted && this.clock.now() < deadlineAt) {
+          try {
+            if (result.l1InfoTreeIndexAt === null) {
+              result.polls += 1;
+              const probe = await sourceClient.getL1InfoTreeIndex({
+                networkId: sourceNetwork,
+                depositCount
+              });
+              if (probe.ready) {
+                result.l1InfoTreeIndexAt = this.clock.now();
+                result.l1InfoTreeIndex = probe.value;
+              }
+            }
+            if (result.l1InfoTreeIndexAt !== null && result.injectedLeafAt === null) {
+              if (destinationNetwork === 0) {
+                // L1 destination: the leaf AT the index, no injection to wait for.
+                result.injectedLeafAt = this.clock.now();
+                result.injectedLeafIndex = result.l1InfoTreeIndex;
+              } else {
+                result.polls += 1;
+                const probe = await clientFor(destinationNetwork, sourceNetwork).getInjectedL1InfoLeaf({
+                  networkId: destinationNetwork,
+                  leafIndex: result.l1InfoTreeIndex as number
+                });
+                if (probe.ready) {
+                  result.injectedLeafAt = this.clock.now();
+                  result.injectedLeafIndex = probe.value.l1_info_tree_index;
+                  // Present on newer aggkit only (absent in the S43 live payload).
+                  const extra = probe.value as unknown as {
+                    injected_l2_block_num?: unknown;
+                    injected_l2_block_timestamp?: unknown;
+                  };
+                  if (typeof extra.injected_l2_block_num === 'number') {
+                    result.injectedL2BlockNum = extra.injected_l2_block_num;
+                  }
+                  if (typeof extra.injected_l2_block_timestamp === 'number') {
+                    result.injectedL2BlockTimestamp = extra.injected_l2_block_timestamp;
+                  }
+                }
+              }
+            }
+            if (result.injectedLeafAt !== null && result.claimProofAt === null) {
+              result.polls += 1;
+              const probe = await sourceClient.getClaimProof({
+                networkId: sourceNetwork,
+                leafIndex: result.injectedLeafIndex as number,
+                depositCount
+              });
+              if (probe.ready) result.claimProofAt = this.clock.now();
+            }
+          } catch {
+            // A transient poll failure (HTTP/transport) never ends the probe —
+            // the next round retries; the request itself is already recorded
+            // (status/transport failure) by the timing fetch wrapper.
+          }
+          params.onProgress?.({ ...result });
+          if (result.claimProofAt !== null) break;
+          await abortableSleep(intervalMs, signal);
+        }
+        params.onProgress?.({ ...result });
+        return result;
+      }
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -930,6 +1059,7 @@ export class HeadlessUser implements UserDriver {
           hash: txHash,
           ...(this.receiptTimeoutMs !== undefined ? { timeout: this.receiptTimeoutMs } : {})
         });
+        const gas = extractReceiptGas(receipt as never);
         return {
           step: {
             txHash,
@@ -939,7 +1069,8 @@ export class HeadlessUser implements UserDriver {
               timing: {
                 startedAt: receiptStartedAt,
                 durationMs: this.clock.now() - receiptStartedAt
-              }
+              },
+              ...(gas !== undefined ? { gas } : {})
             }
           },
           rawReceipt: receipt

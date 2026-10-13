@@ -903,3 +903,49 @@ describe('collector — run lifecycle', () => {
     expect(run.lapsInFlightAtStop).toBe(3);
   });
 });
+
+describe('collector — hopMeasurement (S45 C3)', () => {
+  const record = {
+    hopId: 'h1',
+    lapId: 'l1',
+    userId: 'u1',
+    mode: 'headless' as const,
+    hopRoute: 'A->B',
+    fromNetworkId: 82,
+    toNetworkId: 85,
+    assetKind: 'eth' as const,
+    assetIndex: 0,
+    outcome: 'hop_completed_manual' as const,
+    depositCount: 4,
+    bridge: { txHash: '0xb', blockNumber: '10', minedObservedAt: 1, gas: null },
+    stages: null,
+    readyObservedAt: 5,
+    claim: {
+      txHash: '0xc',
+      blockNumber: '12',
+      sentAt: 6,
+      minedObservedAt: 8,
+      gas: { blockNumber: '12', gasUsed: '1', effectiveGasPrice: '2' },
+      claimKind: 'eth' as const
+    }
+  };
+
+  it('writes one hop_measurement ndjson line per hop and keeps the record for the snapshot', () => {
+    const sink = createMemoryActivitySink();
+    const collector = createCollector({ activitySink: sink });
+    collector.hopMeasurement(record);
+
+    expect(sink.lines).toHaveLength(1);
+    const line = JSON.parse(sink.lines[0]);
+    expect(line).toMatchObject({
+      kind: 'hop_measurement',
+      userId: 'u1',
+      mode: 'headless',
+      hopId: 'h1',
+      hopRoute: 'A->B',
+      depositCount: 4,
+      claim: { claimKind: 'eth', gas: { gasUsed: '1' } }
+    });
+    expect(collector.snapshot().hopMeasurements).toStrictEqual([record]);
+  });
+});

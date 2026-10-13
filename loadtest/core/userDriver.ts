@@ -36,13 +36,32 @@ export interface DriverError {
 
 export type ReceiptStatus = 'success' | 'reverted';
 
+// Measurement (S45 C1): the gas facts of a mined receipt, kept from the viem
+// receipt the headless driver already holds (no extra RPC). Every value is a
+// DECIMAL STRING (bigint-safe JSON). The OP L1-fee fields are present only
+// when the chain's receipt carries them (OP stack); `wrapperDeployed` is set by
+// `claim()` only (a `NewWrappedToken` log from the destination bridge).
+export interface ReceiptGas {
+  blockNumber: string;
+  gasUsed: string;
+  effectiveGasPrice: string;
+  l1Fee?: string;
+  l1GasUsed?: string;
+  l1GasPrice?: string;
+  l1BaseFeeScalar?: string;
+  l1BlobBaseFee?: string;
+  l1BlobBaseFeeScalar?: string;
+  daFootprintGasScalar?: string;
+  wrapperDeployed?: boolean;
+}
+
 // One submitted transaction: the build+send window, then the receipt wait.
 // `receipt: null` with no `error` means the send never resolved (the runner
 // hit the phase deadline first) — ring.ts's tick handles that, not this type.
 export interface TxStepResult {
   txHash: Hex | null;
   submit: StepTiming;
-  receipt: { status: ReceiptStatus; timing: StepTiming } | null;
+  receipt: { status: ReceiptStatus; timing: StepTiming; gas?: ReceiptGas } | null;
   error?: DriverError;
 }
 
@@ -123,4 +142,35 @@ export interface UserDriver {
   claim(hop: HopSpec, row: ObservedRow): Promise<ClaimSubmission>;
   readState(hop: HopSpec, row: ObservedRow | null): Promise<HopReadState>;
   dispose(): Promise<void>;
+}
+
+// Measurement (S45 C2): the outcome of the optional stage probe — first-200
+// client times (ms epoch, `clock.now()`) for the three claim-path endpoints,
+// polled from bridge-mined. `null` = stage not reached before the probe
+// stopped. `polls` counts every probe request issued (all `harness` origin).
+export interface ClaimStageProbeResult {
+  l1InfoTreeIndexAt: number | null;
+  l1InfoTreeIndex: number | null;
+  injectedLeafAt: number | null;
+  injectedLeafIndex: number | null;
+  injectedL2BlockNum?: number;
+  injectedL2BlockTimestamp?: number;
+  claimProofAt: number | null;
+  polls: number;
+}
+
+export interface ClaimStageProbeParams {
+  sourceNetwork: number;
+  destinationNetwork: number;
+  depositCount: number;
+  intervalMs: number;
+  deadlineAt: number;
+  signal?: AbortSignal;
+  /** Called after every poll round with the (partial) result so far. */
+  onProgress?: (partial: ClaimStageProbeResult) => void;
+}
+
+/** Optional headless-only capability (like `BrowserCapableDriver` in runner.ts) — NOT part of `UserDriver`. */
+export interface StageProbingDriver extends UserDriver {
+  probeClaimStages(params: ClaimStageProbeParams): Promise<ClaimStageProbeResult>;
 }

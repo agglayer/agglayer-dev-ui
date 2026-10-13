@@ -25,8 +25,10 @@ import type {
   ModeSplitStats,
   Stats
 } from './collector';
+import type { MeasurementsBlock } from './measurement';
 
 import { isSuccessOutcome } from '../core/types';
+import { buildMeasurements, renderMeasurementsSection } from './measurement';
 
 export const RESULTS_SCHEMA_VERSION = 1;
 
@@ -163,6 +165,9 @@ export interface ResultsJson {
   };
   policy: { autoclaimOverdue: number; unexpectedAutoclaim: number; claimRaceLost: number };
   resources: CollectorSnapshot['resources'];
+  // S45 C3/C4: present iff at least one hop was measured. Absent in a
+  // `results.json` from before this field existed (rendered as "no measurements").
+  measurements?: MeasurementsBlock;
 }
 
 // ---------------------------------------------------------------------------
@@ -403,7 +408,15 @@ export const buildResultsJson = (params: {
     gates: snapshot.gates,
     errors: snapshot.errors,
     policy: snapshot.policy,
-    resources: snapshot.resources
+    resources: snapshot.resources,
+    ...(snapshot.hopMeasurements !== undefined && snapshot.hopMeasurements.length > 0
+      ? {
+          measurements: buildMeasurements(
+            snapshot.hopMeasurements,
+            config.measurement?.stageProbeIntervalMs ?? null
+          )
+        }
+      : {})
   };
 };
 
@@ -1000,7 +1013,9 @@ export const renderSummaryMd = (results: ResultsJson, config: LoadtestConfig): s
     ['## Autoclaim policy', renderAutoclaimPolicy(results)].join('\n\n'),
     ['## Errors', renderErrors(results)].join('\n\n'),
     ['## Resources', renderResources(results)].join('\n\n'),
-    ['## Environment', renderEnvironment(results)].join('\n\n')
+    ['## Environment', renderEnvironment(results)].join('\n\n'),
+    // S45 C4: appended AFTER `## Environment` so the existing section order is unchanged.
+    ['## Claim gas and stage latency', renderMeasurementsSection(results.measurements)].join('\n\n')
   ];
 
   return `${sections.join('\n\n')}\n`;

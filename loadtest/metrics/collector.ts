@@ -37,6 +37,7 @@ import type {
   TransitionId
 } from '../core/types';
 import type { DriverMode } from '../core/userDriver';
+import type { HopMeasurementRecord } from './measurement';
 
 import { redactSecrets } from '../wallets/redact';
 import { isBenignExternalAssetHost } from './errors';
@@ -460,6 +461,9 @@ export interface CollectorSnapshot {
     hopBridgesSubmittedSteady: number;
   };
   resources: { samples: (ResourceSampleInput & { ts: string })[] };
+  // S45 C3: one record per hop that reached `hopEnd` (see `metrics/measurement.ts`).
+  // Optional so a hand-built snapshot (tests) that predates it stays valid.
+  hopMeasurements?: HopMeasurementRecord[];
 }
 
 export interface Clock {
@@ -514,6 +518,8 @@ export interface Collector {
   claimAttempt(input: ClaimAttemptInput): void;
   error(input: ErrorInput): void;
   hopEnd(input: HopEndInput): void;
+  /** S45 C3: writes one ndjson `hop_measurement` line and keeps the record for the snapshot. */
+  hopMeasurement(input: HopMeasurementRecord): void;
   lapEnd(input: LapEndInput): void;
   resourceSample(input: ResourceSampleInput): void;
 
@@ -601,6 +607,7 @@ export const createCollector = (options: CollectorOptions = {}): Collector => {
   let rampEndsAtMs: number | null = null;
 
   const phases: PhaseBucket = { global: new Map(), byRoute: new Map() };
+  const hopMeasurements: HopMeasurementRecord[] = [];
 
   const hopsByOutcome = new Map<Outcome, number>();
   const hopRouteOutcomes = new Map<string, Map<Outcome, number>>();
@@ -872,6 +879,12 @@ export const createCollector = (options: CollectorOptions = {}): Collector => {
       }
     },
 
+    hopMeasurement(input) {
+      hopMeasurements.push(input);
+      const { userId, mode, ...rest } = input;
+      writeLine('hop_measurement', userId, mode, rest);
+    },
+
     hopEnd(input) {
       hopsByOutcome.set(input.outcome, (hopsByOutcome.get(input.outcome) ?? 0) + 1);
       const routeOutcomes = getOrCreate(
@@ -1124,7 +1137,8 @@ export const createCollector = (options: CollectorOptions = {}): Collector => {
           hopBridgesSubmittedRamp,
           hopBridgesSubmittedSteady
         },
-        resources: { samples: [...resourceSamples] }
+        resources: { samples: [...resourceSamples] },
+        hopMeasurements: [...hopMeasurements]
       };
     },
 

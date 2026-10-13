@@ -27,11 +27,19 @@ import os from 'node:os';
 import path from 'node:path';
 import { monitorEventLoopDelay } from 'node:perf_hooks';
 
-import type { LoadtestConfig } from './config/schema';
+import type { LoadtestAsset, LoadtestConfig } from './config/schema';
 import type { Clock, RingEmission, RingEngine } from './core/ring';
 import type { AbortCause, InflightLookup, SchedulerDecision } from './core/scheduler';
 import type { AssetKind, Gate, Hop, HopSpec, Lap, ObservedRow } from './core/types';
-import type { DriverError, DriverMode, UserDriver } from './core/userDriver';
+import type {
+  ClaimStageProbeResult,
+  ClaimSubmission,
+  DriverError,
+  DriverMode,
+  StageProbingDriver,
+  TxStepResult,
+  UserDriver
+} from './core/userDriver';
 import type { Collector, HostInfo, LapOutcome } from './metrics/collector';
 import type { ServeUiHandle } from './ui/serve';
 import type { DerivedWallet } from './wallets/derive';
@@ -41,6 +49,7 @@ import { createRingEngine, eventsFromBridge, eventsFromClaim, systemClock } from
 import { createScheduler } from './core/scheduler';
 import { createCollector, createFileActivitySink } from './metrics/collector';
 import { classifyError } from './metrics/errors';
+import { deriveClaimKind } from './metrics/measurement';
 import { writeReportFiles } from './metrics/report';
 import { buildUi } from './ui/build';
 import { serveUi } from './ui/serve';
@@ -218,7 +227,7 @@ const buildHopSpecs = (
 // Emission / hop-completion translation (core/ring.ts -> metrics/collector.ts)
 // ---------------------------------------------------------------------------
 
-interface LapRunCtx {
+export interface LapRunCtx {
   engine: RingEngine;
   driver: UserDriver;
   userId: string;
@@ -227,7 +236,77 @@ interface LapRunCtx {
   collector: Collector;
   getDrainDeadline: () => number | null;
   logger: (line: string) => void;
+  /** S45: `config.assets` (to resolve a hop's token origin network). */
+  assets: readonly LoadtestAsset[];
+  /** S45 C2: `measurement.stageProbeIntervalMs`, or null when the probe is off. */
+  stageProbeIntervalMs: number | null;
 }
+
+// ---------------------------------------------------------------------------
+// Measurement (S45 C2/C3) — per-hop stash the runner fills while driving a hop
+// and turns into one `hop_measurement` record at hop end. Observation only:
+// nothing here feeds back into `core/` state transitions.
+// ---------------------------------------------------------------------------
+
+export interface HopMeasureState {
+  bridge: TxStepResult | null;
+  depositCount: number | null;
+  claim: ClaimSubmission | null;
+  stages: ClaimStageProbeResult | null;
+  probeAbort: AbortController | null;
+}
+
+const endTime = (step: TxStepResult | null | undefined): number | null =>
+  step?.receipt != null ? step.receipt.timing.startedAt + step.receipt.timing.durationMs : null;
+
+const sentTime = (step: TxStepResult | null | undefined): number | null =>
+  step != null && step.txHash !== null ? step.submit.startedAt + step.submit.durationMs : null;
+
+export const hopMeasurementRecord = (ctx: LapRunCtx, hop: Hop, lapId: string, st: HopMeasureState) => {
+  const spec = hop.spec;
+  const asset = ctx.assets[spec.assetIndex];
+  const tokenOriginNetworkId =
+    spec.assetKind === 'erc20' && asset?.kind === 'erc20' ? asset.originNetworkId : undefined;
+  const claimStep = st.claim?.claim ?? null;
+  const claimGas = claimStep?.receipt?.gas ?? null;
+  return {
+    hopId: hop.id,
+    lapId,
+    userId: ctx.userId,
+    mode: ctx.mode,
+    hopRoute: spec.hopRoute,
+    fromNetworkId: spec.fromNetworkId,
+    toNetworkId: spec.toNetworkId,
+    assetKind: spec.assetKind,
+    assetIndex: spec.assetIndex,
+    ...(tokenOriginNetworkId !== undefined ? { tokenOriginNetworkId } : {}),
+    outcome: hop.outcome as NonNullable<Hop['outcome']>,
+    depositCount: hop.depositCount ?? st.depositCount,
+    bridge: {
+      txHash: st.bridge?.txHash ?? hop.bridgeTxHash ?? null,
+      blockNumber: st.bridge?.receipt?.gas?.blockNumber ?? null,
+      minedObservedAt: endTime(st.bridge),
+      gas: st.bridge?.receipt?.gas ?? null
+    },
+    stages: st.stages,
+    readyObservedAt: hop.readyAt,
+    claim: {
+      txHash: claimStep?.txHash ?? hop.claimTxHash ?? null,
+      blockNumber: claimGas?.blockNumber ?? null,
+      sentAt: sentTime(claimStep),
+      minedObservedAt: endTime(claimStep),
+      gas: claimGas,
+      claimKind: deriveClaimKind({
+        assetKind: spec.assetKind,
+        toNetworkId: spec.toNetworkId,
+        tokenOriginNetworkId,
+        claimStatus: claimStep?.receipt?.status ?? null,
+        wrapperDeployed: claimGas?.wrapperDeployed,
+        alreadyClaimed: st.claim?.isClaimedBefore === true || st.claim?.isClaimedRecheck === true
+      })
+    }
+  };
+};
 
 const reportDriverError = (
   ctx: LapRunCtx,
@@ -407,6 +486,42 @@ const runLapToCompletion = async (params: { ctx: LapRunCtx; cell: Cell }): Promi
 
   const lastRowByHopId = new Map<string, ObservedRow>();
   const reportedHopIds = new Set<string>();
+  const measureByHopId = new Map<string, HopMeasureState>();
+  const measureState = (hopId: string): HopMeasureState => {
+    let st = measureByHopId.get(hopId);
+    if (st === undefined) {
+      st = { bridge: null, depositCount: null, claim: null, stages: null, probeAbort: null };
+      measureByHopId.set(hopId, st);
+    }
+    return st;
+  };
+
+  // S45 C2: background stage probe, headless only, started right after a
+  // successful bridge receipt. Stops at claim-proof available, hop terminal,
+  // or the hop deadline.
+  const startStageProbe = (hop: Hop, depositCount: number): void => {
+    const intervalMs = ctx.stageProbeIntervalMs;
+    const probing = driver as Partial<StageProbingDriver>;
+    if (intervalMs === null || mode !== 'headless') return;
+    if (typeof probing.probeClaimStages !== 'function') return;
+    const st = measureState(hop.id);
+    if (st.probeAbort !== null) return;
+    const abort = new AbortController();
+    st.probeAbort = abort;
+    void probing
+      .probeClaimStages({
+        sourceNetwork: hop.spec.fromNetworkId,
+        destinationNetwork: hop.spec.toNetworkId,
+        depositCount,
+        intervalMs,
+        deadlineAt: hop.startedAt + engine.timeouts.hopMs,
+        signal: abort.signal,
+        onProgress: (partial) => {
+          st.stages = partial;
+        }
+      })
+      .catch(() => undefined);
+  };
 
   const applyStep = (step: { lap: Lap; emissions: RingEmission[] }, preHop: Hop): void => {
     lap = step.lap;
@@ -423,6 +538,9 @@ const runLapToCompletion = async (params: { ctx: LapRunCtx; cell: Cell }): Promi
           outcome: h.outcome
         });
         reportedHopIds.add(h.id);
+        const st = measureState(h.id);
+        st.probeAbort?.abort();
+        collector.hopMeasurement(hopMeasurementRecord(ctx, h, lap.id, st));
       }
     }
   };
@@ -459,6 +577,17 @@ const runLapToCompletion = async (params: { ctx: LapRunCtx; cell: Cell }): Promi
             raced.value.bridge?.error,
             raced.value.bridgeEventDecodeError
           ]);
+          {
+            const st = measureState(hop.id);
+            st.bridge = raced.value.bridge;
+            st.depositCount = raced.value.depositCount;
+            if (
+              raced.value.bridge?.receipt?.status === 'success' &&
+              raced.value.depositCount !== null
+            ) {
+              startStageProbe(hop, raced.value.depositCount);
+            }
+          }
           applyStep(engine.applyAll(lap, eventsFromBridge(raced.value), drainArg), hop);
         } catch (error) {
           if (error instanceof BrowserCrashError) {
@@ -513,6 +642,10 @@ const runLapToCompletion = async (params: { ctx: LapRunCtx; cell: Cell }): Promi
           const raced = await raceOrTimeout(driver.claim(hop.spec, row), deadlineAt, clock);
           if (raced.timedOut) break;
           reportEmbeddedErrors(ctx, hop.id, [raced.value.claim?.error]);
+          {
+            const st = measureState(hop.id);
+            if (raced.value.claim !== null || st.claim === null) st.claim = raced.value;
+          }
           applyStep(engine.applyAll(lap, eventsFromClaim(raced.value), drainArg), hop);
         } catch (error) {
           if (error instanceof BrowserCrashError) {
@@ -590,6 +723,7 @@ const runLapToCompletion = async (params: { ctx: LapRunCtx; cell: Cell }): Promi
     }
   }
 
+  for (const st of measureByHopId.values()) st.probeAbort?.abort();
   return lap;
 };
 
@@ -967,7 +1101,9 @@ export const runLoadTest = async (options: RunLoadTestOptions): Promise<RunLoadT
         clock,
         collector,
         getDrainDeadline: () => scheduler.drainDeadline(),
-        logger
+        logger,
+        assets: config.assets,
+        stageProbeIntervalMs: config.measurement?.stageProbeIntervalMs ?? null
       };
 
       const task = runLapToCompletion({ ctx, cell })
