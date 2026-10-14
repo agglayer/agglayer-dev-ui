@@ -135,6 +135,14 @@ const lastPathSegment = (url: string): string | null => {
  * returned unchanged. This also repairs the class names of runs recorded before
  * S53 (the keyed ring-A run) at render time.
  */
+const hostnameOf = (url: string): string | null => {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return null;
+  }
+};
+
 export const redactEndpointClass = (
   endpointClass: string,
   config: { chains: readonly ChainRpcRef[] }
@@ -142,6 +150,11 @@ export const redactEndpointClass = (
   const match = /^rpc\/([^/]+)(\/.*)?$/.exec(endpointClass);
   if (match === null) return endpointClass;
   const [, segment, rest = ''] = match;
+  // Runs from before chain-key names label RPC classes by the provider host
+  // (an IP or hostname): show the chain key that owns that host instead.
+  const hostOwner = config.chains.find((chain) => hostnameOf(chain.rpcUrl) === segment);
+  if (hostOwner !== undefined && !config.chains.some((chain) => chain.key === segment))
+    return `rpc/${hostOwner.key}${rest}`;
   if (!isTokenLikeSegment(segment)) return endpointClass;
   if (config.chains.some((chain) => chain.key === segment)) return endpointClass;
   const owner = config.chains.find((chain) => lastPathSegment(chain.rpcUrl) === segment);

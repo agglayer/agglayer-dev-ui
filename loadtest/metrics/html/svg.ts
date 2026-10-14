@@ -146,6 +146,8 @@ export interface LineChartOptions {
   /** Tick marks along the x axis (elapsed ms), e.g. L1 leaves; pump deposits as diamonds. */
   ticksTop?: { at: number; kind: 'leaf' | 'pump' }[];
   h?: number;
+  /** Smallest y span (default 1); small for ETH-scale values. */
+  minSpan?: number;
 }
 
 export const lineChart = (o: LineChartOptions): string => {
@@ -154,10 +156,11 @@ export const lineChart = (o: LineChartOptions): string => {
   const vFmt = o.valueFmt ?? yFmt;
   const plotted = o.series.map((s) => s.buckets.map((b) => (s.usePeak === true ? b.max : b.mean)));
   const dataMax = Math.max(0, ...o.series.flatMap((s) => s.buckets.map((b) => b.max)));
-  const thresholds = (o.thresholds ?? []).filter((th) => th.value <= Math.max(1, dataMax) * 3);
-  const offScale = (o.thresholds ?? []).filter((th) => th.value > Math.max(1, dataMax) * 3);
+  const span = o.minSpan ?? 1;
+  const thresholds = (o.thresholds ?? []).filter((th) => th.value <= Math.max(span, dataMax) * 3);
+  const offScale = (o.thresholds ?? []).filter((th) => th.value > Math.max(span, dataMax) * 3);
   const yMin = o.yMin ?? 0;
-  const yMaxRaw = Math.max(yMin + 1, dataMax, ...thresholds.map((th) => th.value));
+  const yMaxRaw = Math.max(yMin + span, dataMax, ...thresholds.map((th) => th.value));
   const ticks = niceTicks(yMin, yMaxRaw * 1.05, 4);
   const yMax = Math.max(ticks[ticks.length - 1], yMaxRaw);
   const xMax = Math.max(1, o.xMax);
@@ -313,6 +316,8 @@ export const hbarStack = (o: {
   timeAxis?: boolean;
   /** Show totals at the bar end. */
   showTotal?: boolean;
+  /** Counts: ticks fall on whole numbers only. */
+  integer?: boolean;
 }): string => {
   const rowH = 30;
   const f: Frame = { w: 960, h: 22 + o.rows.length * rowH + 28, l: 190, r: 90, t: 14, b: 28 };
@@ -327,6 +332,10 @@ export const hbarStack = (o: {
     for (let v = 0; v <= max + step * 0.5; v += step) ticks.push(v);
   } else {
     ticks = niceTicks(0, max, 5);
+    if (o.integer === true) {
+      ticks = ticks.filter((v) => Number.isInteger(v));
+      if (ticks.length < 2) ticks = Array.from({ length: Math.ceil(max) + 1 }, (_, i) => i);
+    }
   }
   const xMax = Math.max(max, ticks[ticks.length - 1]);
   const px = (v: number): number => f.l + (v / xMax) * (f.w - f.l - f.r);
@@ -490,12 +499,14 @@ const hash01 = (i: number): number => {
 
 export const stripPlot = (o: StripOptions): string => {
   const rowH = 48;
+  // Reference-line labels get their own band above the rows so they never sit on a marker.
+  const refBand = (o.refLines ?? []).length * 14;
   const f: Frame = {
     w: 960,
-    h: 16 + o.rows.length * rowH + (o.xLabel === undefined ? 34 : 54),
+    h: 16 + refBand + o.rows.length * rowH + (o.xLabel === undefined ? 34 : 54),
     l: 190,
     r: 30,
-    t: 14,
+    t: 14 + refBand,
     b: o.xLabel === undefined ? 30 : 50
   };
   const all = o.rows.flatMap((r) => [
@@ -578,7 +589,7 @@ export const stripPlot = (o: StripOptions): string => {
         {
           class: 'ax thr',
           x: sx(ref.value) + (rightSide ? -5 : 5),
-          y: f.h - f.b - 5 - i * 12,
+          y: f.t - refBand + 11 + i * 14,
           'text-anchor': rightSide ? 'end' : 'start'
         },
         esc(ref.label)

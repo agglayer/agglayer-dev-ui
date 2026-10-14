@@ -112,11 +112,14 @@ describe('redactEndpointClass — endpoint-name mapping (F1)', () => {
     );
   });
 
+  it('maps the host of a configured chain to its key (S55)', () => {
+    expect(redactEndpointClass('rpc/l1.example.invalid', config)).toBe('rpc/SEPOLIA');
+  });
+
   it('leaves chain keys, hosts, IPs and short path names alone, so keyless runs render as before', () => {
     for (const cls of [
       'rpc/BALI_82/eth_call',
       'rpc/34.153.133.172/eth_call',
-      'rpc/l1.example.invalid',
       'rpc/l1rpc/eth_call',
       'rpc/l2rpc-001',
       'tracker/activity',

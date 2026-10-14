@@ -146,7 +146,9 @@ section.panel > h2 { padding-bottom: 8px; border-bottom: 1px solid var(--hair); 
 table.data { border-collapse: collapse; width: 100%; font-size: 13px; }
 table.data th, table.data td { padding: 6px 11px; text-align: left; border-bottom: 1px solid var(--grid); white-space: nowrap; }
 table.data td.wrapcell { white-space: normal; min-width: 150px; overflow-wrap: anywhere; }
-table.data.compact th, table.data.compact td { padding: 3px 11px; }
+table.data.compact th, table.data.compact td { padding: 3px 8px; }
+table.data.compact th { white-space: normal; vertical-align: bottom; }
+table.data.compact td.wrapcell { min-width: 110px; }
 table.data th { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 650; background: var(--surface); }
 table.data th.sorted::after { content: " \\2193"; }
 table.data th.sorted.asc::after { content: " \\2191"; }
@@ -214,6 +216,7 @@ footer { margin-top: 36px; color: var(--muted); font-size: 12px; }
   .banner { flex-direction: column; }
   .stamp { flex-direction: row; justify-content: flex-start; min-width: 0; padding: 12px 16px; }
   .kv { grid-template-columns: 1fr; }
+  .chart-wrap::before, .tablewrap::before { content: "Wide: swipe sideways"; display: block; position: sticky; left: 0; padding: 2px 8px; font-size: 11px; color: var(--muted); }
 }
 @media (forced-colors: active) {
   .stamp, .chip, .kpi { border: 1px solid CanvasText; }

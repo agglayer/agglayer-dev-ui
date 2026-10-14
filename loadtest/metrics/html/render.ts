@@ -281,6 +281,7 @@ const renderOutcomes = (m: ReportModel): string => {
   const chart = hbarStack({
     aria: 'Hop outcomes per route, stacked by outcome',
     rows,
+    integer: true,
     valueFmt: (v) => fmtInt(Math.round(v))
   });
   const lg = legend(order.map((o, i) => ({ name: o, slot: OUTCOME_SLOT(o, i) })));
@@ -812,7 +813,11 @@ const renderErrors = (m: ReportModel): string => {
   let body = '';
   if (e.nonSuppressedTotal === 0 && e.rows.every((r) => r.own)) {
     body += empty(
-      `No errors that count. Only warnings or tracker_not_ready rows (${e.rows.reduce((s, r) => s + r.count, 0)}), and ${e.suppressed.notReady + e.suppressed.benignExternalAsset} suppressed.`
+      `No errors that count. Only warnings or tracker_not_ready rows (${e.rows.reduce((s, r) => s + r.count, 0)}), and ${e.suppressed.notReady + e.suppressed.benignExternalAsset} suppressed.${
+        m.verdict.level === 'fail'
+          ? ' A failed hop is not an error row: see Hop outcomes for its outcome class.'
+          : ''
+      }`
     );
   }
   body += table(
@@ -1083,7 +1088,8 @@ const renderWallets = (m: ReportModel): string => {
           c.floorEth === null
             ? []
             : [{ value: c.floorEth, label: `SC9 floor ${c.floorEth.toFixed(4)} ETH` }],
-        h: 190
+        h: 190,
+        minSpan: 1e-6
       })}${legend([
         { name: 'lowest wallet', slot: 0 },
         { name: 'median wallet', slot: 2 }
@@ -1143,7 +1149,13 @@ const flattenConfig = (value: unknown, prefix: string, out: [string, string][]):
     if (entries.length === 0) out.push([prefix, 'none']);
     for (const [k, v] of entries) flattenConfig(v, prefix === '' ? k : `${prefix}.${k}`, out);
   } else {
-    out.push([prefix, String(value)]);
+    const text = String(value);
+    // Millisecond settings read better with the duration next to the raw number.
+    const human =
+      /Ms$/.test(prefix) && typeof value === 'number' && value >= 1000
+        ? ` (${fmtDurationShort(value)})`
+        : '';
+    out.push([prefix, text === '' ? '(empty)' : `${text}${human}`]);
   }
 };
 
