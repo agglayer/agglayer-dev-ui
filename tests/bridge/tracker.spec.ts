@@ -28,13 +28,20 @@ test.skip(
 // (app/__fixtures__/tracker.ts), which ship the full ordered `all_steps`
 // array (later entries `pending`) as soon as the tracker resolves the route,
 // well before any step actually starts.
-const L1_TO_L2_STEP_NAMES = ['WaitingGERUpdate', 'WaitingGERInjection', 'WaitingClaim', 'Claimed'];
+const L1_TO_L2_STEP_NAMES = [
+  'WaitingGERUpdate',
+  'WaitingGERInjection',
+  'WaitingL1InfoLeafAvailable',
+  'WaitingClaim',
+  'Claimed'
+];
 const L2_TO_L2_STEP_NAMES = [
   'WaitingLERUpdate',
   'PendingInclusion',
   'CertificatePending',
   'WaitL1SettledGER',
   'WaitingGERInjection',
+  'WaitingL1InfoLeafAvailable',
   'WaitingClaim',
   'Claimed'
 ];
@@ -50,11 +57,12 @@ const L2_TO_L2_STEP_LABEL_PATTERNS = [
   /Waiting for the certificate to settle/,
   /Waiting for settlement to confirm on L1/,
   /Waiting for the exit root to reach .+/,
-  /Finalizing claim data for .+/,
+  /Waiting until the claim proof can be generated/,
+  /Waiting for the claim on .+/,
   /Claimed/
 ];
 
-test('L1→L2 tracker progress bar shows 4 steps, advances, then disappears on Completed', async ({
+test('L1→L2 tracker progress bar shows 5 steps, advances, then disappears on Completed', async ({
   page
 }) => {
   // Merged bar-appear + at-least-one-done-dot poll, then a final wait for
@@ -87,7 +95,7 @@ test('L1→L2 tracker progress bar shows 4 steps, advances, then disappears on C
 
   const trackerBar = bridgePage.getTrackerBar(transactionHash);
 
-  // Single poll loop covering both "the bar renders with its 4 dots" and
+  // Single poll loop covering both "the bar renders with its 5 dots" and
   // "at least one dot reaches done" -- the tracker needs its own poll cycle
   // to resolve `all_steps` (registered -> running), so the bar may not exist
   // for the first refresh or two. Per-step mid-flight status strings are
@@ -140,7 +148,7 @@ test('L1→L2 tracker progress bar shows 4 steps, advances, then disappears on C
     )
     .toBe(true);
 
-  // Route shape: exactly 4 dots, in the fixed step_name order the tracker
+  // Route shape: exactly 5 dots, in the fixed step_name order the tracker
   // resolves them in (this is the acceptance-criterion assertion, not a
   // timing-sensitive one -- the full ordered array is present from the
   // first non-null `all_steps` response, see the comment above).
@@ -185,7 +193,7 @@ test('L1→L2 tracker progress bar shows 4 steps, advances, then disappears on C
   await expect(trackerBar).toHaveCount(0);
 });
 
-test('L2-1→L2-2 tracker: 7-step bar, modal detail mid-flight, disappears on Completed', async ({
+test('L2-1→L2-2 tracker: 8-step bar, modal detail mid-flight, disappears on Completed', async ({
   page
 }) => {
   // L2->L2 requires a second devnet L2 -- same guard l2-to-l2.spec.ts uses.
@@ -244,7 +252,7 @@ test('L2-1→L2-2 tracker: 7-step bar, modal detail mid-flight, disappears on Co
 
   const trackerBar = bridgePage.getTrackerBar(transactionHash);
 
-  // Wait for the bar to resolve its 7 dots, capturing the step order on
+  // Wait for the bar to resolve its 8 dots, capturing the step order on
   // first sighting -- see the L1->L2 test above for why this needs its own
   // poll rather than a single refreshActivity().
   const capturedStepNames: string[] = [];
@@ -265,7 +273,7 @@ test('L2-1→L2-2 tracker: 7-step bar, modal detail mid-flight, disappears on Co
         return true;
       },
       {
-        message: 'Waiting for the tracker to resolve the L2->L2 route and render its 7 dots',
+        message: 'Waiting for the tracker to resolve the L2->L2 route and render its 8 dots',
         // This route's dominant latency term (source-side certificate
         // settlement, see E2E_L2_TO_L2_CLAIM_TIMEOUT_MS's comment in
         // app/constants/e2e.ts) is downstream of route resolution, so
@@ -290,7 +298,9 @@ test('L2-1→L2-2 tracker: 7-step bar, modal detail mid-flight, disappears on Co
   // already warm from the bar above -- no extra wait needed for it to
   // populate.
   await bridgePage.openTransactionDetails(transactionHash);
-  await expect(bridgePage.trackerDetail).toBeVisible();
+  // Reaches TrackerDetail whether the row is still in flight or already
+  // CLAIMED ("Show bridge steps" button) -- see BridgePage.revealTrackerDetail.
+  await bridgePage.revealTrackerDetail();
 
   for (const [index, pattern] of L2_TO_L2_STEP_LABEL_PATTERNS.entries()) {
     await expect(bridgePage.getTrackerDetailStep(index)).toContainText(pattern);
