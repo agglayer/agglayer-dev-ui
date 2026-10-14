@@ -1296,3 +1296,220 @@ describe('runLoadTest artifacts render to the HTML report (S54)', () => {
     expect(logs.some((l) => l.startsWith('WARN report: HTML report failed:'))).toBe(true);
   }, 90_000);
 });
+
+// ---------------------------------------------------------------------------
+// S56: the whole heavy-load path in one offline run, no funds and no network:
+// several wallets, a ramp, the L1 pump ON and measurement ON, then everything a
+// campaign operator reads (results.json, activity.ndjson, report.html) is
+// checked against what the fake world actually did. A second run with the pump
+// off proves the pump leaves no trace.
+// ---------------------------------------------------------------------------
+
+describe('runLoadTest heavy-load E2E: wallets + ramp + pump + measurement -> report.html (S56)', () => {
+  const WALLETS = 4;
+  const KEYED_URL_SECRET = 'FAKEKEY0123456789abcdef';
+  const fixture = buildRing('eth');
+  const l1BridgeAddress = fixture.chains[0].bridgeAddress;
+
+  const config = (pumpEnabled: boolean): LoadtestConfig => {
+    const base = fixture.config;
+    return {
+      ...base,
+      chains: base.chains.map((c) => ({
+        ...c,
+        // a key-bearing endpoint: it must never reach results.json or the HTML
+        rpcUrl: `http://127.0.0.1:8545/v2/${KEYED_URL_SECRET}`
+      })),
+      users: { ...base.users, total: WALLETS },
+      load: {
+        bridgesPerMinutePerUser: 600,
+        durationMinutes: 0.1,
+        rampUpSeconds: 2,
+        maxInflightLapsPerUser: 1
+      },
+      timeouts: { ...base.timeouts, appearsInActivityMs: 30_000, hopMs: 60_000 },
+      output: { ...base.output, activityLog: true },
+      pump: {
+        enabled: pumpEnabled,
+        chainKey: 'SEPOLIA',
+        destinationNetworkId: 1,
+        walletIndex: 99,
+        amount: '0',
+        intervalSeconds: 60,
+        maxTotalSpend: '0.07',
+        maxGasPriceGwei: 5
+      },
+      measurement: {
+        walletBalanceIntervalMs: 60_000,
+        l1InfoTree: { pollIntervalMs: 15_000 },
+        httpWindowMs: 10_000,
+        claimPreState: true
+      }
+    };
+  };
+
+  const newPumpWorld = (): PumpWorld => ({
+    head: BigInt(1000),
+    sends: [],
+    logs: [],
+    failSend: false,
+    receiptDelayMs: 0,
+    balanceReads: []
+  });
+
+  // Like the CLI: run, then render report.html from the artifacts the run wrote.
+  const runHeavy = async (pumpEnabled: boolean, pumpWorld: PumpWorld) => {
+    const startedAtMs = Date.now();
+    const ran = await runRing(
+      fixture,
+      {},
+      {
+        config: config(pumpEnabled),
+        runOptions: { chainClientFactory: pumpClientFactory(pumpWorld, l1BridgeAddress) }
+      }
+    );
+    const rendered = await renderReportAfterRun({
+      outDir: ran.outDir,
+      runStartedAtMs: startedAtMs,
+      log: () => {},
+      warn: (l) => {
+        throw new Error(`report warning: ${l}`);
+      },
+      redact: String
+    });
+    expect(rendered?.htmlPath).toBe(path.join(ran.outDir, 'report.html'));
+    return ran;
+  };
+
+  const embeddedModel = (html: string): Record<string, unknown> => {
+    const match = /<script type="application\/json" id="report-data">([\s\S]*?)<\/script>/.exec(
+      html
+    );
+    expect(match).not.toBeNull();
+    return JSON.parse((match as RegExpExecArray)[1]) as Record<string, unknown>;
+  };
+
+  it('pump ON: counters, ndjson records, per-wallet hop counts, verdict and stop-criteria table agree with the fake world', async () => {
+    const pumpWorld = newPumpWorld();
+    const { results, world, outDir: dir } = await runHeavy(true, pumpWorld);
+    const [r0, r1, r2] = fixture.routes;
+
+    // --- the load: every wallet took part and every lap completed ---
+    const n = depositsOn(world, r0).length;
+    expect(n).toBeGreaterThanOrEqual(WALLETS);
+    expect(depositsOn(world, r1)).toHaveLength(n);
+    expect(depositsOn(world, r2)).toHaveLength(n);
+    expect(results.laps.byOutcome).toMatchObject({ LAP_DONE: n, LAP_FAILED: 0, LAP_ABORTED: 0 });
+    expect(results.errors.byClass).toStrictEqual({});
+
+    // --- results.json: the pump counters ---
+    const pump = results.pump as {
+      enabled: boolean;
+      deposits: { txHash: string }[];
+      totalSpendWei: string;
+      pendingAtStop: boolean;
+      skipped: Record<string, number>;
+    };
+    expect(pump.enabled).toBe(true);
+    expect(pump.deposits).toHaveLength(pumpWorld.sends.length);
+    expect(pump.deposits.length).toBeGreaterThanOrEqual(1);
+    expect(pump.pendingAtStop).toBe(false);
+    expect(BigInt(pump.totalSpendWei)).toBe(
+      BigInt(pump.deposits.length) * BigInt(437_125) * BigInt(1_000_000)
+    );
+    // within the 0.07 ETH cap
+    expect(BigInt(pump.totalSpendWei) <= BigInt(70_000_000_000_000_000)).toBe(true);
+    // the pump's deposits are not user deposits
+    for (const s of pumpWorld.sends) {
+      expect(world.deposits.some((d) => d.txHash === s.hash)).toBe(false);
+    }
+
+    // --- activity.ndjson: pump records belong to the harness, never to a wallet ---
+    const lines = readNdjson(dir);
+    const pumpLines = lines.filter((l) => String(l.kind).startsWith('pump_'));
+    expect(pumpLines.filter((l) => l.kind === 'pump_deposit')).toHaveLength(pump.deposits.length);
+    expect(pumpLines.every((l) => l.userId === 'harness:pump')).toBe(true);
+    const userIds = [...new Set(lines.filter((l) => l.kind === 'tick').map((l) => l.userId))];
+    expect(userIds).toHaveLength(WALLETS);
+
+    // --- report.html rendered from this run's artifacts ---
+    const htmlPath = path.join(dir, 'report.html');
+    expect(fs.existsSync(htmlPath)).toBe(true);
+    const html = fs.readFileSync(htmlPath, 'utf8');
+    expect(html).toContain('PUMP ON');
+    expect(html).toContain(`data-metric="pump.deposits">${pump.deposits.length}<`);
+    expect(html).toContain(`data-metric="laps.done">${n}<`);
+
+    // verdict: PASS banner, and the campaign go/no-go note
+    expect(html).toMatch(/<div class="stamp pass"[^>]*>[\s\S]*?<span>PASS<\/span>/);
+    expect(html).toContain('Campaign go/no-go uses the stop criteria');
+
+    // stop-criteria table: all SC1..SC13 rows, none fired in a clean run
+    expect(html).toContain('<h2 id="stop-h">Stop criteria (post-hoc)</h2>');
+    const model = embeddedModel(html) as {
+      stop: { id: string; fired: boolean | null; kind: string }[];
+      wallets: {
+        rows: {
+          userId: string;
+          lapsDone: number;
+          lapsFailed: number;
+          hopsOk: number;
+          hopsFailed: number;
+        }[];
+      };
+    };
+    const ids = model.stop.map((c) => c.id);
+    for (let i = 1; i <= 13; i += 1) expect(ids).toContain(`SC${i}`);
+    expect(model.stop.filter((c) => c.kind === 'stop' && c.fired === true)).toStrictEqual([]);
+
+    // per-wallet hop counts: 3 hops per lap, one row per wallet, totals match
+    expect(model.wallets.rows).toHaveLength(WALLETS);
+    for (const row of model.wallets.rows) {
+      expect(row.lapsFailed).toBe(0);
+      expect(row.hopsFailed).toBe(0);
+      expect(row.hopsOk).toBe(row.lapsDone * 3);
+      expect(row.lapsDone).toBeGreaterThanOrEqual(1);
+      expect(html).toContain(`<td>${row.userId}</td>`);
+    }
+    expect(model.wallets.rows.reduce((a, r) => a + r.lapsDone, 0)).toBe(n);
+    expect(model.wallets.rows.reduce((a, r) => a + r.hopsOk, 0)).toBe(n * 3);
+
+    // --- no secrets, tokens or network references anywhere in the HTML ---
+    for (const secret of [
+      KEYED_URL_SECRET,
+      TEST_FUNDER_PRIVATE_KEY,
+      TEST_FUNDER_PRIVATE_KEY.slice(2)
+    ]) {
+      expect(html).not.toContain(secret);
+    }
+    expect(html).not.toContain(TEST_MNEMONIC);
+    expect(html).not.toMatch(/0x[0-9a-fA-F]{64}/);
+    expect(html).not.toMatch(/https?:\/\//);
+    // and results.json carries the masked endpoint, not the keyed one
+    expect(fs.readFileSync(path.join(dir, 'results.json'), 'utf8')).not.toContain(KEYED_URL_SECRET);
+  }, 120_000);
+
+  it('pump OFF, same config: no pump records, no pump key, no pump section, wallets unchanged', async () => {
+    const pumpWorld = newPumpWorld();
+    const { results, world, outDir: dir } = await runHeavy(false, pumpWorld);
+
+    expect(pumpWorld.sends).toHaveLength(0);
+    expect('pump' in results).toBe(false);
+    const lines = readNdjson(dir);
+    expect(lines.some((l) => String(l.kind).startsWith('pump_'))).toBe(false);
+    expect(lines.some((l) => l.userId === 'harness:pump')).toBe(false);
+
+    const n = depositsOn(world, fixture.routes[0]).length;
+    expect(n).toBeGreaterThanOrEqual(WALLETS);
+    expect(results.laps.byOutcome).toMatchObject({ LAP_DONE: n, LAP_FAILED: 0, LAP_ABORTED: 0 });
+
+    const html = fs.readFileSync(path.join(dir, 'report.html'), 'utf8');
+    expect(html).not.toContain('PUMP ON');
+    expect(html).toContain('PUMP OFF');
+    expect(html).not.toContain('data-metric="pump.deposits">1<');
+    expect(html).not.toContain('Spend versus cap');
+    expect(html).toContain(`data-metric="laps.done">${n}<`);
+    expect(html).toContain('<h2 id="stop-h">Stop criteria (post-hoc)</h2>');
+    expect(html).not.toContain(KEYED_URL_SECRET);
+  }, 120_000);
+});
