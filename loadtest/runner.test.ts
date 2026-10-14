@@ -13,12 +13,20 @@ import type { Hop } from './core/types';
 import type { ClaimSubmission, TxStepResult } from './core/userDriver';
 import type { HopMeasureState, LapRunCtx } from './runner';
 
-import { hopMeasurementRecord, MainnetConfirmationRequiredError, runLoadTest } from './runner';
+import { ClassifiedFetchError } from './metrics/errors';
+import {
+  classifyActivityPollError,
+  hopMeasurementRecord,
+  MainnetConfirmationRequiredError,
+  OBSERVE_ACTIVITY_DEFAULT_RETRY_MS,
+  runLoadTest
+} from './runner';
 import {
   buildTestDevnetConfig,
   TEST_FUNDER_PRIVATE_KEY,
   TEST_MNEMONIC
 } from './wallets/testHelpers';
+import { NON_TERMINAL_INTERVAL_MS } from './workers/headless/uiCallset';
 
 const setTestSecretEnv = (): void => {
   process.env.LOADTEST_TEST_MNEMONIC = TEST_MNEMONIC;
@@ -177,5 +185,32 @@ describe('hopMeasurementRecord — the hop_measurement record built at hop end (
     expect(record.claim).toMatchObject({ claimKind: 'none', gas: null, sentAt: null });
     expect(record.stages).toBeNull();
     expect(record.bridge.minedObservedAt).toBeNull();
+  });
+});
+
+// S53 / heavy-load design F3.
+describe('classifyActivityPollError — what the runner does with a failed activity poll', () => {
+  it('a tracker error that kept its class is reported under that class, not re-classified as internal', () => {
+    const out = classifyActivityPollError(
+      new ClassifiedFetchError({ errorClass: 'proxy_5xx', message: 'HTTP 502' }, 502)
+    );
+    expect(out.classified).toStrictEqual({ errorClass: 'proxy_5xx', message: 'HTTP 502' });
+  });
+
+  it('backs off for the UI non-terminal cadence (5 s) on any classified tracker error, tracker_not_ready included', () => {
+    for (const errorClass of ['tracker_not_ready', 'proxy_5xx', 'proxy_4xx'] as const) {
+      const out = classifyActivityPollError(
+        new ClassifiedFetchError({ errorClass, message: 'x' }, 503)
+      );
+      expect(out.retryAfterMs).toBe(NON_TERMINAL_INTERVAL_MS);
+    }
+    expect(NON_TERMINAL_INTERVAL_MS).toBe(5000);
+  });
+
+  it('an unclassified failure keeps the old 1 s retry and the old classification', () => {
+    const out = classifyActivityPollError(new Error('socket hang up'));
+    expect(out.retryAfterMs).toBe(OBSERVE_ACTIVITY_DEFAULT_RETRY_MS);
+    expect(OBSERVE_ACTIVITY_DEFAULT_RETRY_MS).toBe(1000);
+    expect(out.classified.errorClass).toBe('internal');
   });
 });

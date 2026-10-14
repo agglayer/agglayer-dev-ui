@@ -194,6 +194,12 @@ export type ErrorClass =
   // Recorded, never a hop failure, and deliberately NOT `proxy_5xx` (no 5xx
   // occurred — the request returned 200).
   | 'activity_warning'
+  // S53 (heavy-load design F3/F4): `tracker/activity` answered 503 "activity
+  // for this address is not ready yet" — expected for a first-time address (the
+  // tracker is still registering it), not a failure of the system under test.
+  // Recorded in its own class so it neither fails a hop nor counts toward the
+  // proxy 5xx stop criterion. "activity registry is full" stays `proxy_5xx`.
+  | 'tracker_not_ready'
   | 'funding'
   | 'config'
   // R10 (loadtest/REVIEW.md), fixed S26: a browser context's connected

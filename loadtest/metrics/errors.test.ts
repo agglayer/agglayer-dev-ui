@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  ClassifiedFetchError,
   classifyActivityWarning,
   classifyBrowserCrash,
   classifyConfigError,
@@ -72,6 +73,69 @@ describe('classifyHttpError — proxy_4xx / proxy_5xx', () => {
     expect(classifyHttpError({ endpointClass: 'tracker/activity', status: 502 }).errorClass).toBe(
       'proxy_5xx'
     );
+  });
+});
+
+describe('classifyHttpError — tracker_not_ready (S53, heavy-load design F3/F4)', () => {
+  const notReadyBody = 'activity for this address is not ready yet, retry after 5s';
+
+  it('tracker/activity 503 "not ready yet" -> tracker_not_ready (its own non-failing class)', () => {
+    const result = classifyHttpError({
+      endpointClass: 'tracker/activity',
+      status: 503,
+      bodyText: notReadyBody
+    });
+    expect(result.errorClass).toBe('tracker_not_ready');
+    expect(result.message).toContain('not ready yet');
+  });
+
+  it('tracker/activity 503 "activity registry is full" stays proxy_5xx: that one is a real capacity limit', () => {
+    expect(
+      classifyHttpError({
+        endpointClass: 'tracker/activity',
+        status: 503,
+        bodyText: 'activity registry is full'
+      }).errorClass
+    ).toBe('proxy_5xx');
+  });
+
+  it('only a 503 on tracker/activity is reclassified: other statuses and endpoints are unchanged', () => {
+    expect(
+      classifyHttpError({ endpointClass: 'tracker/activity', status: 500, bodyText: notReadyBody })
+        .errorClass
+    ).toBe('proxy_5xx');
+    expect(
+      classifyHttpError({ endpointClass: 'tracker/tx', status: 503, bodyText: notReadyBody })
+        .errorClass
+    ).toBe('proxy_5xx');
+    expect(
+      classifyHttpError({ endpointClass: 'tracker/activity', status: 503, bodyText: '' }).errorClass
+    ).toBe('proxy_5xx');
+    expect(
+      classifyHttpError({ endpointClass: 'tracker/activity', status: 429, bodyText: 'slow down' })
+        .errorClass
+    ).toBe('proxy_4xx');
+  });
+
+  it('the dispatcher routes it the same way', () => {
+    expect(
+      classifyError({
+        source: 'http',
+        endpointClass: 'tracker/activity',
+        status: 503,
+        bodyText: notReadyBody
+      }).errorClass
+    ).toBe('tracker_not_ready');
+  });
+});
+
+describe('ClassifiedFetchError (S53 F3)', () => {
+  it('carries class, status and message through a throw', () => {
+    const error = new ClassifiedFetchError({ errorClass: 'proxy_5xx', message: 'HTTP 502' }, 502);
+    expect(error).toBeInstanceOf(Error);
+    expect(error.errorClass).toBe('proxy_5xx');
+    expect(error.status).toBe(502);
+    expect(error.message).toBe('HTTP 502');
   });
 });
 

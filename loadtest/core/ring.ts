@@ -638,6 +638,7 @@ const outcomeFromDriverError = (error: DriverError | undefined): Outcome => {
         return 'internal';
       case 'console_error':
       case 'activity_warning':
+      case 'tracker_not_ready':
       case 'funding':
       case 'config':
         return 'internal';

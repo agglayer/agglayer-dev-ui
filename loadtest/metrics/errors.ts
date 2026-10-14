@@ -81,6 +81,18 @@ const isLbtUnderflow = (message: string): boolean =>
 // has — the dispatcher below is a convenience, not the only entry point.
 // ---------------------------------------------------------------------------
 
+// S53 (heavy-load design F3/F4): the aggkit tracker answers `activity/from/{addr}`
+// with 503 "activity for this address is not ready yet, retry after <interval>"
+// for an address it has not registered yet. Keyed on the body text (like the
+// `not_ready` rule above), so a differently worded deployment fails safe into
+// `proxy_5xx` instead of being hidden.
+const TRACKER_NOT_READY_BODY_NEEDLE = 'not ready yet';
+
+const isTrackerNotReady = (endpointClass: string, status: number, bodyText: string): boolean =>
+  endpointClass === 'tracker/activity' &&
+  status === 503 &&
+  bodyText.includes(TRACKER_NOT_READY_BODY_NEEDLE);
+
 /** A non-2xx response from `{proxy}/bridge/v1/*` or `{proxy}/tracker/v1/*`. */
 export const classifyHttpError = (input: {
   endpointClass: string;
@@ -91,6 +103,9 @@ export const classifyHttpError = (input: {
   const message = redactSecrets(bodyText.length > 0 ? bodyText : `HTTP ${input.status}`);
   if (matchesNotReady(input.endpointClass, bodyText)) {
     return { errorClass: 'not_ready', message };
+  }
+  if (isTrackerNotReady(input.endpointClass, input.status, bodyText)) {
+    return { errorClass: 'tracker_not_ready', message };
   }
   if (input.status >= 500) return { errorClass: 'proxy_5xx', message };
   if (input.status >= 400) return { errorClass: 'proxy_4xx', message };
@@ -126,6 +141,24 @@ export const classifyRpcError = (input: { message: string; code?: number }): Cla
   }
   return { errorClass: 'rpc_error', message };
 };
+
+/**
+ * S53 (design F3): a classified failure of one fetch that keeps its class when
+ * it crosses an `await` boundary. `performActivityFetch` used to throw a plain
+ * `Error(message)`, so the runner re-classified it as `internal` and a tracker
+ * 5xx was invisible to the proxy-error stop criterion.
+ */
+export class ClassifiedFetchError extends Error {
+  readonly errorClass: ErrorClass;
+  readonly status: number;
+
+  constructor(classified: ClassifiedError, status: number) {
+    super(classified.message);
+    this.name = 'ClassifiedFetchError';
+    this.errorClass = classified.errorClass;
+    this.status = status;
+  }
+}
 
 /** A mined transaction whose receipt `status === 'reverted'` (T6/T10/T25). */
 export const classifyRevertError = (input: {

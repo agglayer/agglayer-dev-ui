@@ -65,6 +65,7 @@ import { toClaimProof } from '../../../app/services/claimProof';
 import { mapTransactionRequest } from '../../../app/utils/transaction';
 import { toRowKey } from '../../core/types';
 import {
+  ClassifiedFetchError,
   classifyActivityWarning,
   classifyHttpError,
   classifyRpcError,
@@ -305,7 +306,15 @@ export class HeadlessUser implements UserDriver {
   // no "don't bother retrying, the whole session is gone" case — every
   // failure here is a plain network/HTTP error, so the default (always
   // retryable, bounded to 3 attempts) is the right behaviour.
-  private readonly activityPoller = new SingleFlightPoller<ObservedRow[]>();
+  //
+  // S53 (design F3): `tracker_not_ready` is the tracker saying "retry after
+  // <interval>" for a first-time address — hammering it again 300 ms later is
+  // exactly the wrong response, so it is not retried here; the runner backs
+  // off to the UI's own cadence instead. Every other failure keeps the retry.
+  private readonly activityPoller = new SingleFlightPoller<ObservedRow[]>({
+    isFatal: (error) =>
+      error instanceof ClassifiedFetchError && error.errorClass === 'tracker_not_ready'
+  });
 
   // S29 (reverses R3, `loadtest/REVIEW.md`): serializes every
   // nonce-consuming send THIS user issues, per chain — see `sendAndWait`'s
@@ -609,7 +618,17 @@ export class HeadlessUser implements UserDriver {
         status: response.status,
         bodyText
       });
-      throw new Error(classified.message);
+      // S53 (design F3): keep the class (and the tracker's own `Retry-After`,
+      // recorded but not obeyed — the UI's behaviour on a 503 is unverified,
+      // so this keeps parity) instead of flattening to a plain Error that the
+      // runner would re-classify as `internal`.
+      const retryAfter = response.headers.get('retry-after');
+      throw new ClassifiedFetchError(
+        retryAfter === null
+          ? classified
+          : { ...classified, message: `${classified.message} (Retry-After: ${retryAfter})` },
+        response.status
+      );
     }
 
     // DESIGN §9.2: text, then the big-int-safe parse — NEVER response.json().

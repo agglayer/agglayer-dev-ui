@@ -30,7 +30,7 @@ import { monitorEventLoopDelay } from 'node:perf_hooks';
 import type { LoadtestAsset, LoadtestConfig } from './config/schema';
 import type { Clock, RingEmission, RingEngine } from './core/ring';
 import type { AbortCause, InflightLookup, SchedulerDecision } from './core/scheduler';
-import type { AssetKind, Gate, Hop, HopSpec, Lap, ObservedRow } from './core/types';
+import type { AssetKind, ErrorClass, Gate, Hop, HopSpec, Lap, ObservedRow } from './core/types';
 import type {
   ClaimStageProbeResult,
   ClaimSubmission,
@@ -48,7 +48,7 @@ import type { GasTokenIdentity } from './wallets/preflight';
 import { createRingEngine, eventsFromBridge, eventsFromClaim, systemClock } from './core/ring';
 import { createScheduler } from './core/scheduler';
 import { createCollector, createFileActivitySink } from './metrics/collector';
-import { classifyError } from './metrics/errors';
+import { ClassifiedFetchError, classifyError } from './metrics/errors';
 import { deriveClaimKind } from './metrics/measurement';
 import { writeReportFiles } from './metrics/report';
 import { buildUi } from './ui/build';
@@ -64,7 +64,7 @@ import {
 } from './workers/browser/browserUser';
 import { BrowserPool } from './workers/browser/pool';
 import { HeadlessUser } from './workers/headless/headlessUser';
-import { installTimingFetch } from './workers/headless/uiCallset';
+import { installTimingFetch, NON_TERMINAL_INTERVAL_MS } from './workers/headless/uiCallset';
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -305,6 +305,34 @@ export const hopMeasurementRecord = (ctx: LapRunCtx, hop: Hop, lapId: string, st
         alreadyClaimed: st.claim?.isClaimedBefore === true || st.claim?.isClaimedRecheck === true
       })
     }
+  };
+};
+
+/**
+ * What the runner does with a failed `observeActivity()` poll. A transient
+ * failure never fails the hop (the UI's own background poll would just retry
+ * on its next interval) — only the ring timeouts can end a hop stuck polling.
+ *
+ * S53 (design F3): a failure that kept its class (`ClassifiedFetchError` — a
+ * tracker non-2xx) is reported under THAT class, and the retry waits the UI's
+ * own non-terminal cadence (5 s) instead of 1 s: at 1 s (plus the poller's own
+ * 300 ms retries) a wallet whose poll is being refused polled several times
+ * faster than a real user, exactly when the tracker was struggling.
+ */
+export const OBSERVE_ACTIVITY_DEFAULT_RETRY_MS = 1000;
+
+export const classifyActivityPollError = (
+  error: unknown
+): { classified: { errorClass: ErrorClass; message: string }; retryAfterMs: number } => {
+  if (error instanceof ClassifiedFetchError) {
+    return {
+      classified: { errorClass: error.errorClass, message: error.message },
+      retryAfterMs: NON_TERMINAL_INTERVAL_MS
+    };
+  }
+  return {
+    classified: classifyError({ source: 'unknown', error }),
+    retryAfterMs: OBSERVE_ACTIVITY_DEFAULT_RETRY_MS
   };
 };
 
@@ -708,9 +736,9 @@ const runLapToCompletion = async (params: { ctx: LapRunCtx; cell: Cell }): Promi
             // background poll would just retry on its next interval too) —
             // only the existing ring timeouts (checked every loop iteration
             // above) can end a hop that is stuck polling.
-            const classified = classifyError({ source: 'unknown', error });
+            const { classified, retryAfterMs } = classifyActivityPollError(error);
             reportDriverError(ctx, hop.id, classified);
-            await sleep(1000);
+            await sleep(retryAfterMs);
           }
         }
         break;

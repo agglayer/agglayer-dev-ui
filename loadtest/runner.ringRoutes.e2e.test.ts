@@ -37,10 +37,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LoadtestConfig } from './config/schema';
 import type { ObservedRow } from './core/types';
 import type { ClaimSubmission } from './core/userDriver';
+import type { RunLoadTestOptions } from './runner';
 import type { ChainClientFactory, ChainClientSet } from './wallets/chainClients';
 import type * as headlessModule from './workers/headless/headlessUser';
 
 import { parseLoadtestConfig } from './config/schema';
+import { ClassifiedFetchError } from './metrics/errors';
 import { runLoadTest } from './runner';
 import {
   buildTestDevnetConfig,
@@ -120,6 +122,11 @@ interface World {
   receipts: Map<string, { status: 'success'; logs: unknown[] }>;
   depositCounters: Map<string, number>;
   seq: number;
+  // S53: how many upcoming `observeActivity()` calls answer like a tracker that
+  // has not registered the address yet (503 "not ready yet"), and when each
+  // call happened — the back-off test reads the gap after a refusal.
+  trackerNotReadyBudget: number;
+  activityCalls: { at: number; refused: boolean }[];
 }
 
 const newWorld = (chains: ChainInfo[], policyByRoute: Record<string, Policy>): World => ({
@@ -131,7 +138,9 @@ const newWorld = (chains: ChainInfo[], policyByRoute: Record<string, Policy>): W
   builds: new Map(),
   receipts: new Map(),
   depositCounters: new Map(),
-  seq: 0
+  seq: 0,
+  trackerNotReadyBudget: 0,
+  activityCalls: []
 });
 
 const mocks = vi.hoisted(() => ({
@@ -336,7 +345,20 @@ vi.mock('./workers/headless/headlessUser', async (importOriginal) => {
     async observeActivity(): Promise<ObservedRow[]> {
       await new Promise((resolve) => setTimeout(resolve, 20));
       const now = Date.now();
-      return getWorld().deposits.map((d) => toRow(d, now));
+      const world = getWorld();
+      if (world.trackerNotReadyBudget > 0) {
+        world.trackerNotReadyBudget -= 1;
+        world.activityCalls.push({ at: now, refused: true });
+        throw new ClassifiedFetchError(
+          {
+            errorClass: 'tracker_not_ready',
+            message: 'activity for this address is not ready yet, retry after 5s'
+          },
+          503
+        );
+      }
+      world.activityCalls.push({ at: now, refused: false });
+      return world.deposits.map((d) => toRow(d, now));
     }
     async claim(
       hop: Parameters<headlessModule.HeadlessUser['claim']>[0],
@@ -551,7 +573,11 @@ const buildRing = (kind: 'eth' | 'gas'): RingFixture => {
 // ---------------------------------------------------------------------------
 
 interface ResultsShape {
-  hops: { byRoute: Record<string, { byOutcome: Record<string, number> }> };
+  [key: string]: unknown;
+  hops: {
+    byOutcome?: Record<string, number>;
+    byRoute: Record<string, { byOutcome: Record<string, number> }>;
+  };
   laps: { byOutcome: Record<string, number> };
   policy: { autoclaimOverdue: number; unexpectedAutoclaim: number; claimRaceLost: number };
   errors: { byClass: Record<string, unknown> };
@@ -568,10 +594,20 @@ afterEach(() => {
   fs.rmSync(outDir, { recursive: true, force: true });
 });
 
+// S53: optional extras so the heavy-load tests can reuse this harness without
+// changing what the original tests above run.
+interface RunExtras {
+  config?: LoadtestConfig;
+  setup?: (world: World) => void;
+  runOptions?: Partial<RunLoadTestOptions>;
+  logger?: (line: string) => void;
+}
+
 const runRing = async (
   fixture: RingFixture,
-  policyOverrides: Partial<Record<0 | 1 | 2, Policy>>
-): Promise<{ results: ResultsShape; world: World }> => {
+  policyOverrides: Partial<Record<0 | 1 | 2, Policy>>,
+  extra: RunExtras = {}
+): Promise<{ results: ResultsShape; world: World; outDir: string }> => {
   // expected-true hops are auto-claimed, the expected-false hop is not.
   const policies: [Policy, Policy, Policy] = [
     policyOverrides[0] ?? 'auto',
@@ -586,20 +622,22 @@ const runRing = async (
   mocks.world = world;
   mocks.chainClientFactory = buildClientFactory(fixture.gasTokenChainKeys);
   mocks.fetchImpl = fetchOk;
+  extra.setup?.(world);
 
   const result = await runLoadTest({
-    config: fixture.config,
+    config: extra.config ?? fixture.config,
     activeAssetIndices: [0],
     configPath: '/nonexistent/loadtest.config.json',
     repoRoot: '/nonexistent-repo-root',
     fund: false,
     mainnetConfirmed: false,
     outDir,
-    logger: () => {}
+    logger: extra.logger ?? (() => {}),
+    ...extra.runOptions
   });
   expect(result.aborted).toBe(false);
   const results = JSON.parse(fs.readFileSync(result.resultsPath, 'utf8')) as ResultsShape;
-  return { results, world };
+  return { results, world, outDir };
 };
 
 const outcomesOf = (results: ResultsShape, route: string): Record<string, number> =>
@@ -736,3 +774,47 @@ describe.each([['eth' as const], ['gas' as const]])(
     );
   }
 );
+
+// ---------------------------------------------------------------------------
+// S53 / heavy-load design F3 through the real runner: a tracker "not ready yet"
+// refusal is its own class, never fails a hop, and the retry waits the UI cadence.
+// ---------------------------------------------------------------------------
+
+describe('runLoadTest — tracker "not ready yet" handling (S53 F3)', () => {
+  const fixture = buildRing('eth');
+
+  it('records tracker_not_ready, does not fail the hop, and waits the 5 s UI cadence before polling again', async () => {
+    // The default fixture gives a hop only 5 s to appear in the activity feed;
+    // the back-off alone is 5 s, so widen that one budget (nothing else).
+    const config: LoadtestConfig = {
+      ...fixture.config,
+      timeouts: { ...fixture.config.timeouts, appearsInActivityMs: 30_000, hopMs: 60_000 }
+    };
+    const { results, world } = await runRing(
+      fixture,
+      {},
+      {
+        config,
+        setup: (w) => {
+          w.trackerNotReadyBudget = 1;
+        }
+      }
+    );
+
+    const refusedIndex = world.activityCalls.findIndex((c) => c.refused);
+    expect(refusedIndex).toBeGreaterThanOrEqual(0);
+    const next = world.activityCalls[refusedIndex + 1];
+    expect(next).toBeDefined();
+    // 5 000 ms back-off (timer granularity leaves a little slack).
+    expect(next.at - world.activityCalls[refusedIndex].at).toBeGreaterThanOrEqual(4_900);
+
+    // Its own class, counted once...
+    expect(results.errors.byClass).toStrictEqual({ tracker_not_ready: 1 });
+    // ...and no hop or lap failed because of it.
+    const failed = Object.entries(results.hops.byOutcome ?? {}).filter(
+      ([outcome]) => !outcome.startsWith('hop_completed')
+    );
+    expect(failed).toStrictEqual([]);
+    expect(results.laps.byOutcome).toMatchObject({ LAP_FAILED: 0 });
+  }, 90_000);
+});

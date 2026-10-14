@@ -892,11 +892,7 @@ describe('measurements — results.json `measurements` key and the summary secti
 
     expect(results.measurements?.probeIntervalMs).toBe(5000);
     expect(results.measurements?.hops).toHaveLength(1);
-    expect(results.measurements?.claimGas[0]).toMatchObject({
-      toNetworkId: 85,
-      claimKind: 'eth',
-      n: 1
-    });
+    expect(results.measurements?.claimGas[0]).toMatchObject({ toNetworkId: 85, claimKind: 'eth', n: 1 });
     expect(results.measurements?.stageLatency[0].deltas.claimProof).toStrictEqual({
       n: 1,
       min: 2000,
@@ -913,9 +909,7 @@ describe('measurements — results.json `measurements` key and the summary secti
       summary.indexOf('## Environment')
     );
     expect(summary).toContain('| 85 | eth | 1 |');
-    expect(summary).toContain(
-      'T3b-T3 tracker READY lag after claim-proof | 1 / 1000 / 1000 / 1000'
-    );
+    expect(summary).toContain('T3b-T3 tracker READY lag after claim-proof | 1 / 1000 / 1000 / 1000');
   });
 
   it('regenerates byte-identically from results.json (the `report --dir` path)', () => {
