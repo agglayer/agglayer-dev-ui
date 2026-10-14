@@ -1083,16 +1083,22 @@ const topFailingHopOutcomes = (byOutcome: ResultsJson['hops']['byOutcome']): str
   return failing.join(', ');
 };
 
-export const renderSummaryMd = (results: ResultsJson, config: LoadtestConfig): string => {
-  // S11 retry defect (2): `aborted` now means ABNORMAL termination only
-  // (SIGINT / fatal) — a run that served its full `--minutes` and drained
-  // normally is not ABORTED, optionally noting how many laps were still
-  // in flight at the moment drain began.
-  // A run in which no lap ever started proves nothing (e.g. `--rate 1
-  // --minutes 1`: the first tick falls at `stopAt`), so it must not read PASS.
-  // PASS additionally requires that no finished lap FAILED or was ABORTED
-  // (e.g. by the drain deadline): LAP_FAILED => FAIL, else LAP_ABORTED =>
-  // INCOMPLETE (FAIL wins when both are present).
+/**
+ * The strict verdict text of the `summary.md` headline (`PASS`, `FAIL (...)`,
+ * `INCOMPLETE (...)`, `ABORTED (...)`, `NO LAPS STARTED (...)`). Exported so the
+ * HTML report (S54) prints the same words instead of re-implementing them.
+ *
+ * S11 retry defect (2): `aborted` now means ABNORMAL termination only
+ * (SIGINT / fatal) — a run that served its full `--minutes` and drained
+ * normally is not ABORTED, optionally noting how many laps were still
+ * in flight at the moment drain began.
+ * A run in which no lap ever started proves nothing (e.g. `--rate 1
+ * --minutes 1`: the first tick falls at `stopAt`), so it must not read PASS.
+ * PASS additionally requires that no finished lap FAILED or was ABORTED
+ * (e.g. by the drain deadline): LAP_FAILED => FAIL, else LAP_ABORTED =>
+ * INCOMPLETE (FAIL wins when both are present).
+ */
+export const computeVerdict = (results: ResultsJson): string => {
   const lapsFailed = results.laps.byOutcome.LAP_FAILED ?? 0;
   const lapsAborted = results.laps.byOutcome.LAP_ABORTED ?? 0;
   const lapsFinished = (results.laps.byOutcome.LAP_DONE ?? 0) + lapsFailed + lapsAborted;
@@ -1100,7 +1106,7 @@ export const renderSummaryMd = (results: ResultsJson, config: LoadtestConfig): s
     const why = topFailingHopOutcomes(results.hops.byOutcome);
     return `${n} of ${lapsFinished} lap(s) ${verb}${why === '' ? '' : `: ${why}`}`;
   };
-  const statusLine = results.run.aborted
+  return results.run.aborted
     ? `ABORTED (${results.run.abortCause ?? 'unknown cause'})`
     : results.achieved.lapStartsSubmitted === 0
       ? 'NO LAPS STARTED (0 lap starts — nothing was exercised)'
@@ -1111,6 +1117,63 @@ export const renderSummaryMd = (results: ResultsJson, config: LoadtestConfig): s
           : results.run.lapsInFlightAtStop > 0
             ? `PASS (drained ${results.run.lapsInFlightAtStop} in-flight lap${results.run.lapsInFlightAtStop === 1 ? '' : 's'})`
             : 'PASS';
+};
+
+/**
+ * Hop outcomes that count as a HARD failure of the system under test for stop
+ * criterion SC1 (`tmp/loadtest-heavy/campaign.md` §6): a revert, a bridge that
+ * emitted no event, a bad activity status, an RPC or proxy error, or an
+ * unclassified failure. Timeouts and aborted-by-drain hops are deliberately not
+ * in the set — SC2/SC3 watch stalls separately.
+ */
+export const HARD_HOP_FAILURE_OUTCOMES: readonly Outcome[] = [
+  'revert_approve',
+  'revert_bridge',
+  'revert_claim',
+  'tx_revert',
+  'lbt_underflow',
+  'bridge_event_missing',
+  'activity_status_error',
+  'rpc_error',
+  'proxy_4xx',
+  'proxy_5xx',
+  'internal'
+];
+
+export interface FailureRates {
+  lapsFinished: number;
+  lapsFailed: number;
+  /** `LAP_FAILED / (LAP_DONE + LAP_FAILED + LAP_ABORTED)`; `null` when no lap finished. */
+  lapFailureRate: number | null;
+  hopsEnded: number;
+  hardHopFailures: number;
+  /** Hard failures (`HARD_HOP_FAILURE_OUTCOMES`) over every hop that reached an outcome; `null` when none did. */
+  hardHopFailureRate: number | null;
+}
+
+export const failureRates = (results: ResultsJson): FailureRates => {
+  const lapsFailed = results.laps.byOutcome.LAP_FAILED ?? 0;
+  const lapsFinished =
+    (results.laps.byOutcome.LAP_DONE ?? 0) + lapsFailed + (results.laps.byOutcome.LAP_ABORTED ?? 0);
+  const outcomes = Object.entries(results.hops.byOutcome) as [Outcome, number | undefined][];
+  const hopsEnded = outcomes.reduce((sum, [, count]) => sum + (count ?? 0), 0);
+  const hardHopFailures = outcomes.reduce(
+    (sum, [outcome, count]) =>
+      sum + (HARD_HOP_FAILURE_OUTCOMES.includes(outcome) ? (count ?? 0) : 0),
+    0
+  );
+  return {
+    lapsFinished,
+    lapsFailed,
+    lapFailureRate: lapsFinished > 0 ? lapsFailed / lapsFinished : null,
+    hopsEnded,
+    hardHopFailures,
+    hardHopFailureRate: hopsEnded > 0 ? hardHopFailures / hopsEnded : null
+  };
+};
+
+export const renderSummaryMd = (results: ResultsJson, config: LoadtestConfig): string => {
+  const statusLine = computeVerdict(results);
   // DESIGN §6.3 item 1: "one line stating pass/abort, users, rate,
   // duration" — the heading line ITSELF, not a separate line below it, so
   // §5.5 invariant 4 ("summary.md's first line") is literally satisfied.

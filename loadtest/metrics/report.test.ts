@@ -21,6 +21,9 @@ import { classifyActivityWarning } from './errors';
 import {
   buildResultsJson,
   checkThroughputIdentity,
+  computeVerdict,
+  failureRates,
+  HARD_HOP_FAILURE_OUTCOMES,
   redactConfigForReport,
   renderSummaryMd,
   requestedFromConfig,
@@ -1133,5 +1136,120 @@ describe('buildResultsJson / renderSummaryMd — pump, wallet balances and L1 in
     const original = renderSummaryMd(results, config);
     const reloaded = JSON.parse(JSON.stringify(results)) as typeof results;
     expect(renderSummaryMd(reloaded, reloaded.config as LoadtestConfig)).toBe(original);
+  });
+});
+
+// S53: the verdict helpers `report.ts` now exports for the HTML report (S54).
+describe('computeVerdict / failureRates (S53)', () => {
+  const resultsFor = (opts: {
+    laps?: Partial<Record<'LAP_DONE' | 'LAP_FAILED' | 'LAP_ABORTED', number>>;
+    hops?: Record<string, number>;
+    aborted?: boolean;
+    abortCause?: string | null;
+    lapStarts?: number;
+    inFlightAtStop?: number;
+  }) => {
+    const config = buildDevnetConfig();
+    const results = buildResultsJson({ snapshot: createCollector().snapshot(), config });
+    results.laps.byOutcome = { LAP_DONE: 0, LAP_FAILED: 0, LAP_ABORTED: 0, ...opts.laps };
+    results.hops.byOutcome = opts.hops ?? {};
+    results.run.aborted = opts.aborted ?? false;
+    results.run.abortCause = opts.abortCause ?? null;
+    results.achieved.lapStartsSubmitted = opts.lapStarts ?? 1;
+    results.run.lapsInFlightAtStop = opts.inFlightAtStop ?? 0;
+    return results;
+  };
+
+  it('keeps the exact verdict wording of the summary headline for every branch', () => {
+    expect(computeVerdict(resultsFor({ laps: { LAP_DONE: 3 } }))).toBe('PASS');
+    expect(computeVerdict(resultsFor({ laps: { LAP_DONE: 3 }, inFlightAtStop: 1 }))).toBe(
+      'PASS (drained 1 in-flight lap)'
+    );
+    expect(computeVerdict(resultsFor({ laps: { LAP_DONE: 3 }, inFlightAtStop: 4 }))).toBe(
+      'PASS (drained 4 in-flight laps)'
+    );
+    expect(computeVerdict(resultsFor({ lapStarts: 0 }))).toBe(
+      'NO LAPS STARTED (0 lap starts — nothing was exercised)'
+    );
+    expect(computeVerdict(resultsFor({ aborted: true, abortCause: 'sigint' }))).toBe(
+      'ABORTED (sigint)'
+    );
+    expect(computeVerdict(resultsFor({ aborted: true }))).toBe('ABORTED (unknown cause)');
+    expect(
+      computeVerdict(
+        resultsFor({
+          laps: { LAP_DONE: 2, LAP_FAILED: 1 },
+          hops: { timeout_ready_to_claim: 1, hop_completed_manual: 2 }
+        })
+      )
+    ).toBe('FAIL (1 of 3 lap(s) failed: timeout_ready_to_claim x1)');
+    expect(
+      computeVerdict(resultsFor({ laps: { LAP_DONE: 2, LAP_ABORTED: 2 }, hops: { aborted_drain: 2 } }))
+    ).toBe('INCOMPLETE (2 of 4 lap(s) aborted: aborted_drain x2)');
+    // FAIL wins when both are present.
+    expect(computeVerdict(resultsFor({ laps: { LAP_FAILED: 1, LAP_ABORTED: 1 } }))).toMatch(/^FAIL /);
+  });
+
+  it('the summary headline is exactly computeVerdict', () => {
+    const config = buildDevnetConfig();
+    const results = resultsFor({ laps: { LAP_DONE: 2, LAP_FAILED: 1 }, hops: { proxy_5xx: 1 } });
+    expect(renderSummaryMd(results, config).split('\n')[0]).toContain(
+      ` — ${computeVerdict(results)} — users=`
+    );
+  });
+
+  it('failureRates: lap failure rate and the hard hop-failure rate over the SC1 outcome set', () => {
+    const rates = failureRates(
+      resultsFor({
+        laps: { LAP_DONE: 6, LAP_FAILED: 3, LAP_ABORTED: 1 },
+        hops: {
+          hop_completed_manual: 70,
+          proxy_5xx: 4,
+          rpc_error: 3,
+          revert_claim: 2,
+          internal: 1,
+          // Not hard failures: stalls and drain aborts are watched by other criteria.
+          timeout_ready_to_claim: 15,
+          aborted_drain: 5
+        }
+      })
+    );
+    expect(rates).toStrictEqual({
+      lapsFinished: 10,
+      lapsFailed: 3,
+      lapFailureRate: 0.3,
+      hopsEnded: 100,
+      hardHopFailures: 10,
+      hardHopFailureRate: 0.1
+    });
+  });
+
+  it('failureRates: null, never a false 0, when nothing finished', () => {
+    expect(failureRates(resultsFor({}))).toStrictEqual({
+      lapsFinished: 0,
+      lapsFailed: 0,
+      lapFailureRate: null,
+      hopsEnded: 0,
+      hardHopFailures: 0,
+      hardHopFailureRate: null
+    });
+  });
+
+  it('the hard-failure set is exactly the SC1 list: reverts, bridge_event_missing, activity_status_error, rpc and proxy errors, internal', () => {
+    expect([...HARD_HOP_FAILURE_OUTCOMES].sort()).toStrictEqual(
+      [
+        'activity_status_error',
+        'bridge_event_missing',
+        'internal',
+        'lbt_underflow',
+        'proxy_4xx',
+        'proxy_5xx',
+        'revert_approve',
+        'revert_bridge',
+        'revert_claim',
+        'rpc_error',
+        'tx_revert'
+      ].sort()
+    );
   });
 });
