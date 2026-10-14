@@ -1,11 +1,17 @@
 import type { TransactionStatus } from '@/app/types/transaction';
 
 import { cn } from '@/app/utils/common';
-import { CheckCircle, Loader2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
 
 interface TransactionStatusBadgeProps {
   status: TransactionStatus;
   className?: string;
+  // Overrides `status`'s usual label/icon with a neutral loading state --
+  // used right after a successful claim, while the row still reports its
+  // pre-claim status (typically READY_TO_CLAIM) because the next activity
+  // poll hasn't landed yet. See transactionsView.tsx's
+  // pendingClaimConfirmationIds.
+  isConfirming?: boolean;
 }
 
 const STATUS_CONFIG: Record<
@@ -22,14 +28,14 @@ const STATUS_CONFIG: Record<
     icon: <CheckCircle size={16} />,
     variant: 'info'
   },
-  LEAF_INCLUDED: {
+  PENDING: {
     label: 'Pending',
     icon: <Loader2 size={16} className="animate-spin" />,
     variant: 'warning'
   },
-  BRIDGED: {
-    label: 'Pending',
-    icon: <Loader2 size={16} className="animate-spin" />,
+  ERROR: {
+    label: 'Needs attention',
+    icon: <AlertTriangle size={16} />,
     variant: 'warning'
   }
 };
@@ -41,12 +47,23 @@ const VARIANT_STYLES = {
   pending: 'bg-grey-light text-black border-border'
 };
 
-export const TransactionStatusBadge = ({ status, className }: TransactionStatusBadgeProps) => {
-  const config = STATUS_CONFIG[status];
+export const TransactionStatusBadge = ({
+  status,
+  className,
+  isConfirming
+}: TransactionStatusBadgeProps) => {
+  const config = isConfirming
+    ? {
+        label: 'Updating status…',
+        icon: <Loader2 size={16} className="animate-spin" />,
+        variant: 'pending' as const
+      }
+    : STATUS_CONFIG[status];
   const variantStyle = VARIANT_STYLES[config.variant];
 
   return (
     <div
+      data-test-id="transaction-status"
       className={cn(
         'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-semibold',
         variantStyle,

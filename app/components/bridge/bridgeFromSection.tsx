@@ -64,6 +64,7 @@ export const BridgeFromSection = ({
           options={chainOptions}
           selectedValue={selectedChainId.toString()}
           onSelect={(option) => onSelectChain(Number(option.value))}
+          testId="from-chain-selector"
         />
 
         <AmountInput

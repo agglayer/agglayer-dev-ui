@@ -1,6 +1,6 @@
 'use client';
 
-import type { TransactionStatus, Transaction } from '@/app/types/transaction';
+import type { ClaimExecutionResult, TransactionStatus, Transaction } from '@/app/types/transaction';
 
 import { ClaimResultModal } from '@/app/components/transactions/claimResultModal';
 import { getTransactionInitialStatus } from '@/app/components/transactions/intialStatus';
@@ -9,6 +9,8 @@ import { TransactionFilters } from '@/app/components/transactions/transactionFil
 import { TransactionList } from '@/app/components/transactions/transactionList';
 import { Button } from '@/app/components/ui/button';
 import { Card } from '@/app/components/ui/card';
+import { Modal } from '@/app/components/ui/modal';
+import { ACTIVITY_PAGE_SIZE } from '@/app/constants/activity';
 import { useAppMode } from '@/app/context/appMode';
 import { useRefetch } from '@/app/context/refetch';
 import { useWallet } from '@/app/context/walletContext';
@@ -17,15 +19,13 @@ import { useEnforceCorrectChain } from '@/app/hooks/useEnforceCorrectChain';
 import { TOTAL_REFETCH_TIME, useTransactions } from '@/app/hooks/useTransactions';
 import { getChainById, getChainByNetworkId } from '@/app/utils/chains';
 import { cn } from '@/app/utils/common';
-import { useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Plug, RotateCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 export const TransactionsView = () => {
   const { address, status, chainId, connect } = useWallet();
-  const { defaultFromChainId, chains, bridgeAddress } = useAppMode();
+  const { defaultFromChainId, chains } = useAppMode();
   const { aggressiveRefetch, triggerAggressiveRefetch, clearAggressiveRefetch } = useRefetch();
-  const queryClient = useQueryClient();
   const initialStatus = getTransactionInitialStatus();
   const [filters, setFilters] = useState<{ status?: TransactionStatus; updatedSince?: number }>(
     () => ({
@@ -33,16 +33,31 @@ export const TransactionsView = () => {
     })
   );
   const statusKey = (initialStatus || filters.status || 'all') as string;
-  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
-  const [isDifferentAddress, setIsDifferentAddress] = useState<boolean>(false);
+  // Store just the id, not the Transaction object: allTransactions gets a
+  // fresh array (and fresh row objects) every poll, so looking the row up by
+  // id each render is what keeps the modal's status/tracker live while
+  // it's open, instead of freezing on the object captured at click time --
+  // see useBridgeTracking.ts, which now reads tracking straight off
+  // whatever Transaction object it's handed.
+  const [selectedTransactionId, setSelectedTransactionId] = useState<string | null>(null);
+  const [warningsModalOpen, setWarningsModalOpen] = useState(false);
+  // hubUIDs whose claim just succeeded, kept flagged (button hidden, status
+  // badge shows a loading state) until the next activity poll actually
+  // confirms it -- see the cleanup effect below and
+  // transactionListItem.tsx's isPendingClaimConfirmation. Needed because
+  // useClaimExecution's own success state clears on modal close/reset, well
+  // before the row's real status (still READY_TO_CLAIM from the last poll)
+  // catches up.
+  const [pendingClaimConfirmationIds, setPendingClaimConfirmationIds] = useState<Set<string>>(
+    () => new Set()
+  );
 
   const queryFilters = useMemo(
     () => ({
       fromAddress: address,
       status: filters.status,
       updatedSince: filters.updatedSince,
-      order: 'desc' as const,
-      limit: 20
+      limit: ACTIVITY_PAGE_SIZE
     }),
     [address, filters]
   );
@@ -51,9 +66,12 @@ export const TransactionsView = () => {
   const isConnected = status === 'connected' && Boolean(address);
 
   const {
-    data,
+    transactions: allTransactions,
+    totalCount,
+    warnings,
     isLoading,
     isFetchingNextPage,
+    fetchNextPageError,
     hasNextPage,
     fetchNextPage,
     error,
@@ -73,15 +91,44 @@ export const TransactionsView = () => {
     return () => clearTimeout(timeout);
   }, [aggressiveRefetch, clearAggressiveRefetch]);
 
-  const handleClaimComplete = useCallback(() => {
-    triggerAggressiveRefetch();
-    void refetch();
-    void queryClient.invalidateQueries({ queryKey: ['ready-to-claim-count'] });
-  }, [queryClient, refetch, triggerAggressiveRefetch]);
+  const handleClaimComplete = useCallback(
+    (result: ClaimExecutionResult) => {
+      triggerAggressiveRefetch();
+      if (result.status === 'success') {
+        setPendingClaimConfirmationIds((prev) => {
+          const next = new Set(prev);
+          next.add(result.transactionId);
+          return next;
+        });
+      }
+      // useTransactions' refetch also invalidates useReadyToClaimCount's
+      // query, so the header badge refreshes along with the list.
+      void refetch();
+    },
+    [refetch, triggerAggressiveRefetch]
+  );
+
+  // Clears a row's "pending confirmation" flag once a poll actually reflects
+  // the claim -- its status moved off READY_TO_CLAIM (typically to CLAIMED),
+  // or it dropped out of the current filtered page entirely.
+  useEffect(() => {
+    setPendingClaimConfirmationIds((prev) => {
+      if (prev.size === 0) return prev;
+      let changed = false;
+      const next = new Set(prev);
+      for (const id of prev) {
+        const tx = allTransactions.find((transaction) => transaction.hubUID === id);
+        if (!tx || tx.status !== 'READY_TO_CLAIM') {
+          next.delete(id);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [allTransactions]);
 
   const ensureCorrectChain = useEnforceCorrectChain();
   const claimExecution = useClaimExecution({
-    bridgeAddress,
     chains,
     onComplete: handleClaimComplete
   });
@@ -91,15 +138,26 @@ export const TransactionsView = () => {
   const claimStep = claimExecution.state.currentStep;
   const claimResultOpen = claimStep === 'success' || claimStep === 'error';
 
-  const allTransactions = useMemo(() => {
-    return data?.pages.flatMap((page) => page.data) ?? [];
-  }, [data]);
-
-  const totalCount = data?.pages[0]?.pagination.total ?? 0;
-
   const destChain = claimExecution.state.destinationChainId
     ? getChainById(chains, claimExecution.state.destinationChainId)
     : undefined;
+
+  // Looked up fresh every render (not stored as its own state) so the modal
+  // reflects the latest poll -- see selectedTransactionId's comment above.
+  // Note: if the tx falls out of the currently visible/filtered page (e.g.
+  // it becomes CLAIMED while the status filter is "Ready to claim"), it
+  // disappears from allTransactions and the modal closes, same as its row
+  // would vanish from the list itself.
+  const selectedTransaction = useMemo(
+    () => allTransactions.find((tx) => tx.hubUID === selectedTransactionId) ?? null,
+    [allTransactions, selectedTransactionId]
+  );
+
+  const isDifferentAddress = useMemo(() => {
+    const walletAddr = address?.toLowerCase();
+    const receiver = selectedTransaction?.receiverAddress?.toLowerCase();
+    return Boolean(walletAddr && receiver && walletAddr !== receiver);
+  }, [address, selectedTransaction]);
 
   const handleClaim = async (transaction: Transaction) => {
     if (!address) return;
@@ -120,15 +178,11 @@ export const TransactionsView = () => {
   };
 
   const handleSelectTransaction = (transaction: Transaction) => {
-    setSelectedTransaction(transaction);
-    const walletAddr = address?.toLowerCase();
-    const receiver = transaction.receiverAddress?.toLowerCase();
-    setIsDifferentAddress(Boolean(walletAddr && receiver && walletAddr !== receiver));
+    setSelectedTransactionId(transaction.hubUID);
   };
 
   const handleCloseModal = () => {
-    setSelectedTransaction(null);
-    setIsDifferentAddress(false);
+    setSelectedTransactionId(null);
   };
 
   const handleManualRefetch = () => {
@@ -145,7 +199,10 @@ export const TransactionsView = () => {
           </p>
           {totalCount > 0 && (
             <p className="text-base font-semibold text-muted">
-              Total transactions: <span className="text-black">{totalCount}</span>
+              Total transactions:{' '}
+              <span className="text-black" data-test-id="transactions-total">
+                {allTransactions.length} / {totalCount}
+              </span>
             </p>
           )}
         </div>
@@ -169,18 +226,35 @@ export const TransactionsView = () => {
             }
             disabled={!isConnected}
           />
-          <button
-            type="button"
-            aria-label="Refresh activity"
-            onClick={handleManualRefetch}
-            disabled={isRefetching || isLoading}
-            className={cn(
-              'bg-transparent text-black',
-              isRefetching ? 'cursor-not-allowed text-grey' : 'hover:text-grey cursor-pointer'
+          <div className="flex items-center gap-3">
+            {warnings.length > 0 && (
+              <button
+                type="button"
+                aria-label={`${warnings.length} network warning${warnings.length === 1 ? '' : 's'}`}
+                data-test-id="transactions-warnings"
+                onClick={() => setWarningsModalOpen(true)}
+                className="bg-transparent text-orange hover:text-orange/80 cursor-pointer"
+              >
+                <AlertTriangle aria-hidden="true" size={18} />
+              </button>
             )}
-          >
-            <RotateCw aria-hidden="true" className={cn('size-4', isRefetching && 'animate-spin')} />
-          </button>
+            <button
+              type="button"
+              aria-label="Refresh activity"
+              data-test-id="transactions-refresh"
+              onClick={handleManualRefetch}
+              disabled={isRefetching || isLoading}
+              className={cn(
+                'bg-transparent text-black',
+                isRefetching ? 'cursor-not-allowed text-grey' : 'hover:text-grey cursor-pointer'
+              )}
+            >
+              <RotateCw
+                aria-hidden="true"
+                className={cn('size-4', isRefetching && 'animate-spin')}
+              />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -219,6 +293,21 @@ export const TransactionsView = () => {
               Retry
             </Button>
           </div>
+          {error.message && (
+            <details
+              className="mx-auto w-full max-w-md text-left text-sm"
+              data-test-id="activity-error-details"
+            >
+              <summary className="cursor-pointer text-grey hover:text-foreground">
+                Technical details
+              </summary>
+              <div className="mt-2 space-y-1 rounded-lg bg-surface-muted p-3 text-xs text-grey">
+                <p className="break-words">
+                  <span className="font-semibold">Error:</span> {error.message}
+                </p>
+              </div>
+            </details>
+          )}
         </div>
       )}
 
@@ -228,14 +317,46 @@ export const TransactionsView = () => {
           isLoading={isLoading}
           isFetchingNextPage={isFetchingNextPage}
           hasNextPage={hasNextPage}
+          loadMoreError={fetchNextPageError}
           onLoadMore={() => fetchNextPage()}
           onClaim={handleClaim}
           onSelect={handleSelectTransaction}
           claimingTxId={claimingTxId}
           claimStep={claimStep}
           isAnyClaiming={isAnyClaiming}
+          pendingClaimConfirmationIds={pendingClaimConfirmationIds}
         />
       )}
+
+      <Modal
+        open={warningsModalOpen}
+        onClose={() => setWarningsModalOpen(false)}
+        title="Network warnings"
+        dataTestId="transactions-warnings-modal"
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-grey">
+            Some networks couldn&apos;t be checked -- your transaction history may be incomplete for
+            these networks.
+          </p>
+          <ul className="space-y-2">
+            {warnings.map((warning, index) => {
+              const chain = getChainByNetworkId(chains, warning.network_id);
+              return (
+                <li
+                  key={`${warning.network_id}-${index}`}
+                  className="rounded-lg bg-surface-muted p-3 text-sm"
+                >
+                  <p className="font-semibold text-black">
+                    {chain?.name ?? `Network ${warning.network_id}`}
+                  </p>
+                  <p className="mt-1 break-words text-xs text-grey">{warning.message}</p>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      </Modal>
 
       <TransactionDetailsModal
         open={Boolean(selectedTransaction)}
@@ -245,6 +366,9 @@ export const TransactionsView = () => {
         onClaim={handleClaim}
         claimStep={selectedTransaction?.hubUID === claimingTxId ? claimStep : undefined}
         isAnyClaiming={isAnyClaiming}
+        isPendingClaimConfirmation={
+          selectedTransaction ? pendingClaimConfirmationIds.has(selectedTransaction.hubUID) : false
+        }
       />
 
       <ClaimResultModal
@@ -254,6 +378,7 @@ export const TransactionsView = () => {
         claimTxHash={claimExecution.state.claimTxHash}
         explorerUrl={destChain?.explorer}
         errorMessage={claimExecution.state.error?.message}
+        errorStep={claimExecution.state.error?.step}
       />
     </Card>
   );

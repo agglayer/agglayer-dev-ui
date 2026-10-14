@@ -3,22 +3,27 @@
 import type { ClaimStep, Transaction } from '@/app/types/transaction';
 
 import { TransactionListItem } from '@/app/components/transactions/transactionListItem';
-import { useInfiniteScroll } from '@/app/hooks/useInfiniteScroll';
+import { Button } from '@/app/components/ui/button';
 import { groupTransactionsByDate } from '@/app/utils/date';
 import { Loader2 } from 'lucide-react';
-import { useMemo, useRef } from 'react';
+import { useMemo } from 'react';
 
 interface TransactionListProps {
   transactions: Transaction[];
   isLoading?: boolean;
   isFetchingNextPage?: boolean;
   hasNextPage?: boolean;
+  loadMoreError?: Error | null;
   onLoadMore?: () => void;
   onClaim?: (transaction: Transaction) => void;
   onSelect?: (transaction: Transaction) => void;
   claimingTxId?: string;
   claimStep?: ClaimStep;
   isAnyClaiming?: boolean;
+  // hubUIDs whose claim just succeeded and are awaiting confirmation from
+  // the next activity poll -- see transactionsView.tsx's
+  // pendingClaimConfirmationIds.
+  pendingClaimConfirmationIds?: Set<string>;
 }
 
 export const TransactionList = ({
@@ -26,28 +31,16 @@ export const TransactionList = ({
   isLoading,
   isFetchingNextPage,
   hasNextPage,
+  loadMoreError,
   onLoadMore,
   onClaim,
   onSelect,
   claimingTxId,
   claimStep,
-  isAnyClaiming
+  isAnyClaiming,
+  pendingClaimConfirmationIds
 }: TransactionListProps) => {
-  const sentinelRef = useRef<HTMLDivElement>(null);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const groupedTransactions = useMemo(() => groupTransactionsByDate(transactions), [transactions]);
-
-  useInfiniteScroll({
-    sentinelRef,
-    onIntersect: () => {
-      if (hasNextPage && !isFetchingNextPage && onLoadMore) {
-        onLoadMore();
-      }
-    },
-    enabled: Boolean(hasNextPage && !isFetchingNextPage),
-    rootMargin: '100px',
-    rootRef: scrollContainerRef
-  });
 
   if (isLoading) {
     return (
@@ -67,7 +60,7 @@ export const TransactionList = ({
   }
 
   return (
-    <div ref={scrollContainerRef} className="space-y-6 max-h-[70vh] overflow-auto">
+    <div className="space-y-6 max-h-[70vh] overflow-auto">
       {Object.entries(groupedTransactions).map(([date, txs]) => (
         <div key={date} className="space-y-3">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-grey">{date}</h3>
@@ -80,6 +73,7 @@ export const TransactionList = ({
                 onSelect={onSelect}
                 claimStep={tx.hubUID === claimingTxId ? claimStep : undefined}
                 isAnyClaiming={isAnyClaiming}
+                isPendingClaimConfirmation={pendingClaimConfirmationIds?.has(tx.hubUID) ?? false}
               />
             ))}
           </div>
@@ -87,12 +81,27 @@ export const TransactionList = ({
       ))}
 
       {hasNextPage && (
-        <div ref={sentinelRef} className="flex items-center justify-center py-4">
-          {isFetchingNextPage && (
-            <div className="flex items-center gap-2 text-sm text-grey">
-              <Loader2 size={20} className="animate-spin" />
-              <span>Loading more transactions...</span>
-            </div>
+        <div className="flex flex-col items-center gap-2 py-4">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onLoadMore}
+            disabled={isFetchingNextPage}
+            data-test-id="transactions-load-more"
+          >
+            {isFetchingNextPage ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                Loading more transactions...
+              </>
+            ) : (
+              'Load more'
+            )}
+          </Button>
+          {loadMoreError && (
+            <p className="text-sm text-orange" data-test-id="transactions-load-more-error">
+              Couldn&apos;t load more transactions. Please try again.
+            </p>
           )}
         </div>
       )}
