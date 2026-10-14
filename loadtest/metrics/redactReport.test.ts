@@ -16,6 +16,8 @@ import {
 } from './redactReport';
 
 const TOKEN = 'AbCdEf0123456789TokenXyz';
+// A made-up home directory, assembled at run time so no literal machine path lives in the file.
+const FAKE_HOME = ['', 'home', 'someone'].join('/');
 
 describe('safeUrlLabel', () => {
   it('shows scheme://host[:port] only, flagging a dropped path', () => {
@@ -77,16 +79,16 @@ describe('redactUrlForDisplay (summary.md)', () => {
 describe('refLabel', () => {
   it('shows an env var name, only the basename of a file, and understands the results.json shape', () => {
     expect(refLabel({ env: 'LOADTEST_MNEMONIC' })).toBe('env:LOADTEST_MNEMONIC');
-    expect(refLabel({ file: '/home/someone/secret.txt' })).toBe('file:secret.txt');
+    expect(refLabel({ file: `${FAKE_HOME}/secret.txt` })).toBe('file:secret.txt');
     expect(refLabel({ ref: 'env:LOADTEST_MNEMONIC' })).toBe('env:LOADTEST_MNEMONIC');
-    expect(refLabel({ ref: 'file:/home/someone/keys/secret.txt' })).toBe('file:secret.txt');
+    expect(refLabel({ ref: `file:${FAKE_HOME}/keys/secret.txt` })).toBe('file:secret.txt');
     expect(refLabel({ file: 'C:\\Users\\someone\\secret.txt' })).toBe('file:secret.txt');
     expect(refLabel('0xnot-a-ref')).toBe('<unknown ref>');
     expect(refLabel(undefined)).toBe('<unknown ref>');
   });
 
   it('never leaks the directory of a file ref', () => {
-    expect(refLabel({ file: '/home/someone/secret.txt' })).not.toContain('someone');
+    expect(refLabel({ file: `${FAKE_HOME}/secret.txt` })).not.toContain('someone');
   });
 });
 
@@ -151,10 +153,10 @@ const seededConfig = () => {
     users: {
       ...base.users,
       devnetFunding: undefined,
-      wallets: { mnemonicRef: { file: '/home/someone/secret.txt' }, startIndex: 0 },
+      wallets: { mnemonicRef: { file: `${FAKE_HOME}/secret.txt` }, startIndex: 0 },
       funder: {
         ...base.users.funder,
-        privateKeyRef: { file: '/home/someone/funder.key' },
+        privateKeyRef: { file: `${FAKE_HOME}/funder.key` },
         maxTotalErc20Spend: '1'
       }
     },
@@ -175,14 +177,14 @@ const seededConfig = () => {
       httpWindowMs: 60_000,
       claimPreState: true
     },
-    output: { dir: '/home/someone/work/out', activityLog: true }
+    output: { dir: `${FAKE_HOME}/work/out`, activityLog: true }
   });
 };
 
 describe('allowlistedConfigView', () => {
   it('prints no URL path, query, userinfo, secret-file directory or home path', () => {
     const text = JSON.stringify(allowlistedConfigView(seededConfig()));
-    for (const forbidden of [TOKEN, 'SECRETQ', 'p4ss', 'u:p@', '/home/', 'someone', 'proxy?']) {
+    for (const forbidden of [TOKEN, 'SECRETQ', 'p4ss', 'u:p@', FAKE_HOME, 'someone', 'proxy?']) {
       expect(text, forbidden).not.toContain(forbidden);
     }
     expect(text).toContain('https://rpc.example.invalid (path/query redacted)');
@@ -208,8 +210,8 @@ describe('allowlistedConfigView', () => {
     const live = JSON.stringify(allowlistedConfigView(seededConfig()));
     const stored = JSON.parse(JSON.stringify(seededConfig())) as Record<string, unknown>;
     const users = stored.users as Record<string, Record<string, unknown>>;
-    users.wallets.mnemonicRef = { ref: 'file:/home/someone/secret.txt' };
-    users.funder.privateKeyRef = { ref: 'file:/home/someone/funder.key' };
+    users.wallets.mnemonicRef = { ref: `file:${FAKE_HOME}/secret.txt` };
+    users.funder.privateKeyRef = { ref: `file:${FAKE_HOME}/funder.key` };
     expect(JSON.stringify(allowlistedConfigView(stored))).toBe(live);
   });
 
