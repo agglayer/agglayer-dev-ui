@@ -451,9 +451,9 @@ during a campaign) and decides.
 
 |  ID  | Criterion | Threshold | Action |
 |---|---|---|---|
-| SC1 | Hard hop failures | at least 5 hard failures (`revert_*`, `tx_revert`, `lbt_underflow`, `bridge_event_missing`, `activity_status_error`, `rpc_error`, `proxy_4xx`, `proxy_5xx`, `internal`), or at least 2% of ended hops once 50 have ended | drain |
-| SC2 | 82-origin stall | no successful 82>85 hop for 30 min while one is in flight | drain |
-| SC3 | 85-origin stall | no successful 85>82 hop for 120 min while one is in flight | drain |
+| SC1 | Hard hop failures | at least 5 hard failures (`revert_*`, `tx_revert`, `lbt_underflow`, `bridge_event_missing`, `activity_status_error`, `rpc_error`, `proxy_4xx`, `proxy_5xx`, `internal`), or at least 2% of ended hops once 50 have ended and at least 2 of them failed (judged over the whole run so far: one early failure that the run recovers from is not a rate) | drain |
+| SC2 | 82-origin stall | no successful 82>85 hop for 30 min while one is in flight (the window starts at the later of the last success and the moment the route went from idle to in flight) | drain |
+| SC3 | 85-origin stall | no successful 85>82 hop for 120 min while one is in flight (same window rule as SC2) | drain |
 | SC4 | Proxy errors | at least 30 `proxy_5xx`/`proxy_4xx` errors in any 10 min window (`tracker_not_ready`, `not_ready`, `activity_warning` excluded) | drain |
 | SC5 | Nonce conflicts | at least 20 `nonce_conflict` errors in the run | drain, lower `maxInflightLapsPerUser` |
 | SC6 | Tool memory | `toolRssMb` above 4096 for 3 consecutive samples | drain |
@@ -461,7 +461,7 @@ during a campaign) and decides.
 | SC8 | Tool CPU | `toolCpuPct` above 90 for 60 consecutive samples | drain |
 | SC9 | Wallet balance floor | any wallet below 20% of `gasPerChain` (needs `walletBalanceIntervalMs`) | drain |
 | SC10 | Funding floor | checked before the start: `fund` cap refusal, `PUMP_UNDERFUNDED`, funder balance; shown as `OUTSIDE` | do not start |
-| SC11 | Pump spend | cumulative pump spend reaches `maxTotalSpend` | pump stops, run continues |
+| SC11 | Pump spend | cumulative pump spend reaches `maxTotalSpend` (the pump stops before exceeding it, so this fires on a `cap_reached` skip or spend at or above the cap) | pump stops, run continues |
 | SC12 | Shared Bali health | Grafana alerts, certificates in error, proxy restarts: **outside the tool**, shown as `OUTSIDE` | abort, tell the user |
 | SC13 | Backpressure (gate) | `tick_skipped` is at least 25% of ticks | do not advance to the next stage |
 
@@ -483,6 +483,16 @@ Each criterion prints `FIRED`, `ok`, `N/A` (no data) or `OUTSIDE` (SC10 and SC12
 observed value. The command exits 0 even when a criterion fired. To act on SC1-SC9, drain
 gracefully with one SIGINT (`loadtest.sh stop <ring> --drain` in the workspace runner); a
 second SIGINT aborts without waiting for in-flight hops.
+
+**Ctrl-C inside the tmux pane is not a drain.** It reaches the whole process group at once:
+`pnpm` exits, `tee` dies, and the tsx parent relays the signal to the runner after only 30 ms,
+killing it with no report if the event loop is busy (the runner is single-threaded and
+`SC7` is 500 ms). Always use `loadtest.sh stop <ring> --drain` (it signals the one runner
+process and records that it did, so a repeat is refused), `loadtest.sh stop` with no ring
+drains every running ring (all signalled first, then it waits), and `loadtest.sh stop <ring>
+--abort` is the deliberate second SIGINT of a drain in progress. A SIGINT that arrives during
+preflight or start-up is held and the run drains as soon as it starts; one that arrives while
+the report is being written is ignored.
 
 ### Ramp stages (explicit flags)
 
