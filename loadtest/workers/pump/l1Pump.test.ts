@@ -18,7 +18,7 @@ import type { L1PumpClients } from './l1Pump';
 
 import { createCollector, createMemoryActivitySink } from '../../metrics/collector';
 import { installTimingFetch, runWithFetchContext } from '../headless/uiCallset';
-import { createL1Pump } from './l1Pump';
+import { createL1Pump, pumpScheduleFromConfig } from './l1Pump';
 
 const GWEI = BigInt(1_000_000_000);
 const ETH = BigInt(10) ** BigInt(18);
@@ -586,5 +586,54 @@ describe('l1Pump: stop', () => {
     const h = harness();
     await h.pump.stop();
     expect(h.sink.lines).toHaveLength(0);
+  });
+});
+
+describe('l1Pump: progress and configuration', () => {
+  it('progress() reports settled deposits and the counted spend (a pending deposit at its worst case)', async () => {
+    const h = harness();
+    expect(h.pump.progress()).toStrictEqual({ settledDeposits: 0, committedWei: BigInt(0) });
+    h.pump.start();
+    await vi.advanceTimersByTimeAsync(600_000);
+    const cost = BigInt(437_125) * (GWEI / BigInt(1000));
+    expect(h.pump.progress()).toStrictEqual({ settledDeposits: 2, committedWei: cost * BigInt(2) });
+    await h.pump.stop();
+
+    const pending = harness({ receiptNever: true });
+    pending.pump.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(pending.pump.progress()).toStrictEqual({
+      settledDeposits: 0,
+      committedWei: BigInt(528_000) * BigInt(5) * GWEI
+    });
+    await pending.pump.stop({ waitForReceipt: false });
+  });
+
+  it('pumpScheduleFromConfig converts ETH and gwei decimals to wei exactly', () => {
+    expect(
+      pumpScheduleFromConfig({
+        amount: '0.000001',
+        intervalSeconds: 600,
+        maxTotalSpend: '0.07',
+        maxGasPriceGwei: 0.001
+      })
+    ).toStrictEqual({
+      intervalMs: 600_000,
+      maxTotalSpendWei: BigInt(70_000_000_000_000_000),
+      maxGasPriceWei: BigInt(1_000_000),
+      amountWei: BigInt(1_000_000_000_000)
+    });
+    expect(
+      pumpScheduleFromConfig({
+        amount: '0',
+        intervalSeconds: 60,
+        maxTotalSpend: '1',
+        maxGasPriceGwei: 5
+      })
+    ).toMatchObject({
+      maxTotalSpendWei: ETH,
+      maxGasPriceWei: BigInt(5) * GWEI,
+      amountWei: BigInt(0)
+    });
   });
 });

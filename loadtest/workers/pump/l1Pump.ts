@@ -105,6 +105,8 @@ export interface L1Pump {
   tick(): Promise<void>;
   /** True when `txHash` is a deposit this pump has sent, settled or not (M3 `fromPump`). */
   isPumpTx(txHash: string): boolean;
+  /** Settled deposit count and the counted spend so far (a pending deposit at its worst case), for the status line. */
+  progress(): { settledDeposits: number; committedWei: bigint };
 }
 
 interface PendingTx {
@@ -142,6 +144,7 @@ export const createL1Pump = (options: L1PumpOptions): L1Pump => {
   let capReached = false;
   let lastTickAt: number | null = null;
   let spentWei = BigInt(0);
+  let settledDeposits = 0;
   let pendingTx: PendingTx | null = null;
   let loopDone: Promise<void> = Promise.resolve();
   let wake: (() => void) | null = null;
@@ -218,6 +221,7 @@ export const createL1Pump = (options: L1PumpOptions): L1Pump => {
       // A reverted deposit still pays gas, but the value it carried comes back.
       const cost = gasCost + (receipt.status === 'success' ? schedule.amountWei : BigInt(0));
       spentWei += cost;
+      settledDeposits += 1;
       pendingTx = null;
       collector.pumpEvent({
         kind: 'deposit',
@@ -368,6 +372,8 @@ export const createL1Pump = (options: L1PumpOptions): L1Pump => {
 
     tick: () => runWithFetchContext(ctx, tick),
 
-    isPumpTx: (txHash) => pumpTxHashes.has(txHash.toLowerCase())
+    isPumpTx: (txHash) => pumpTxHashes.has(txHash.toLowerCase()),
+
+    progress: () => ({ settledDeposits, committedWei: committedWei() })
   };
 };

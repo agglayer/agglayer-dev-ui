@@ -27,6 +27,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { monitorEventLoopDelay } from 'node:perf_hooks';
 
+import { formatEther } from 'viem';
+
 import type { LoadtestAsset, LoadtestConfig } from './config/schema';
 import type { Clock, RingEmission, RingEngine } from './core/ring';
 import type { AbortCause, InflightLookup, SchedulerDecision } from './core/scheduler';
@@ -42,18 +44,28 @@ import type {
 } from './core/userDriver';
 import type { Collector, HostInfo, LapOutcome } from './metrics/collector';
 import type { ServeUiHandle } from './ui/serve';
+import type { ChainClientFactory } from './wallets/chainClients';
 import type { DerivedWallet } from './wallets/derive';
 import type { GasTokenIdentity } from './wallets/preflight';
+import type { L1Pump } from './workers/pump/l1Pump';
 
+import { pumpWalletOverlap } from './config/schema';
 import { createRingEngine, eventsFromBridge, eventsFromClaim, systemClock } from './core/ring';
 import { createScheduler } from './core/scheduler';
 import { createCollector, createFileActivitySink } from './metrics/collector';
 import { ClassifiedFetchError, classifyError } from './metrics/errors';
 import { deriveClaimKind } from './metrics/measurement';
 import { writeReportFiles } from './metrics/report';
+import {
+  createL1InfoTreePoller,
+  createPeriodicTask,
+  createWalletBalanceSampler,
+  l1InfoTreeClientFromViem
+} from './metrics/samplers';
 import { buildUi } from './ui/build';
 import { serveUi } from './ui/serve';
-import { deriveWallets } from './wallets/derive';
+import { defaultChainClientFactory } from './wallets/chainClients';
+import { derivePumpAccount, deriveWallets } from './wallets/derive';
 import { fundWallets } from './wallets/fund';
 import { PreflightError, runPreflight } from './wallets/preflight';
 import { redactError } from './wallets/redact';
@@ -64,7 +76,12 @@ import {
 } from './workers/browser/browserUser';
 import { BrowserPool } from './workers/browser/pool';
 import { HeadlessUser } from './workers/headless/headlessUser';
-import { installTimingFetch, NON_TERMINAL_INTERVAL_MS } from './workers/headless/uiCallset';
+import {
+  buildChainKeyResolver,
+  installTimingFetch,
+  NON_TERMINAL_INTERVAL_MS
+} from './workers/headless/uiCallset';
+import { createL1Pump, pumpClientsFromViem } from './workers/pump/l1Pump';
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -89,6 +106,12 @@ export interface RunLoadTestOptions {
   mainnetConfirmed: boolean;
   outDir: string;
   logger?: (line: string) => void;
+  /**
+   * S53: viem client factory for the harness-side pump and samplers (the L1
+   * deposit pump, wallet balances, L1 info tree). Defaults to the real one; a
+   * test injects fakes. Preflight and the users keep their own wiring.
+   */
+  chainClientFactory?: ChainClientFactory;
 }
 
 export interface RunLoadTestResult {
@@ -240,6 +263,12 @@ export interface LapRunCtx {
   assets: readonly LoadtestAsset[];
   /** S45 C2: `measurement.stageProbeIntervalMs`, or null when the probe is off. */
   stageProbeIntervalMs: number | null;
+  /**
+   * S53: true when `config.measurement` is present. Gates everything the heavy-load
+   * measurements add to a hop (`tx_sent`/`tx_receipt` lines, the approve gas record),
+   * so a config without it keeps byte-identical ndjson and `results.json`.
+   */
+  measurementEnabled?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -249,6 +278,8 @@ export interface LapRunCtx {
 // ---------------------------------------------------------------------------
 
 export interface HopMeasureState {
+  /** S53 M8: the ERC-20 approve of this hop, when `driver.bridge` sent one. */
+  approve?: TxStepResult | null;
   bridge: TxStepResult | null;
   depositCount: number | null;
   claim: ClaimSubmission | null;
@@ -288,6 +319,9 @@ export const hopMeasurementRecord = (ctx: LapRunCtx, hop: Hop, lapId: string, st
       minedObservedAt: endTime(st.bridge),
       gas: st.bridge?.receipt?.gas ?? null
     },
+    ...(ctx.measurementEnabled === true && st.approve != null
+      ? { approve: { txHash: st.approve.txHash, gas: st.approve.receipt?.gas ?? null } }
+      : {}),
     stages: st.stages,
     readyObservedAt: hop.readyAt,
     claim: {
@@ -303,7 +337,8 @@ export const hopMeasurementRecord = (ctx: LapRunCtx, hop: Hop, lapId: string, st
         claimStatus: claimStep?.receipt?.status ?? null,
         wrapperDeployed: claimGas?.wrapperDeployed,
         alreadyClaimed: st.claim?.isClaimedBefore === true || st.claim?.isClaimedRecheck === true
-      })
+      }),
+      ...(st.claim?.preState !== undefined ? { preState: st.claim.preState } : {})
     }
   };
 };
@@ -358,6 +393,37 @@ const reportEmbeddedErrors = (
 ): void => {
   for (const error of errors) {
     if (error !== undefined) reportDriverError(ctx, hopId, error);
+  }
+};
+
+// S53 M7: `tx_sent` / `tx_receipt` ndjson lines from a driver result the runner
+// already holds. Only called when `config.measurement` is present, so the SC5
+// denominator (`count(tx_sent)`) exists for campaign runs and a config without a
+// measurement block keeps byte-identical ndjson.
+const emitTxEvents = (
+  ctx: LapRunCtx,
+  hopId: string,
+  steps: readonly (readonly ['approve' | 'bridge' | 'claim', TxStepResult | null | undefined])[]
+): void => {
+  if (ctx.measurementEnabled !== true) return;
+  for (const [step, result] of steps) {
+    if (result === null || result === undefined || result.txHash === null) continue;
+    ctx.collector.txSent({
+      userId: ctx.userId,
+      mode: ctx.mode,
+      hopId,
+      step,
+      txHash: result.txHash
+    });
+    if (result.receipt !== null) {
+      ctx.collector.txReceipt({
+        userId: ctx.userId,
+        mode: ctx.mode,
+        hopId,
+        step,
+        status: result.receipt.status
+      });
+    }
   }
 };
 
@@ -607,8 +673,13 @@ const runLapToCompletion = async (params: { ctx: LapRunCtx; cell: Cell }): Promi
           ]);
           {
             const st = measureState(hop.id);
+            st.approve = raced.value.approve;
             st.bridge = raced.value.bridge;
             st.depositCount = raced.value.depositCount;
+            emitTxEvents(ctx, hop.id, [
+              ['approve', raced.value.approve],
+              ['bridge', raced.value.bridge]
+            ]);
             if (
               raced.value.bridge?.receipt?.status === 'success' &&
               raced.value.depositCount !== null
@@ -673,6 +744,7 @@ const runLapToCompletion = async (params: { ctx: LapRunCtx; cell: Cell }): Promi
           {
             const st = measureState(hop.id);
             if (raced.value.claim !== null || st.claim === null) st.claim = raced.value;
+            emitTxEvents(ctx, hop.id, [['claim', raced.value.claim]]);
           }
           applyStep(engine.applyAll(lap, eventsFromClaim(raced.value), drainArg), hop);
         } catch (error) {
@@ -756,6 +828,169 @@ const runLapToCompletion = async (params: { ctx: LapRunCtx; cell: Cell }): Promi
 };
 
 // ---------------------------------------------------------------------------
+// S53: harness-side workers (heavy-load design §1.3/§1.4) — the L1 deposit pump
+// and the periodic samplers. All optional: with no `pump` block and no matching
+// `measurement` field nothing is created, nothing is scheduled and the run is
+// exactly what it was before.
+// ---------------------------------------------------------------------------
+
+interface HarnessWorkers {
+  /** Starts the L1 poller (baseline first), then the pump, then the periodic samplers. */
+  start(): Promise<void>;
+  /** Normal end: stops the pump (bounded receipt wait) and the samplers, then takes a last L1 poll and HTTP window. */
+  stop(): Promise<void>;
+  /** Failure path: stops everything without waiting for a receipt or taking final samples. */
+  abort(): Promise<void>;
+  /** ` pump=on(<settled>/<planned>,<spend>ETH)` for the status line, or '' when there is no pump. */
+  statusSuffix(): string;
+}
+
+const createHarnessWorkers = (params: {
+  config: LoadtestConfig;
+  wallets: readonly DerivedWallet[];
+  collector: Collector;
+  clock: Clock;
+  logger: (line: string) => void;
+  chainClientFactory: ChainClientFactory;
+}): HarnessWorkers => {
+  const { config, wallets, collector, clock, logger, chainClientFactory } = params;
+  const measurement = config.measurement;
+  type RunChain = LoadtestConfig['chains'][number];
+  const chainByKey = new Map(config.chains.map((chain) => [chain.key, chain]));
+  const l1Chain = config.chains.find((chain) => chain.networkId === 0);
+  const clientSets = new Map<string, ReturnType<ChainClientFactory>>();
+  const setFor = (chain: RunChain) => {
+    let set = clientSets.get(chain.key);
+    if (set === undefined) {
+      set = chainClientFactory(chain);
+      clientSets.set(chain.key, set);
+    }
+    return set;
+  };
+
+  let pump: L1Pump | null = null;
+  if (config.pump?.enabled === true) {
+    const pumpConfig = config.pump;
+    const chain = chainByKey.get(pumpConfig.chainKey);
+    if (chain === undefined) {
+      throw new Error(`pump.chainKey "${pumpConfig.chainKey}" is not a chain`);
+    }
+    const account = derivePumpAccount(config);
+    pump = createL1Pump({
+      chain,
+      sender: account.address,
+      pump: pumpConfig,
+      clients: pumpClientsFromViem(setFor(chain), account),
+      collector,
+      clock,
+      receiptTimeoutMs: config.timeouts.txReceiptMs,
+      logger
+    });
+  }
+
+  const tasks: ReturnType<typeof createPeriodicTask>[] = [];
+  let l1Poller: ReturnType<typeof createL1InfoTreePoller> | null = null;
+  let lastWindowAt = clock.now();
+  let finished = false;
+
+  const flushWindow = (): void => {
+    const now = clock.now();
+    collector.flushHttpWindow(now - lastWindowAt);
+    lastWindowAt = now;
+  };
+
+  return {
+    async start() {
+      lastWindowAt = clock.now();
+      if (measurement?.l1InfoTree !== undefined && l1Chain !== undefined) {
+        const { pollIntervalMs, gerManagerAddress } = measurement.l1InfoTree;
+        const poller = createL1InfoTreePoller({
+          bridgeAddress: l1Chain.bridgeAddress as Address,
+          ...(gerManagerAddress !== undefined
+            ? { gerManagerAddress: gerManagerAddress as Address }
+            : {}),
+          client: l1InfoTreeClientFromViem(setFor(l1Chain).public),
+          collector,
+          isPumpTx: (txHash) => pump?.isPumpTx(txHash) ?? false,
+          logger
+        });
+        l1Poller = poller;
+        // The baseline (GER manager, leaf count, head) is taken BEFORE the pump's
+        // first deposit, so that deposit's leaf cannot fall before the cursor.
+        await poller.pollOnce();
+        tasks.push(
+          createPeriodicTask({
+            intervalMs: pollIntervalMs,
+            run: poller.pollOnce,
+            label: 'l1 info tree poller',
+            logger
+          })
+        );
+      }
+      pump?.start();
+      if (measurement?.walletBalanceIntervalMs !== undefined) {
+        const ringChainKeys = [...new Set(config.ring.slice(0, -1))];
+        const sampler = createWalletBalanceSampler({
+          chains: config.chains.filter(
+            (chain) => ringChainKeys.includes(chain.key) && chain.networkId !== 0
+          ),
+          wallets: wallets.map((wallet) => ({ userId: wallet.userId, address: wallet.address })),
+          readerFor: (chainKey) => setFor(chainByKey.get(chainKey) as RunChain).public,
+          collector,
+          logger
+        });
+        tasks.push(
+          createPeriodicTask({
+            intervalMs: measurement.walletBalanceIntervalMs,
+            run: sampler.sampleOnce,
+            immediate: true,
+            label: 'wallet balance sampler',
+            logger
+          })
+        );
+      }
+      if (measurement?.httpWindowMs !== undefined) {
+        tasks.push(
+          createPeriodicTask({
+            intervalMs: measurement.httpWindowMs,
+            run: async () => flushWindow(),
+            label: 'http window',
+            logger
+          })
+        );
+      }
+      tasks.forEach((task) => task.start());
+    },
+
+    async stop() {
+      if (finished) return;
+      finished = true;
+      await pump?.stop();
+      await Promise.all(tasks.map((task) => task.stop()));
+      // A last poll (no overlap now: the periodic one has stopped) picks up the
+      // leaf of the final deposit, and the last partial window is flushed.
+      await l1Poller?.pollOnce();
+      if (measurement?.httpWindowMs !== undefined) flushWindow();
+    },
+
+    async abort() {
+      if (finished) return;
+      finished = true;
+      await pump?.stop({ waitForReceipt: false });
+      await Promise.all(tasks.map((task) => task.stop()));
+    },
+
+    statusSuffix() {
+      if (pump === null || config.pump === undefined) return '';
+      const { settledDeposits, committedWei } = pump.progress();
+      const planned =
+        Math.floor((config.load.durationMinutes * 60) / config.pump.intervalSeconds) + 1;
+      return ` pump=on(${settledDeposits}/${planned},${formatEther(committedWei)}ETH)`;
+    }
+  };
+};
+
+// ---------------------------------------------------------------------------
 // Main orchestrator
 // ---------------------------------------------------------------------------
 
@@ -795,6 +1030,15 @@ export const runLoadTest = async (options: RunLoadTestOptions): Promise<RunLoadT
         'This gates the load test itself (real bridge transactions from real funded wallets), not just `fund` — ' +
         'see loadtest/REVIEW.md R0.'
     );
+  }
+
+  // S53: the schema already refuses a pump wallet inside the user range, but
+  // `--users` is applied after parsing and can grow that range over the pump
+  // index — re-check with the FINAL user count, before any wallet is derived or
+  // funded, so the pump can never share a wallet with a user.
+  if (config.pump?.enabled === true) {
+    const overlap = pumpWalletOverlap(config.users, config.pump);
+    if (overlap !== null) throw new Error(`PUMP_WALLET_OVERLAPS_USERS: ${overlap}`);
   }
 
   const clock: Clock = systemClock;
@@ -871,9 +1115,14 @@ export const runLoadTest = async (options: RunLoadTestOptions): Promise<RunLoadT
   // handle specifically so `globalThis.fetch` doesn't stay monkey-patched
   // (and the collector reachable through its closure) past this run —
   // captured and called in `disposeEverything` below.
-  const uninstallTimingFetch = installTimingFetch(collector, clock).uninstall;
+  // S53 F1: RPC traffic is named `rpc/<CHAIN_KEY>/<method>`, never by the URL's
+  // last path segment (which is the API key for a keyed provider URL).
+  const uninstallTimingFetch = installTimingFetch(collector, clock, {
+    resolveChainKey: buildChainKeyResolver(config.chains)
+  }).uninstall;
 
   let browserPool: BrowserPool | null = null;
+  let harness: HarnessWorkers | null = null;
   let fatalError: unknown = null;
   // Guards `browserPool.dispose()` / `uiHandle.close()` / `collector.close()`
   // against running twice — the success path calls it once before
@@ -891,6 +1140,10 @@ export const runLoadTest = async (options: RunLoadTestOptions): Promise<RunLoadT
     if (disposed) return;
     disposed = true;
     eventLoopDelay.disable();
+    // S53: a failure path never waits for a pump receipt or takes final samples.
+    await harness?.abort().catch((error: unknown) => {
+      logger(`run: harness workers abort failed: ${redactError(error)}`);
+    });
     if (browserPool) {
       await browserPool
         .dispose()
@@ -1007,7 +1260,9 @@ export const runLoadTest = async (options: RunLoadTestOptions): Promise<RunLoadT
           clock,
           // R4 (loadtest/REVIEW.md): bounds viem's receipt wait to the same
           // budget `ring.ts` enforces, instead of viem's 180s default.
-          receiptTimeoutMs: config.timeouts.txReceiptMs
+          receiptTimeoutMs: config.timeouts.txReceiptMs,
+          // S53 M9: off unless `measurement.claimPreState` is set.
+          claimPreState: config.measurement?.claimPreState === true
         }) as UserDriver,
         cellsByAsset: activeAssetIndices.map(() => [] as Cell[]),
         lapCounterByAsset: activeAssetIndices.map(() => 0)
@@ -1057,6 +1312,17 @@ export const runLoadTest = async (options: RunLoadTestOptions): Promise<RunLoadT
       host: getHostInfo(),
       rampUpSeconds: config.load.rampUpSeconds
     });
+
+    // S53: pump + samplers (a no-op without a pump block / matching measurement fields).
+    harness = createHarnessWorkers({
+      config,
+      wallets,
+      collector,
+      clock,
+      logger,
+      chainClientFactory: options.chainClientFactory ?? defaultChainClientFactory
+    });
+    await harness.start();
 
     const engine = createRingEngine({ clock, timeouts: config.timeouts });
     const scheduler = createScheduler({
@@ -1131,7 +1397,8 @@ export const runLoadTest = async (options: RunLoadTestOptions): Promise<RunLoadT
         getDrainDeadline: () => scheduler.drainDeadline(),
         logger,
         assets: config.assets,
-        stageProbeIntervalMs: config.measurement?.stageProbeIntervalMs ?? null
+        stageProbeIntervalMs: config.measurement?.stageProbeIntervalMs ?? null,
+        measurementEnabled: config.measurement !== undefined
       };
 
       const task = runLapToCompletion({ ctx, cell })
@@ -1212,32 +1479,42 @@ export const runLoadTest = async (options: RunLoadTestOptions): Promise<RunLoadT
     const printStatus = (): void => {
       const now = clock.now();
       const elapsedSec = Math.max(1, Math.round((now - runStartedAtMs) / 1000));
-      const snap = collector.snapshot();
+      // S53 F6: O(1) running counters. `collector.snapshot()` re-sorts every HTTP
+      // and phase sample array — at stage-3 scale that is hundreds of thousands
+      // of samples every 5 s, which blocked the event loop the tool is measuring.
+      const live = collector.liveCounters();
       const activeUsers = users.filter((u) =>
         u.cellsByAsset.some((cells) => cells.some((c) => c.lap.state === 'LAP_RUNNING'))
       ).length;
-      const inflightHops = users.reduce(
-        (sum, u) =>
-          sum +
-          u.cellsByAsset.reduce(
-            (s, cells) => s + cells.filter((c) => c.lap.state === 'LAP_RUNNING').length,
-            0
-          ),
-        0
-      );
+      let inflightHops = 0;
+      // S53 M6: laps currently in flight per route (the hop each one is on).
+      const inflightByRoute = new Map<string, number>();
+      for (const u of users) {
+        for (const cells of u.cellsByAsset) {
+          for (const cell of cells) {
+            if (cell.lap.state !== 'LAP_RUNNING') continue;
+            inflightHops += 1;
+            const route = cell.lap.hops[cell.lap.currentHopIndex]?.spec.hopRoute;
+            if (route !== undefined) {
+              inflightByRoute.set(route, (inflightByRoute.get(route) ?? 0) + 1);
+            }
+          }
+        }
+      }
       // S11 retry defect (1): the live status line's `rate=` must be
       // comparable to the requested `--rate` (lap-starts/user/min), so it
       // is driven by `lapStartsSubmitted` (one per lap start), never the
       // hop-level `hopBridgesSubmitted` attempt #1 used here (which reads
       // `ring.length - 1` times too high for any multi-hop ring).
-      const lapStartsSubmitted = snap.scheduler.lapStartsSubmitted;
+      const lapStartsSubmitted = live.lapStartsSubmitted;
       const ratePerMin = lapStartsSubmitted / (elapsedSec / 60);
-      const errorsTotal = Object.values(snap.errors.byClass).reduce(
-        (a: number, b) => a + (b ?? 0),
-        0
-      );
+      const routeOrder = config.ring.slice(0, -1).map((key, i) => `${key}->${config.ring[i + 1]}`);
+      const byRoute = [...inflightByRoute.entries()]
+        .sort(([a], [b]) => routeOrder.indexOf(a) - routeOrder.indexOf(b))
+        .map(([route, count]) => `${route}:${count}`)
+        .join(',');
       logger(
-        `[status] t=${elapsedSec}s phase=${scheduler.phase()} usersActive=${activeUsers}/${users.length} lapStartsSubmitted=${lapStartsSubmitted} rate=${ratePerMin.toFixed(2)}/min inflightHops=${inflightHops} skippedBackpressure=${snap.scheduler.skippedBackpressure} errors=${errorsTotal}`
+        `[status] t=${elapsedSec}s phase=${scheduler.phase()} usersActive=${activeUsers}/${users.length} lapStartsSubmitted=${lapStartsSubmitted} rate=${ratePerMin.toFixed(2)}/min inflightHops=${inflightHops} skippedBackpressure=${live.skippedBackpressure} errors=${live.errorsTotal} inflightByRoute=${byRoute === '' ? '-' : byRoute}${harness?.statusSuffix() ?? ''}`
       );
     };
 
@@ -1343,6 +1620,11 @@ export const runLoadTest = async (options: RunLoadTestOptions): Promise<RunLoadT
     } finally {
       process.off('SIGINT', onSigint);
     }
+
+    // S53: the pump and samplers stop when the main loop exits (end of drain, or
+    // abort), and a pending pump receipt is awaited (bounded by `txReceiptMs`)
+    // BEFORE `runEnd`/`writeReportFiles`, so the report holds the final accounting.
+    await harness.stop();
 
     await Promise.allSettled(activeLapTasks);
     sampleResources();

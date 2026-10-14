@@ -127,6 +127,8 @@ interface World {
   // call happened — the back-off test reads the gap after a refusal.
   trackerNotReadyBudget: number;
   activityCalls: { at: number; refused: boolean }[];
+  // S53: the `claimPreState` option each user driver was constructed with.
+  claimPreStateSeen: unknown[];
 }
 
 const newWorld = (chains: ChainInfo[], policyByRoute: Record<string, Policy>): World => ({
@@ -140,7 +142,8 @@ const newWorld = (chains: ChainInfo[], policyByRoute: Record<string, Policy>): W
   depositCounters: new Map(),
   seq: 0,
   trackerNotReadyBudget: 0,
-  activityCalls: []
+  activityCalls: [],
+  claimPreStateSeen: []
 });
 
 const mocks = vi.hoisted(() => ({
@@ -336,6 +339,9 @@ vi.mock('./workers/headless/headlessUser', async (importOriginal) => {
   class ScriptedHeadlessUser extends actual.HeadlessUser {
     async init(): Promise<void> {
       await super.init(); // real: only constructs clients, no I/O
+      getWorld().claimPreStateSeen.push(
+        (this as unknown as { claimPreState: unknown }).claimPreState
+      );
       installFakes(
         this as unknown as Record<string, unknown>,
         getWorld().chains.map((c) => c.key)
@@ -816,5 +822,405 @@ describe('runLoadTest — tracker "not ready yet" handling (S53 F3)', () => {
     );
     expect(failed).toStrictEqual([]);
     expect(results.laps.byOutcome).toMatchObject({ LAP_FAILED: 0 });
+  }, 90_000);
+});
+
+// ---------------------------------------------------------------------------
+// S53 / heavy-load design §1.3-§1.5 through the real runner: the L1 deposit pump
+// and the samplers run beside the users without changing what the users do, and
+// a config without them produces none of their output.
+// ---------------------------------------------------------------------------
+
+const GER: Address = '0x00000000000000000000000000000000000000a1';
+
+interface PumpWorld {
+  head: bigint;
+  sends: { hash: Hex; blockNumber: bigint }[];
+  logs: { blockNumber: bigint; transactionHash: Hex; topics: readonly Hex[]; data: Hex }[];
+  failSend: boolean;
+  receiptDelayMs: number;
+  balanceReads: { chain: string; address: string }[];
+}
+
+// One fake viem client set, shared by the pump (L1 sends), the wallet-balance
+// sampler (`getBalance`) and the L1 info tree poller (`getBlockNumber`/`getLogs`).
+const pumpClientFactory = (world: PumpWorld, l1BridgeAddress: string): ChainClientFactory => {
+  const L1_INFO_TREE_V2 = parseAbiItem(
+    'event UpdateL1InfoTreeV2(bytes32 currentL1InfoRoot, uint32 indexed leafCount, uint256 blockhash, uint64 minTimestamp)'
+  );
+  return (chain) =>
+    ({
+      public: {
+        getChainId: async () => chain.chainId,
+        getCode: async () => '0x1234' as const,
+        getBalance: async ({ address }: { address: string }) => {
+          world.balanceReads.push({ chain: chain.key, address });
+          return BigInt(10) ** BigInt(18);
+        },
+        readContract: async ({ functionName }: { functionName: string }) => {
+          if (functionName === 'globalExitRootManager') return GER;
+          if (functionName === 'depositCount') return 500;
+          if (functionName === 'balanceOf') return BigInt(10) ** BigInt(18);
+          if (functionName === 'allowance') return BigInt(0);
+          throw new Error(`unexpected readContract: ${functionName}`);
+        },
+        call: async () => ({ data: `0x${'0'.repeat(64)}` }),
+        getGasPrice: async () => BigInt(1_000_000),
+        estimateGas: async () => BigInt(440_000),
+        estimateMaxPriorityFeePerGas: async () => BigInt(1_000_000),
+        getTransactionCount: async () => 7,
+        getBlockNumber: async () => world.head,
+        getLogs: async ({ fromBlock, toBlock }: { fromBlock: bigint; toBlock: bigint }) =>
+          world.logs.filter((l) => l.blockNumber >= fromBlock && l.blockNumber <= toBlock),
+        waitForTransactionReceipt: async ({ hash }: { hash: Hex }) => {
+          await new Promise((resolve) => setTimeout(resolve, world.receiptDelayMs));
+          const send = world.sends.find((s) => s.hash === hash);
+          if (send === undefined) throw new Error('unknown pump tx');
+          return {
+            status: 'success' as const,
+            blockNumber: send.blockNumber,
+            gasUsed: BigInt(437_125),
+            effectiveGasPrice: BigInt(1_000_000),
+            logs: [
+              bridgeEventLog(
+                l1BridgeAddress,
+                { originNetwork: 0, originAddress: ZERO },
+                1,
+                BigInt(0),
+                42
+              )
+            ]
+          };
+        }
+      },
+      test: {},
+      wallet: () => ({
+        sendTransaction: async () => {
+          if (world.failSend) throw new Error('replacement transaction underpriced');
+          world.head += BigInt(1);
+          const hash = hex32(0xf0_0000 + world.sends.length);
+          world.sends.push({ hash, blockNumber: world.head });
+          // The deposit shows up as a new L1 info tree leaf in its own block.
+          world.logs.push({
+            blockNumber: world.head,
+            transactionHash: hash,
+            topics: encodeEventTopics({
+              abi: [L1_INFO_TREE_V2],
+              eventName: 'UpdateL1InfoTreeV2',
+              args: { leafCount: 501 }
+            }) as readonly Hex[],
+            data: encodeAbiParameters(
+              [{ type: 'bytes32' }, { type: 'uint256' }, { type: 'uint64' }],
+              [`0x${'11'.repeat(32)}`, BigInt(1), BigInt(1_700_000_000)]
+            )
+          });
+          return hash;
+        }
+      })
+    }) as unknown as ChainClientSet;
+};
+
+const readNdjson = (dir: string): Record<string, unknown>[] =>
+  fs
+    .readFileSync(path.join(dir, 'activity.ndjson'), 'utf8')
+    .split('\n')
+    .filter((line) => line.length > 0)
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+
+const NEW_KINDS = [
+  'pump_state',
+  'pump_deposit',
+  'pump_skipped',
+  'wallet_balance',
+  'l1_info_leaf',
+  'l1_info_poll_error',
+  'http_window',
+  'tx_sent',
+  'tx_receipt'
+];
+
+describe('runLoadTest — optional heavy-load features through the runner (S53)', () => {
+  const fixture = buildRing('eth');
+  const l1BridgeAddress = fixture.chains[0].bridgeAddress;
+  const withActivityLog = (config: LoadtestConfig): LoadtestConfig => ({
+    ...config,
+    output: { ...config.output, activityLog: true }
+  });
+  const heavyConfig = (extra: Partial<LoadtestConfig> = {}): LoadtestConfig =>
+    withActivityLog({
+      ...fixture.config,
+      pump: {
+        enabled: true,
+        chainKey: 'SEPOLIA',
+        destinationNetworkId: 1,
+        walletIndex: 999,
+        amount: '0',
+        intervalSeconds: 60,
+        maxTotalSpend: '0.07',
+        maxGasPriceGwei: 5
+      },
+      measurement: {
+        walletBalanceIntervalMs: 60_000,
+        l1InfoTree: { pollIntervalMs: 15_000 },
+        httpWindowMs: 10_000,
+        claimPreState: true
+      },
+      ...extra
+    });
+  const newPumpWorld = (over: Partial<PumpWorld> = {}): PumpWorld => ({
+    head: BigInt(1000),
+    sends: [],
+    logs: [],
+    failSend: false,
+    receiptDelayMs: 0,
+    balanceReads: [],
+    ...over
+  });
+
+  it('flag off: a config with no pump and no measurement writes none of the new kinds or keys, and the status line only gains inflightByRoute', async () => {
+    const logs: string[] = [];
+    // Slow the first poll so the run lives past the 5 s status interval.
+    const { results, outDir: dir } = await runRing(
+      fixture,
+      {},
+      {
+        config: withActivityLog({
+          ...fixture.config,
+          timeouts: { ...fixture.config.timeouts, appearsInActivityMs: 30_000, hopMs: 60_000 }
+        }),
+        setup: (w) => {
+          w.trackerNotReadyBudget = 1;
+        },
+        logger: (line) => logs.push(line)
+      }
+    );
+
+    const lines = readNdjson(dir);
+    const kinds = new Set(lines.map((l) => l.kind as string));
+    for (const kind of NEW_KINDS) expect(kinds.has(kind), kind).toBe(false);
+    for (const key of ['pump', 'walletBalances', 'l1InfoTree'])
+      expect(key in results, key).toBe(false);
+    const measurements = results.measurements as { approveGas?: unknown } | undefined;
+    expect(measurements !== undefined && 'approveGas' in measurements).toBe(false);
+
+    const status = logs.find((l) => l.startsWith('[status]'));
+    expect(status).toBeDefined();
+    expect(status).toMatch(
+      /^\[status\] t=\d+s phase=\S+ usersActive=\d+\/\d+ lapStartsSubmitted=\d+ rate=[\d.]+\/min inflightHops=\d+ skippedBackpressure=\d+ errors=\d+ inflightByRoute=\S+$/
+    );
+    expect(status).not.toContain('pump=');
+  }, 90_000);
+
+  it('pump + samplers on: the pump runs beside the users, is accounted separately, and the users are unaffected', async () => {
+    const pumpWorld = newPumpWorld();
+    const logs: string[] = [];
+    // One refused activity poll costs a 5 s back-off, so the run outlives the
+    // first 5 s status interval and the status line can be checked.
+    const {
+      results,
+      world,
+      outDir: dir
+    } = await runRing(
+      fixture,
+      {},
+      {
+        config: heavyConfig({
+          timeouts: { ...fixture.config.timeouts, appearsInActivityMs: 30_000, hopMs: 60_000 }
+        }),
+        setup: (w) => {
+          w.trackerNotReadyBudget = 1;
+        },
+        runOptions: { chainClientFactory: pumpClientFactory(pumpWorld, l1BridgeAddress) },
+        logger: (line) => logs.push(line)
+      }
+    );
+
+    // --- the users did what they always do ---
+    const [r0, r1, r2] = fixture.routes;
+    const n = depositsOn(world, r0).length;
+    expect(n).toBeGreaterThanOrEqual(1);
+    expect(outcomesOf(results, r0)).toStrictEqual({ hop_completed_auto: n });
+    expect(outcomesOf(results, r1)).toStrictEqual({ hop_completed_auto: n });
+    expect(outcomesOf(results, r2)).toStrictEqual({ hop_completed_manual: n });
+    expect(results.laps.byOutcome).toMatchObject({ LAP_DONE: n, LAP_FAILED: 0, LAP_ABORTED: 0 });
+    // Only the one scripted tracker refusal: the pump added no error of its own.
+    expect(results.errors.byClass).toStrictEqual({ tracker_not_ready: 1 });
+    // The pump's deposit is not a user deposit.
+    expect(world.deposits.some((d) => d.txHash === pumpWorld.sends[0].hash)).toBe(false);
+    expect(pumpWorld.sends).toHaveLength(1);
+
+    // --- the pump block ---
+    const pump = results.pump as {
+      enabled: boolean;
+      sender: string;
+      deposits: { txHash: string; depositCount: number | null; status: string }[];
+      skipped: Record<string, number>;
+      totalSpendWei: string;
+      pendingAtStop: boolean;
+      destinationNetworkId: number;
+    };
+    expect(pump.enabled).toBe(true);
+    expect(pump.destinationNetworkId).toBe(1);
+    expect(pump.deposits).toHaveLength(1);
+    expect(pump.deposits[0]).toMatchObject({
+      txHash: pumpWorld.sends[0].hash,
+      depositCount: 42,
+      status: 'success'
+    });
+    expect(pump.skipped).toStrictEqual({
+      gas_price: 0,
+      cap_reached: 0,
+      previous_pending: 0,
+      send_error: 0
+    });
+    expect(pump.totalSpendWei).toBe((BigInt(437_125) * BigInt(1_000_000)).toString());
+    expect(pump.pendingAtStop).toBe(false);
+    expect(pump.sender).toMatch(/^0x[0-9a-fA-F]{40}$/);
+
+    // --- ndjson: pump kinds are harness:pump only, and never a hop record ---
+    const lines = readNdjson(dir);
+    const pumpLines = lines.filter((l) => String(l.kind).startsWith('pump_'));
+    expect(pumpLines.map((l) => l.kind)).toStrictEqual([
+      'pump_state',
+      'pump_deposit',
+      'pump_state'
+    ]);
+    for (const l of pumpLines) {
+      expect(l.userId).toBe('harness:pump');
+      expect(l.mode).toBeNull();
+    }
+    expect(
+      lines.filter((l) => l.userId === 'harness:pump' && !String(l.kind).startsWith('pump_'))
+    ).toStrictEqual([]);
+    const hopEnds = lines.filter((l) => l.kind === 'hop_end');
+    expect(hopEnds).toHaveLength(3 * n);
+    // pump_state(started) comes after run_start and the stopped record before run_end.
+    const order = lines.map((l) => l.kind);
+    expect(order.indexOf('run_start')).toBeLessThan(order.indexOf('pump_state'));
+    expect(order.lastIndexOf('pump_state')).toBeLessThan(order.indexOf('run_end'));
+
+    // --- M7: tx_sent / tx_receipt now exist (a measurement block is present) ---
+    const txSent = lines.filter((l) => l.kind === 'tx_sent');
+    expect(txSent.filter((l) => l.step === 'bridge')).toHaveLength(world.sends.length);
+    expect(txSent.filter((l) => l.step === 'claim')).toHaveLength(manualClaimsOn(world, r2).length);
+    expect(lines.filter((l) => l.kind === 'tx_receipt').length).toBe(txSent.length);
+    expect(txSent.some((l) => l.txHash === pumpWorld.sends[0].hash)).toBe(false);
+
+    // --- M1: wallet balances on the non-L1 ring chains only ---
+    const balances = results.walletBalances as {
+      intervalMs: number;
+      samples: { chainKey: string; n: number }[];
+    };
+    expect(balances.intervalMs).toBe(60_000);
+    expect(new Set(balances.samples.map((s) => s.chainKey))).toStrictEqual(new Set(['L2A', 'L2B']));
+    expect(balances.samples.every((s) => s.n === 1)).toBe(true);
+    expect(pumpWorld.balanceReads.some((r) => r.chain === 'SEPOLIA')).toBe(false);
+
+    // --- M3: GER discovered, baseline read, the pump's leaf picked up and attributed ---
+    const tree = results.l1InfoTree as {
+      gerManagerAddress: string;
+      baselineLeafCount: number;
+      leaves: { leafCount: number; fromPump: boolean; txHash: string }[];
+      pollErrors: number;
+    };
+    expect(tree.gerManagerAddress).toBe(GER);
+    expect(tree.baselineLeafCount).toBe(500);
+    expect(tree.leaves).toMatchObject([
+      { leafCount: 501, fromPump: true, txHash: pumpWorld.sends[0].hash }
+    ]);
+    expect(tree.pollErrors).toBe(0);
+
+    // --- M4: the final partial window is flushed ---
+    expect(lines.some((l) => l.kind === 'http_window')).toBe(true);
+
+    // --- M9 plumbing: the option reaches every user driver ---
+    expect(world.claimPreStateSeen.length).toBeGreaterThan(0);
+    expect(world.claimPreStateSeen.every((v) => v === true)).toBe(true);
+
+    // --- status line: appended fields only, pump progress shown ---
+    const status = logs.find((l) => l.startsWith('[status]'));
+    expect(status).toBeDefined();
+    expect(status).toMatch(/ inflightByRoute=\S+ pump=on\(\d+\/1,[\d.]+ETH\)$/);
+  }, 90_000);
+
+  it('a pump that cannot send never fails a user hop: the failure is a send_error skip and one rpc_error without a hopId', async () => {
+    const pumpWorld = newPumpWorld({ failSend: true });
+    const {
+      results,
+      world,
+      outDir: dir
+    } = await runRing(
+      fixture,
+      {},
+      {
+        config: heavyConfig(),
+        runOptions: { chainClientFactory: pumpClientFactory(pumpWorld, l1BridgeAddress) }
+      }
+    );
+    const [r0, , r2] = fixture.routes;
+    const n = depositsOn(world, r0).length;
+    expect(outcomesOf(results, r2)).toStrictEqual({ hop_completed_manual: n });
+    expect(results.laps.byOutcome).toMatchObject({ LAP_DONE: n, LAP_FAILED: 0 });
+    expect((results.pump as { skipped: Record<string, number> }).skipped.send_error).toBe(1);
+    expect((results.pump as { deposits: unknown[] }).deposits).toHaveLength(0);
+    expect(results.errors.byClass).toStrictEqual({ rpc_error: 1 });
+    const errorLines = readNdjson(dir).filter((l) => l.kind === 'error');
+    expect(errorLines).toHaveLength(1);
+    expect(errorLines[0]).toMatchObject({ userId: 'harness:pump', errorClass: 'rpc_error' });
+    expect(errorLines[0].hopId).toBeUndefined();
+  }, 90_000);
+
+  it('waits for a pump receipt that arrives after the users finish, BEFORE the report is written', async () => {
+    // The receipt lands ~4 s in, well after the last lap of a ~2.4 s load.
+    const pumpWorld = newPumpWorld({ receiptDelayMs: 4_000 });
+    const { results, outDir: dir } = await runRing(
+      fixture,
+      {},
+      {
+        config: heavyConfig(),
+        runOptions: { chainClientFactory: pumpClientFactory(pumpWorld, l1BridgeAddress) }
+      }
+    );
+    const pump = results.pump as { deposits: unknown[]; pendingAtStop: boolean };
+    expect(pump.deposits).toHaveLength(1);
+    expect(pump.pendingAtStop).toBe(false);
+    const order = readNdjson(dir).map((l) => l.kind);
+    expect(order.indexOf('pump_deposit')).toBeLessThan(order.indexOf('run_end'));
+  }, 90_000);
+
+  it('a pump wallet that falls inside the user range after --users grew it is refused before anything is derived or funded', async () => {
+    const config = heavyConfig();
+    const grown: LoadtestConfig = { ...config, users: { ...config.users, total: 1_000 } };
+    await expect(
+      runRing(
+        fixture,
+        {},
+        {
+          config: grown,
+          runOptions: { chainClientFactory: pumpClientFactory(newPumpWorld(), l1BridgeAddress) }
+        }
+      )
+    ).rejects.toThrow(/PUMP_WALLET_OVERLAPS_USERS/);
+  });
+
+  it('a disabled pump block starts nothing (no pump records, no pump key)', async () => {
+    const config = heavyConfig();
+    const disabled: LoadtestConfig = {
+      ...config,
+      pump: { ...(config.pump as NonNullable<LoadtestConfig['pump']>), enabled: false },
+      measurement: undefined
+    };
+    const pumpWorld = newPumpWorld();
+    const { results, outDir: dir } = await runRing(
+      fixture,
+      {},
+      {
+        config: disabled,
+        runOptions: { chainClientFactory: pumpClientFactory(pumpWorld, l1BridgeAddress) }
+      }
+    );
+    expect('pump' in results).toBe(false);
+    expect(pumpWorld.sends).toHaveLength(0);
+    expect(readNdjson(dir).some((l) => String(l.kind).startsWith('pump_'))).toBe(false);
   }, 90_000);
 });

@@ -33,7 +33,7 @@ import type {
   WalletClient
 } from 'viem';
 
-import { decodeEventLog, parseAbiItem, parseUnits } from 'viem';
+import { decodeEventLog, erc20Abi, parseAbiItem, parseUnits } from 'viem';
 
 import type {
   AggkitBridgeAggregator as AggkitBridgeAggregatorType,
@@ -49,6 +49,7 @@ import type {
   AllowanceRead,
   BridgeSubmission,
   ClaimInputsResult,
+  ClaimPreState,
   ClaimStageProbeParams,
   ClaimStageProbeResult,
   ClaimSubmission,
@@ -216,6 +217,15 @@ export interface HeadlessUserOptions {
    * as before).
    */
   receiptTimeoutMs?: number;
+  /**
+   * S53 M9 (`measurement.claimPreState`): just before sending the claim of a
+   * wrapped ERC-20 (destination is not the token's origin network and the
+   * wrapper already exists), read the wrapped token's `totalSupply()` and the
+   * recipient's `balanceOf()` on the destination at `latest` and return them as
+   * `ClaimSubmission.preState`. Harness-origin reads, best effort: a failed read
+   * never affects the claim. Off by default.
+   */
+  claimPreState?: boolean;
 }
 
 /**
@@ -239,6 +249,8 @@ export class HeadlessUser implements UserDriver {
   private readonly seedTokenList: boolean;
   /** R4 — see `HeadlessUserOptions.receiptTimeoutMs`'s doc. */
   private readonly receiptTimeoutMs?: number;
+  /** S53 M9 — see `HeadlessUserOptions.claimPreState`'s doc. */
+  private readonly claimPreState: boolean;
 
   private chainsByKey = new Map<string, LoadtestChain>();
   private runtimes = new Map<string, ChainRuntime>();
@@ -344,6 +356,7 @@ export class HeadlessUser implements UserDriver {
     this.clock = options.clock ?? { now: () => Date.now() };
     this.seedTokenList = options.seedTokenList ?? true;
     this.receiptTimeoutMs = options.receiptTimeoutMs;
+    this.claimPreState = options.claimPreState ?? false;
   }
 
   async init(): Promise<void> {
@@ -784,6 +797,9 @@ export class HeadlessUser implements UserDriver {
       };
 
       const claimTxParams = await bridge.buildClaimAsset(claimParams, this.address);
+      // S53 M9: read right before the send so the state is as close as possible
+      // to what the claim will act on (still approximate: it lands a few blocks later).
+      const preState = this.claimPreState ? await this.readClaimPreState(hop, toChain) : undefined;
       const { step: claimStep, rawReceipt: claimReceipt } = await this.sendAndWait(
         toChain.key,
         claimTxParams
@@ -811,8 +827,60 @@ export class HeadlessUser implements UserDriver {
         isClaimedRecheck = await this.isClaimedRetryLoop(bridge, row);
       }
 
-      return { isClaimedBefore, isClaimedTiming, claimInputs, claim: claimStep, isClaimedRecheck };
+      return {
+        isClaimedBefore,
+        isClaimedTiming,
+        claimInputs,
+        claim: claimStep,
+        isClaimedRecheck,
+        ...(preState !== undefined ? { preState } : {})
+      };
     });
+  }
+
+  /**
+   * S53 M9: the wrapped token's `totalSupply()` and the recipient's `balanceOf()`
+   * on the destination chain, or `undefined` when this claim is not a wrapped-token
+   * mint candidate (an ETH hop, a claim on the token's origin network, a wrapper
+   * that is not deployed yet) or a read fails. Never throws.
+   */
+  private async readClaimPreState(
+    hop: HopSpec,
+    toChain: LoadtestChain
+  ): Promise<ClaimPreState | undefined> {
+    if (hop.assetKind !== 'erc20') return undefined;
+    const originNetworkId = this.assets[hop.assetIndex]?.originNetworkId;
+    if (originNetworkId === undefined || toChain.networkId === originNetworkId) return undefined;
+    return runWithFetchContext(
+      { userId: this.userId, mode: this.mode, origin: 'harness' },
+      async () => {
+        try {
+          const wrapped = await this.resolveTokenAddress(hop, toChain);
+          // Zero address: the wrapper does not exist yet, so this claim deploys it.
+          if (wrapped.toLowerCase() === ZERO_ADDRESS.toLowerCase()) return undefined;
+          const publicClient = this.chainRuntime(toChain.key).public;
+          const [supply, balance] = await Promise.all([
+            publicClient.readContract({
+              address: wrapped,
+              abi: erc20Abi,
+              functionName: 'totalSupply'
+            }),
+            publicClient.readContract({
+              address: wrapped,
+              abi: erc20Abi,
+              functionName: 'balanceOf',
+              args: [this.address]
+            })
+          ]);
+          return {
+            wrappedSupplyBefore: supply.toString(),
+            recipientBalanceBefore: balance.toString()
+          };
+        } catch {
+          return undefined;
+        }
+      }
+    );
   }
 
   // -------------------------------------------------------------------------
