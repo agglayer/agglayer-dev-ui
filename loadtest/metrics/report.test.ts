@@ -995,3 +995,143 @@ describe('renderSummaryMd — redaction of URLs and endpoint classes (S53)', () 
     expect(config.chains[0].rpcUrl).toContain(TOKEN);
   });
 });
+
+// S53 (heavy-load design §1.3/§1.4): optional results.json keys and summary
+// sections. Each exists only when its producer ran / was configured.
+describe('buildResultsJson / renderSummaryMd — pump, wallet balances and L1 info tree (S53)', () => {
+  const pumpStarted = {
+    kind: 'state' as const,
+    state: 'started' as const,
+    sender: '0x00000000000000000000000000000000000000b1',
+    intervalSeconds: 600,
+    maxTotalSpendWei: '70000000000000000',
+    maxGasPriceWei: '5000000000',
+    destinationNetworkId: 1,
+    amountWei: '0'
+  };
+
+  const configWith = (measurement: LoadtestConfig['measurement']): LoadtestConfig => ({
+    ...buildDevnetConfig(),
+    measurement
+  });
+
+  const heavyCollector = () => {
+    const collector = createCollector();
+    collector.pumpEvent(pumpStarted);
+    collector.pumpEvent({
+      kind: 'deposit',
+      txHash: `0x${'ab'.repeat(32)}`,
+      blockNumber: '123',
+      depositCount: 7,
+      status: 'success',
+      gasUsed: '437125',
+      effectiveGasPrice: '1000000',
+      costWei: '437125000000',
+      cumulativeSpendWei: '437125000000',
+      sentAt: 1,
+      minedObservedAt: 2
+    });
+    collector.pumpEvent({ kind: 'skipped', reason: 'gas_price', gasPriceWei: '6000000000', cumulativeSpendWei: '437125000000' });
+    collector.pumpEvent({ ...pumpStarted, state: 'stopped', pendingAtStop: false, totalSpendWei: '437125000000' });
+    collector.walletBalance({ chainKey: 'L2A', n: 2, minWei: '5', medianWei: '6', maxWei: '7', lowest: [{ userId: 'u0', wei: '5' }] });
+    collector.l1InfoTreeStart({ gerManagerAddress: '0x00000000000000000000000000000000000000a1', baselineLeafCount: 500 });
+    collector.l1InfoLeaf({ blockNumber: '124', leafCount: 501, txHash: `0x${'ab'.repeat(32)}`, minTimestamp: 9, fromPump: true });
+    collector.l1InfoLeaf({ blockNumber: '130', leafCount: 502, txHash: `0x${'cd'.repeat(32)}`, minTimestamp: 10, fromPump: false });
+    collector.runStart({ toolVersion: 't', sdkVersion: 's', host: { cores: 1, totalMemMb: 1, platform: 'linux' } });
+    collector.runEnd({ aborted: false, abortCause: null });
+    return collector;
+  };
+
+  it('adds pump, walletBalances and l1InfoTree to results.json when the run produced / configured them', () => {
+    const config = configWith({
+      walletBalanceIntervalMs: 300_000,
+      l1InfoTree: { pollIntervalMs: 60_000 }
+    });
+    const results = buildResultsJson({ snapshot: heavyCollector().snapshot(), config });
+
+    expect(results.pump).toMatchObject({
+      enabled: true,
+      sender: pumpStarted.sender,
+      deposits: [{ depositCount: 7, status: 'success', blockNumber: '123' }],
+      skipped: { gas_price: 1 },
+      totalSpendWei: '437125000000',
+      pendingAtStop: false
+    });
+    expect(results.walletBalances).toMatchObject({
+      intervalMs: 300_000,
+      samples: [{ chainKey: 'L2A', n: 2 }]
+    });
+    expect(results.l1InfoTree).toMatchObject({
+      gerManagerAddress: '0x00000000000000000000000000000000000000a1',
+      baselineLeafCount: 500,
+      pollErrors: 0
+    });
+    expect(results.l1InfoTree?.leaves).toHaveLength(2);
+  });
+
+  it('a configured sampler that took no sample still yields an empty block, so "not sampled" is distinguishable from "not configured"', () => {
+    const config = configWith({ walletBalanceIntervalMs: 300_000, l1InfoTree: { pollIntervalMs: 60_000 } });
+    const results = buildResultsJson({ snapshot: createCollector().snapshot(), config });
+    expect(results.walletBalances).toStrictEqual({ intervalMs: 300_000, samples: [] });
+    expect(results.l1InfoTree).toStrictEqual({
+      gerManagerAddress: null,
+      baselineLeafCount: null,
+      leaves: [],
+      pollErrors: 0
+    });
+    expect('pump' in results).toBe(false);
+  });
+
+  it('adds none of the keys for a run without them (a measurement block with only the stage probe included)', () => {
+    for (const config of [buildDevnetConfig(), configWith({ stageProbeIntervalMs: 5000 })]) {
+      const results = buildResultsJson({ snapshot: createCollector().snapshot(), config });
+      for (const key of ['pump', 'walletBalances', 'l1InfoTree']) {
+        expect(key in results).toBe(false);
+      }
+    }
+  });
+
+  it('appends ## Pump and ## L1 info tree after the existing sections, only when present', () => {
+    const config = configWith({ walletBalanceIntervalMs: 300_000, l1InfoTree: { pollIntervalMs: 60_000 } });
+    const results = buildResultsJson({ snapshot: heavyCollector().snapshot(), config });
+    const summary = renderSummaryMd(results, config);
+
+    expect(summary.indexOf('## Pump')).toBeGreaterThan(summary.indexOf('## Claim gas and stage latency'));
+    expect(summary.indexOf('## L1 info tree')).toBeGreaterThan(summary.indexOf('## Pump'));
+    expect(summary).toContain('The L1 deposit pump was ON for this run');
+    expect(summary).toContain(`| sender | ${pumpStarted.sender} |`);
+    expect(summary).toContain('| total spend (ETH) | 0.000000437125 |');
+    expect(summary).toContain('| spend cap (ETH) | 0.07 |');
+    expect(summary).toContain('| max gas price (gwei) | 5 |');
+    expect(summary).toContain('| deposits settled | 1 (0 reverted) |');
+    expect(summary).toContain('| 7 | success | 437125 |');
+    expect(summary).toContain('| leaves added during the run | 2 |');
+    expect(summary).toContain('| from the pump / from other deposits | 1 / 1 |');
+
+    const plain = renderSummaryMd(
+      buildResultsJson({ snapshot: createCollector().snapshot(), config: buildDevnetConfig() }),
+      buildDevnetConfig()
+    );
+    expect(plain).not.toContain('## Pump');
+    expect(plain).not.toContain('## L1 info tree');
+  });
+
+  it('flags a deposit still pending at stop in the summary', () => {
+    const collector = createCollector();
+    collector.pumpEvent(pumpStarted);
+    collector.pumpEvent({ ...pumpStarted, state: 'stopped', pendingAtStop: true, totalSpendWei: '2640000000000000' });
+    const config = buildDevnetConfig();
+    const summary = renderSummaryMd(buildResultsJson({ snapshot: collector.snapshot(), config }), config);
+    expect(summary).toContain('a deposit was still pending at stop and is counted at its worst case');
+    expect(summary).toContain('| pending at stop | yes |');
+    expect(summary).toContain('No pump deposit settled.');
+  });
+
+  it('regenerates byte-identically from results.json (the `report --dir` path) with the new sections', () => {
+    const config = configWith({ walletBalanceIntervalMs: 300_000, l1InfoTree: { pollIntervalMs: 60_000 } });
+    const results = buildResultsJson({ snapshot: heavyCollector().snapshot(), config });
+    const original = renderSummaryMd(results, config);
+    const reloaded = JSON.parse(JSON.stringify(results)) as typeof results;
+    expect(renderSummaryMd(reloaded, reloaded.config as LoadtestConfig)).toBe(original);
+  });
+});

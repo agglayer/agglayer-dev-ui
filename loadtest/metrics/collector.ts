@@ -288,6 +288,111 @@ export interface SchedulerCountersInput {
   ticksExpected?: number;
 }
 
+// ---------------------------------------------------------------------------
+// S53 (heavy-load design §1.3/§1.4): harness-side records. None of these is a
+// hop, lap, tick or verdict input — they live beside the user-driven data and
+// only exist when the matching optional config block is set.
+// ---------------------------------------------------------------------------
+
+export type PumpSkipReason = 'gas_price' | 'cap_reached' | 'previous_pending' | 'send_error';
+
+export interface PumpStateInput {
+  state: 'started' | 'stopped';
+  sender: string;
+  intervalSeconds: number;
+  maxTotalSpendWei: string;
+  maxGasPriceWei: string;
+  destinationNetworkId: number;
+  amountWei: string;
+  /** `stopped` only: a deposit had no receipt when the pump gave up waiting. */
+  pendingAtStop?: boolean;
+  /** `stopped` only: worst-case-counted total at stop, so the line is self-contained. */
+  totalSpendWei?: string;
+}
+
+export interface PumpDepositInput {
+  txHash: string;
+  blockNumber: string;
+  /** `null` when the receipt carried no decodable BridgeEvent. */
+  depositCount: number | null;
+  status: 'success' | 'reverted';
+  gasUsed: string;
+  effectiveGasPrice: string;
+  costWei: string;
+  cumulativeSpendWei: string;
+  sentAt: number;
+  minedObservedAt: number;
+}
+
+export interface PumpSkippedInput {
+  reason: PumpSkipReason;
+  gasPriceWei?: string;
+  cumulativeSpendWei: string;
+}
+
+export type PumpEventInput =
+  | ({ kind: 'state' } & PumpStateInput)
+  | ({ kind: 'deposit' } & PumpDepositInput)
+  | ({ kind: 'skipped' } & PumpSkippedInput);
+
+export interface WalletBalanceInput {
+  chainKey: string;
+  n: number;
+  minWei: string;
+  medianWei: string;
+  maxWei: string;
+  lowest: { userId: string; wei: string }[];
+}
+
+export interface L1InfoLeafInput {
+  blockNumber: string;
+  leafCount: number;
+  txHash: string;
+  minTimestamp: number;
+  /** `txHash` is a deposit sent by the pump. */
+  fromPump: boolean;
+}
+
+export interface L1InfoStartInput {
+  gerManagerAddress: string;
+  /** L1 info tree leaf count at run start; `null` when it could not be read. */
+  baselineLeafCount: number | null;
+}
+
+/** `results.json` `pump` block (present only when the pump ran). */
+export interface PumpSnapshot {
+  enabled: true;
+  sender: string;
+  destinationNetworkId: number;
+  amountWei: string;
+  intervalSeconds: number;
+  maxTotalSpendWei: string;
+  maxGasPriceWei: string;
+  deposits: Omit<PumpDepositInput, 'cumulativeSpendWei'>[];
+  skipped: Record<PumpSkipReason, number>;
+  totalSpendWei: string;
+  pendingAtStop: boolean;
+}
+
+export interface WalletBalanceSample extends WalletBalanceInput {
+  ts: string;
+}
+
+export interface L1InfoTreeSnapshot {
+  gerManagerAddress: string | null;
+  baselineLeafCount: number | null;
+  leaves: (L1InfoLeafInput & { ts: string })[];
+  pollErrors: number;
+}
+
+/** O(1) running counters for the live `[status]` line — `snapshot()` re-sorts every sample array. */
+export interface LiveCounters {
+  lapStartsSubmitted: number;
+  skippedBackpressure: number;
+  errorsTotal: number;
+  errorsByClass: Partial<Record<ErrorClass, number>>;
+}
+
 export interface ModeSplitStats<T> {
   browser: T | null;
   headless: T | null;
@@ -464,6 +569,12 @@ export interface CollectorSnapshot {
   // S45 C3: one record per hop that reached `hopEnd` (see `metrics/measurement.ts`).
   // Optional so a hand-built snapshot (tests) that predates it stays valid.
   hopMeasurements?: HopMeasurementRecord[];
+  // S53: each is present only when its producer ran (pump started, a wallet
+  // balance / L1 info tree sample taken), so a run without them snapshots
+  // exactly as before.
+  pump?: PumpSnapshot;
+  walletBalances?: WalletBalanceSample[];
+  l1InfoTree?: L1InfoTreeSnapshot;
 }
 
 export interface Clock {
@@ -558,6 +669,22 @@ export interface Collector {
   // doc above for why this is `tick()`-derived and not `recordPhase`-derived).
   setSchedulerCounters(input: SchedulerCountersInput): void;
 
+  // S53 harness records (see the types above). Pump and sampler records are
+  // written under their own ndjson kinds and never feed hop/lap/tick/verdict data.
+  pumpEvent(input: PumpEventInput): void;
+  walletBalance(input: WalletBalanceInput): void;
+  l1InfoTreeStart(input: L1InfoStartInput): void;
+  l1InfoLeaf(input: L1InfoLeafInput): void;
+  l1InfoPollError(message: string): void;
+  /**
+   * M4: writes one `http_window` ndjson record covering the HTTP samples
+   * recorded since the previous call (a per-bucket cursor into the existing
+   * sample arrays — O(window), no full sort). Not kept in memory.
+   */
+  flushHttpWindow(windowMs: number): void;
+  /** F6: O(1) counters for the status line. */
+  liveCounters(): LiveCounters;
+
   snapshot(): CollectorSnapshot;
   close(): void;
 }
@@ -587,6 +714,19 @@ const getOrCreate = <K, V>(map: Map<K, V>, key: K, make: () => V): V => {
 };
 
 const nowIso = (clock: Clock): string => new Date(clock.now()).toISOString();
+
+/**
+ * M4 grouping of an endpoint class: `tracker/activity`, every other tracker
+ * call as `tracker/other`, `bridge/<route>` without the `[networkId]` suffix,
+ * and `rpc/<chainKey>` without the method.
+ */
+export const httpWindowGroup = (endpointClass: string): string => {
+  if (endpointClass === 'tracker/activity') return endpointClass;
+  if (endpointClass.startsWith('tracker/')) return 'tracker/other';
+  if (endpointClass.startsWith('bridge/')) return endpointClass.replace(/\[[^\]]*\]$/, '');
+  const rpc = /^rpc\/([^/]+)/.exec(endpointClass);
+  return rpc === null ? endpointClass : `rpc/${rpc[1]}`;
+};
 
 export const createCollector = (options: CollectorOptions = {}): Collector => {
   const clock = options.clock ?? systemClock;
@@ -686,6 +826,27 @@ export const createCollector = (options: CollectorOptions = {}): Collector => {
   let lapStartsSteadyByMode: Record<DriverMode, number> = { browser: 0, headless: 0 };
 
   const resourceSamples: (ResourceSampleInput & { ts: string })[] = [];
+
+  // S53 harness-side state — see the types near the top of this file.
+  let pumpParams: PumpStateInput | null = null;
+  const pumpDeposits: PumpDepositInput[] = [];
+  const pumpSkipped: Record<PumpSkipReason, number> = {
+    gas_price: 0,
+    cap_reached: 0,
+    previous_pending: 0,
+    send_error: 0
+  };
+  let pumpTotalSpendWei = '0';
+  let pumpPendingAtStop = false;
+  const walletBalanceSamples: WalletBalanceSample[] = [];
+  let l1InfoStart: L1InfoStartInput | null = null;
+  const l1InfoLeaves: (L1InfoLeafInput & { ts: string })[] = [];
+  let l1InfoPollErrors = 0;
+  // F6: running total of the non-suppressed errors aggregated below.
+  let errorsTotalCount = 0;
+  // M4: how far into each endpoint class's per-mode sample array the previous
+  // window already read.
+  const httpWindowCursor = new Map<string, { browser: number; headless: number }>();
 
   const writeLine = (
     kind: string,
@@ -864,6 +1025,7 @@ export const createCollector = (options: CollectorOptions = {}): Collector => {
         return;
       }
 
+      errorsTotalCount += 1;
       const existing = errorsByClass.get(input.errorClass);
       if (existing === undefined) {
         errorsByClass.set(input.errorClass, {
@@ -1004,6 +1166,112 @@ export const createCollector = (options: CollectorOptions = {}): Collector => {
       schedulerCounters = { ...input };
     },
 
+    pumpEvent(input) {
+      const PUMP_USER = 'harness:pump';
+      if (input.kind === 'state') {
+        const { kind: _kind, ...fields } = input;
+        if (input.state === 'started') {
+          pumpParams = fields;
+        } else {
+          pumpPendingAtStop = input.pendingAtStop === true;
+          if (input.totalSpendWei !== undefined) pumpTotalSpendWei = input.totalSpendWei;
+        }
+        writeLine('pump_state', PUMP_USER, null, fields);
+        return;
+      }
+      if (input.kind === 'deposit') {
+        const { kind: _kind, ...fields } = input;
+        pumpDeposits.push(fields);
+        pumpTotalSpendWei = input.cumulativeSpendWei;
+        writeLine('pump_deposit', PUMP_USER, null, fields);
+        return;
+      }
+      const { kind: _kind, ...fields } = input;
+      pumpSkipped[input.reason] += 1;
+      pumpTotalSpendWei = input.cumulativeSpendWei;
+      writeLine('pump_skipped', PUMP_USER, null, fields);
+    },
+
+    walletBalance(input) {
+      walletBalanceSamples.push({ ts: nowIso(clock), ...input });
+      writeLine('wallet_balance', null, null, { ...input });
+    },
+
+    l1InfoTreeStart(input) {
+      l1InfoStart = { ...input };
+    },
+
+    l1InfoLeaf(input) {
+      l1InfoLeaves.push({ ts: nowIso(clock), ...input });
+      writeLine('l1_info_leaf', null, null, { ...input });
+    },
+
+    l1InfoPollError(message) {
+      l1InfoPollErrors += 1;
+      writeLine('l1_info_poll_error', null, null, { message: redactSecrets(message) });
+    },
+
+    flushHttpWindow(windowMs) {
+      interface Acc {
+        n: number;
+        byStatus: Record<string, number>;
+        durations: number[];
+      }
+      const groups = new Map<string, Record<HttpOrigin, Acc>>();
+      const accFor = (group: string, origin: HttpOrigin): Acc => {
+        const entry = getOrCreate(groups, group, () => ({
+          ui: { n: 0, byStatus: {}, durations: [] },
+          harness: { n: 0, byStatus: {}, durations: [] }
+        }));
+        return entry[origin];
+      };
+      for (const [endpointClass, bucket] of httpSamples) {
+        const cursor = getOrCreate(httpWindowCursor, endpointClass, () => ({
+          browser: 0,
+          headless: 0
+        }));
+        const group = httpWindowGroup(endpointClass);
+        for (const mode of ['browser', 'headless'] as const) {
+          const samples = bucket[mode];
+          for (let i = cursor[mode]; i < samples.length; i += 1) {
+            const acc = accFor(group, samples[i].origin);
+            acc.n += 1;
+            const key = String(samples[i].status);
+            acc.byStatus[key] = (acc.byStatus[key] ?? 0) + 1;
+            acc.durations.push(samples[i].durationMs);
+          }
+          cursor[mode] = samples.length;
+        }
+      }
+      const classes: Record<string, Partial<Record<HttpOrigin, unknown>>> = {};
+      for (const group of [...groups.keys()].sort()) {
+        const entry = groups.get(group) as Record<HttpOrigin, Acc>;
+        const out: Partial<Record<HttpOrigin, unknown>> = {};
+        for (const origin of ['ui', 'harness'] as const) {
+          const acc = entry[origin];
+          if (acc.n === 0) continue;
+          out[origin] = {
+            n: acc.n,
+            byStatus: acc.byStatus,
+            p90: (computeStats(acc.durations) as Stats).p90
+          };
+        }
+        classes[group] = out;
+      }
+      writeLine('http_window', null, null, { windowMs, classes });
+    },
+
+    liveCounters() {
+      const errorsByClassOut: Partial<Record<ErrorClass, number>> = {};
+      for (const [errorClass, agg] of errorsByClass) errorsByClassOut[errorClass] = agg.count;
+      return {
+        lapStartsSubmitted: lapStartsRamp + lapStartsSteady,
+        skippedBackpressure: schedulerCounters.skippedBackpressure,
+        errorsTotal: errorsTotalCount,
+        errorsByClass: errorsByClassOut
+      };
+    },
+
     snapshot() {
       const httpOut: Record<string, HttpModeSplit<HttpStats>> = {};
       const toHttpStats = (samples: HttpSampleRecord[]): HttpStats | null => {
@@ -1138,7 +1406,37 @@ export const createCollector = (options: CollectorOptions = {}): Collector => {
           hopBridgesSubmittedSteady
         },
         resources: { samples: [...resourceSamples] },
-        hopMeasurements: [...hopMeasurements]
+        hopMeasurements: [...hopMeasurements],
+        ...(pumpParams !== null
+          ? {
+              pump: {
+                enabled: true as const,
+                sender: pumpParams.sender,
+                destinationNetworkId: pumpParams.destinationNetworkId,
+                amountWei: pumpParams.amountWei,
+                intervalSeconds: pumpParams.intervalSeconds,
+                maxTotalSpendWei: pumpParams.maxTotalSpendWei,
+                maxGasPriceWei: pumpParams.maxGasPriceWei,
+                deposits: pumpDeposits.map(
+                  ({ cumulativeSpendWei: _cumulative, ...deposit }) => deposit
+                ),
+                skipped: { ...pumpSkipped },
+                totalSpendWei: pumpTotalSpendWei,
+                pendingAtStop: pumpPendingAtStop
+              }
+            }
+          : {}),
+        ...(walletBalanceSamples.length > 0 ? { walletBalances: [...walletBalanceSamples] } : {}),
+        ...(l1InfoStart !== null || l1InfoLeaves.length > 0 || l1InfoPollErrors > 0
+          ? {
+              l1InfoTree: {
+                gerManagerAddress: l1InfoStart?.gerManagerAddress ?? null,
+                baselineLeafCount: l1InfoStart?.baselineLeafCount ?? null,
+                leaves: [...l1InfoLeaves],
+                pollErrors: l1InfoPollErrors
+              }
+            }
+          : {})
       };
     },
 

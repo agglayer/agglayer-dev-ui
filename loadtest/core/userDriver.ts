@@ -109,12 +109,24 @@ export interface ClaimInputsResult {
 // + receipt. `isClaimedRecheck` carries finding C3's post-throw retry loop
 // (up to 3 more reads at 0/400/1000 ms, stopping at the first `true`) and the
 // post-revert re-check T24/T25 branch on.
+/**
+ * S53 M9: wrapped-token state read just BEFORE a wrapped-token claim
+ * (`measurement.claimPreState`). Approximate — the claim lands a few blocks
+ * after a `latest` read. Decimal strings (bigint-safe).
+ */
+export interface ClaimPreState {
+  wrappedSupplyBefore: string;
+  recipientBalanceBefore: string;
+}
+
 export interface ClaimSubmission {
   isClaimedBefore: boolean;
   isClaimedTiming: StepTiming;
   claimInputs: ClaimInputsResult | null;
   claim: TxStepResult | null;
   isClaimedRecheck: boolean | null;
+  /** Headless driver, `measurement.claimPreState` on, wrapped-token claims only. */
+  preState?: ClaimPreState;
 }
 
 // `readState()`: the two idempotent reads that make a hop re-derivable from

@@ -6,7 +6,9 @@
 // line. The existing global `Stats` shape (nearest-rank p50, no min) is
 // deliberately untouched.
 import type { AssetKind, Outcome } from '../core/types';
-import type { ClaimStageProbeResult, ReceiptGas } from '../core/userDriver';
+import type { ClaimPreState, ClaimStageProbeResult, ReceiptGas } from '../core/userDriver';
+
+export type { ClaimPreState };
 
 import { isSuccessOutcome } from '../core/types';
 
@@ -38,6 +40,11 @@ export interface HopMeasurementRecord {
     minedObservedAt: number | null;
     gas: ReceiptGas | null;
   };
+  /**
+   * S53 M8: the ERC-20 approve of this hop, when it sent one. Present only when
+   * `measurement` is configured, so a config without it keeps identical records.
+   */
+  approve?: { txHash: string | null; gas: ReceiptGas | null };
   /** Stage probe result; `null` when the probe was off or never started. */
   stages: ClaimStageProbeResult | null;
   /** First-observed READY_TO_CLAIM (ms epoch) — the tracker's view, T3b. */
@@ -51,6 +58,8 @@ export interface HopMeasurementRecord {
     minedObservedAt: number | null;
     gas: ReceiptGas | null;
     claimKind: ClaimKind;
+    /** S53 M9: present only when `measurement.claimPreState` was on and the read succeeded. */
+    preState?: ClaimPreState;
   };
 }
 
@@ -144,6 +153,15 @@ export const STAGE_DELTAS = [
 ] as const;
 export type StageDelta = (typeof STAGE_DELTAS)[number];
 
+/** S53 M8: approve receipt gas per source network (hops that sent an approve). */
+export interface ApproveGasRow {
+  networkId: number;
+  n: number;
+  gasUsed: MinMedMaxWei;
+  /** `gasUsed * effectiveGasPrice + (l1Fee ?? 0)` per approve. */
+  totalFeeWei: MinMedMaxWei;
+}
+
 export interface StageLatencyRow {
   route: string;
   /** DONE hops on this route that entered the table. */
@@ -160,6 +178,8 @@ export interface MeasurementsBlock {
   stageLatency: StageLatencyRow[];
   /** Hops not counted in the tables above (failed / censored / not a success outcome). */
   excludedHops: number;
+  /** S53 M8: only present when at least one counted hop carried approve gas. */
+  approveGas?: ApproveGasRow[];
 }
 
 const big = (value: string | undefined): bigint | null => {
@@ -187,6 +207,33 @@ export const stageDeltas = (hop: HopMeasurementRecord): Record<StageDelta, numbe
     claimTx: diff(hop.claim.minedObservedAt, hop.claim.sentAt),
     endToEnd: diff(hop.claim.minedObservedAt, t0)
   };
+};
+
+const buildApproveGas = (counted: readonly HopMeasurementRecord[]): ApproveGasRow[] => {
+  const byNetwork = new Map<number, ReceiptGas[]>();
+  for (const hop of counted) {
+    const gas = hop.approve?.gas;
+    if (gas === null || gas === undefined) continue;
+    byNetwork.set(hop.fromNetworkId, [...(byNetwork.get(hop.fromNetworkId) ?? []), gas]);
+  }
+  const rows: ApproveGasRow[] = [];
+  for (const [networkId, samples] of [...byNetwork.entries()].sort(([a], [b]) => a - b)) {
+    const gasUsed = samples.map((g) => big(g.gasUsed));
+    const price = samples.map((g) => big(g.effectiveGasPrice));
+    if (gasUsed.includes(null) || price.includes(null)) continue;
+    const totals = samples.map(
+      (g) =>
+        (big(g.gasUsed) as bigint) * (big(g.effectiveGasPrice) as bigint) +
+        (big(g.l1Fee) ?? BigInt(0))
+    );
+    rows.push({
+      networkId,
+      n: samples.length,
+      gasUsed: minMedMaxWei(gasUsed as bigint[]) as MinMedMaxWei,
+      totalFeeWei: minMedMaxWei(totals) as MinMedMaxWei
+    });
+  }
+  return rows;
 };
 
 export const buildMeasurements = (
@@ -247,12 +294,15 @@ export const buildMeasurements = (
       return { route, hops: routeHops.length, deltas };
     });
 
+  const approveGas = buildApproveGas(counted);
+
   return {
     probeIntervalMs,
     hops: [...hops],
     claimGas,
     stageLatency,
-    excludedHops: hops.length - counted.length
+    excludedHops: hops.length - counted.length,
+    ...(approveGas.length > 0 ? { approveGas } : {})
   };
 };
 
@@ -328,6 +378,30 @@ export const renderMeasurementsSection = (block: MeasurementsBlock | undefined):
           )
         );
 
+  // S53 M8: only when the run measured approve gas, so older output is unchanged.
+  const approveGasTable =
+    block.approveGas === undefined || block.approveGas.length === 0
+      ? []
+      : [
+          '',
+          '**Approve gas**',
+          '',
+          mdTable(
+            [
+              'fromNetworkId',
+              'n',
+              'gasUsed min / median / max',
+              'total fee min / median / max (wei)'
+            ],
+            block.approveGas.map((row) => [
+              String(row.networkId),
+              String(row.n),
+              fmtWei(row.gasUsed),
+              fmtWei(row.totalFeeWei)
+            ])
+          )
+        ];
+
   return [
     `Only completed hops are counted in the tables; ${block.excludedHops} hop(s) with a failed, timed-out or aborted outcome are excluded. Median is the true median (mean of the two middle values for even n). T0 is the client-observed bridge receipt (viem polls every 4 s by default, so up to 4 s late).`,
     '',
@@ -339,6 +413,7 @@ export const renderMeasurementsSection = (block: MeasurementsBlock | undefined):
     '',
     resolution,
     '',
-    latencyTable
+    latencyTable,
+    ...approveGasTable
   ].join('\n');
 };

@@ -177,3 +177,98 @@ describe('renderMeasurementsSection', () => {
     expect(md).toContain('T1-T0 l1-info-tree-index available | n/a');
   });
 });
+
+// ---------------------------------------------------------------------------
+// S53 M8/M9: approve gas and claim pre-state.
+// ---------------------------------------------------------------------------
+
+describe('buildMeasurements — approve gas (S53 M8)', () => {
+  const hop = (over: Partial<HopMeasurementRecord> & { fromNetworkId: number }): HopMeasurementRecord => ({
+    hopId: 'h',
+    lapId: 'l',
+    userId: 'u0',
+    mode: 'headless',
+    hopRoute: 'A->B',
+    toNetworkId: 1,
+    assetKind: 'erc20',
+    assetIndex: 1,
+    outcome: 'hop_completed_manual',
+    depositCount: 1,
+    bridge: { txHash: '0xb', blockNumber: '1', minedObservedAt: 1, gas: null },
+    stages: null,
+    readyObservedAt: null,
+    claim: { txHash: null, blockNumber: null, sentAt: null, minedObservedAt: null, gas: null, claimKind: 'none' },
+    ...over
+  });
+  const approve = (gasUsed: string, price: string, l1Fee?: string) => ({
+    txHash: '0xa',
+    gas: { blockNumber: '5', gasUsed, effectiveGasPrice: price, ...(l1Fee !== undefined ? { l1Fee } : {}) }
+  });
+
+  it('groups approve receipts by source network: n, gasUsed and total fee (incl. the L1 data fee) min / median / max', () => {
+    const block = buildMeasurements(
+      [
+        hop({ fromNetworkId: 82, approve: approve('46000', '10') }),
+        hop({ fromNetworkId: 82, approve: approve('46100', '10', '100') }),
+        hop({ fromNetworkId: 82, approve: approve('46200', '20') }),
+        hop({ fromNetworkId: 85, approve: approve('50000', '5') })
+      ],
+      null
+    );
+    expect(block.approveGas).toStrictEqual([
+      {
+        networkId: 82,
+        n: 3,
+        gasUsed: { n: 3, min: '46000', median: '46100', max: '46200' },
+        totalFeeWei: { n: 3, min: '460000', median: '461100', max: '924000' }
+      },
+      {
+        networkId: 85,
+        n: 1,
+        gasUsed: { n: 1, min: '50000', median: '50000', max: '50000' },
+        totalFeeWei: { n: 1, min: '250000', median: '250000', max: '250000' }
+      }
+    ]);
+  });
+
+  it('leaves the key out when no counted hop approved, and skips hops with a failed outcome, a null gas or a non-numeric gas', () => {
+    expect('approveGas' in buildMeasurements([hop({ fromNetworkId: 82 })], null)).toBe(false);
+    const block = buildMeasurements(
+      [
+        hop({ fromNetworkId: 82, outcome: 'timeout_ready_to_claim', approve: approve('46000', '10') }),
+        hop({ fromNetworkId: 82, approve: { txHash: '0xa', gas: null } }),
+        hop({ fromNetworkId: 82, approve: approve('not-a-number', '10') })
+      ],
+      null
+    );
+    expect('approveGas' in block).toBe(false);
+  });
+
+  it('renders an "Approve gas" table in the summary section only when present', () => {
+    const withApprove = buildMeasurements([hop({ fromNetworkId: 82, approve: approve('46000', '10') })], null);
+    expect(renderMeasurementsSection(withApprove)).toContain('**Approve gas**');
+    expect(renderMeasurementsSection(withApprove)).toContain('| 82 | 1 | 46000 / 46000 / 46000 |');
+    expect(renderMeasurementsSection(buildMeasurements([hop({ fromNetworkId: 82 })], null))).not.toContain(
+      'Approve gas'
+    );
+  });
+
+  it('keeps the M9 claim pre-state on the hop record it was attached to', () => {
+    const preState = { wrappedSupplyBefore: '1000', recipientBalanceBefore: '0' };
+    const record = hop({
+      fromNetworkId: 82,
+      claim: {
+        txHash: '0xc',
+        blockNumber: '1',
+        sentAt: 1,
+        minedObservedAt: 2,
+        gas: { blockNumber: '1', gasUsed: '177166', effectiveGasPrice: '1' },
+        claimKind: 'erc20_wrapped_mint',
+        preState
+      }
+    });
+    const block = buildMeasurements([record], null);
+    expect(block.hops[0].claim.preState).toStrictEqual(preState);
+    expect(block.claimGas[0]).toMatchObject({ claimKind: 'erc20_wrapped_mint', n: 1 });
+  });
+});
