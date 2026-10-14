@@ -19,6 +19,7 @@ import type { ChainClientFactory } from './chainClients';
 import type { DerivedWallet } from './derive';
 
 import { defaultChainClientFactory } from './chainClients';
+import { derivePumpAccount } from './derive';
 // R24 (loadtest/REVIEW.md): this file never imported `redactSecrets`/
 // `redactError` at all, contradicting `redact.ts`'s own header (which
 // names `preflight.ts` as an expected consumer) — every current caller
@@ -70,6 +71,9 @@ export interface PreflightResult {
   chains: PreflightChainRow[];
   assets: PreflightAssetRow[];
   trackerHealthStatus: PreflightStatus;
+  // S53: set only when `pump.enabled` (the L1 deposit pump). Absent otherwise,
+  // so a config without a pump yields exactly the result it always did.
+  pumpStatus?: PreflightStatus;
   failures: PreflightFailure[];
   // Keyed by chain key; empty for an all-ETH-gas config.
   gasTokenChains: Record<string, GasTokenIdentity>;
@@ -486,6 +490,52 @@ const checkAsset = async (
   return { status: 'pass', allowanceRecorded };
 };
 
+// S53 (heavy-load design §1.3): the pump wallet must hold at least its whole
+// run cap (`PUMP_UNDERFUNDED`, the tool half of stop criterion SC10). The pump
+// chain's id and bridge bytecode are already covered by the per-chain checks
+// above — the pump chain is the L1, which is always one of `config.chains`.
+// Funding the pump wallet stays manual.
+const checkPump = async (
+  clientFactory: ChainClientFactory,
+  config: LoadtestConfig
+): Promise<{ status: PreflightStatus; failure?: PreflightFailure }> => {
+  const { pump } = config;
+  if (pump === undefined || !pump.enabled) return { status: 'skipped' };
+  const chain = config.chains.find((candidate) => candidate.key === pump.chainKey);
+  if (chain === undefined) {
+    return {
+      status: 'fail',
+      failure: {
+        code: 'PREFLIGHT_PUMP_WALLET',
+        message: `pump.chainKey "${pump.chainKey}" is not a configured chain`
+      }
+    };
+  }
+  try {
+    const address = derivePumpAccount(config).address;
+    const required = parseUnits(pump.maxTotalSpend, 18);
+    const balance = await clientFactory(chain).public.getBalance({ address });
+    if (balance < required) {
+      return {
+        status: 'fail',
+        failure: {
+          code: 'PUMP_UNDERFUNDED',
+          message: `pump wallet ${address} (index ${pump.walletIndex}) on "${chain.key}" holds ${formatUnits(balance, 18)} ETH, below pump.maxTotalSpend ${pump.maxTotalSpend} ETH — fund it before starting`
+        }
+      };
+    }
+    return { status: 'pass' };
+  } catch (error) {
+    return {
+      status: 'fail',
+      failure: {
+        code: 'PREFLIGHT_PUMP_WALLET',
+        message: `pump wallet check failed: ${redactError(error)}`
+      }
+    };
+  }
+};
+
 const renderTable = (result: Omit<PreflightResult, 'table'>): string => {
   const header = ['CHAIN', 'NET_ID', 'RING', 'CHAIN_ID', 'BRIDGE', 'SYNC', 'GAS', 'GAS_TOKEN'];
   const rows = result.chains.map((row) => [
@@ -506,6 +556,7 @@ const renderTable = (result: Omit<PreflightResult, 'table'>): string => {
   const lines = [renderRow(header), ...rows.map(renderRow)];
   lines.push('');
   lines.push(`tracker/v1/health: ${result.trackerHealthStatus}`);
+  if (result.pumpStatus !== undefined) lines.push(`pump wallet: ${result.pumpStatus}`);
   result.assets.forEach((asset) => {
     lines.push(`asset[${asset.assetIndex}] (${asset.kind}): ${asset.assetStatus}`);
   });
@@ -574,6 +625,9 @@ export const runPreflight = async (options: PreflightOptions): Promise<Preflight
   const trackerHealthResult = await checkTrackerHealth(fetchImpl, config.aggkitProxyUrl);
   if (trackerHealthResult.failure) failures.push(trackerHealthResult.failure);
 
+  const pumpResult = await checkPump(clientFactory, config);
+  if (pumpResult.failure) failures.push(pumpResult.failure);
+
   const ringStartChain = config.chains.find((chain) => chain.key === config.ring[0]);
   const assets: PreflightAssetRow[] = [];
   for (let assetIndex = 0; assetIndex < config.assets.length; assetIndex += 1) {
@@ -620,7 +674,9 @@ export const runPreflight = async (options: PreflightOptions): Promise<Preflight
     'PREFLIGHT_SYNC_STATUS',
     'PREFLIGHT_TRACKER_HEALTH',
     'GAS_TOKEN_NOT_ETHER',
-    'RING_ETH_START_ON_GAS_TOKEN_CHAIN'
+    'RING_ETH_START_ON_GAS_TOKEN_CHAIN',
+    'PREFLIGHT_PUMP_WALLET',
+    'PUMP_UNDERFUNDED'
   ];
   failures.sort((a, b) => priorityOrder.indexOf(a.code) - priorityOrder.indexOf(b.code));
 
@@ -629,6 +685,7 @@ export const runPreflight = async (options: PreflightOptions): Promise<Preflight
     chains,
     assets,
     trackerHealthStatus: trackerHealthResult.status,
+    ...(pumpResult.status !== 'skipped' ? { pumpStatus: pumpResult.status } : {}),
     failures,
     gasTokenChains,
     syncToleranceNotes

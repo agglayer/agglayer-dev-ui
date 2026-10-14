@@ -4,7 +4,12 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { deriveFunderAccount, deriveWallets, WalletDerivationError } from './derive';
+import {
+  deriveFunderAccount,
+  derivePumpAccount,
+  deriveWallets,
+  WalletDerivationError
+} from './derive';
 import { buildTestDevnetConfig, TEST_FUNDER_PRIVATE_KEY, TEST_MNEMONIC } from './testHelpers';
 
 const MNEMONIC_ENV = 'LOADTEST_TEST_MNEMONIC';
@@ -105,5 +110,54 @@ describe('deriveFunderAccount', () => {
     const config = buildTestDevnetConfig();
     const withoutFunder = { ...config, users: { ...config.users, funder: undefined } };
     expect(() => deriveFunderAccount(withoutFunder)).toThrow(WalletDerivationError);
+  });
+});
+
+// S53
+describe("derivePumpAccount — pump.walletIndex of the users' mnemonic", () => {
+  const withPump = (walletIndex: number, total = 3) => {
+    const config = buildTestDevnetConfig({ usersTotal: total });
+    return {
+      ...config,
+      pump: {
+        enabled: true,
+        chainKey: 'L1',
+        destinationNetworkId: 1,
+        walletIndex,
+        amount: '0',
+        intervalSeconds: 600,
+        maxTotalSpend: '0.07',
+        maxGasPriceGwei: 5
+      }
+    };
+  };
+
+  it('uses the absolute HD index: index 1 is the well-known second anvil address', () => {
+    expect(derivePumpAccount(withPump(1)).address).toBe(
+      '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'
+    );
+  });
+
+  it('a high index (99) derives an address that no user wallet shares, deterministically', () => {
+    const config = withPump(99, 50);
+    const pump = derivePumpAccount(config).address;
+    expect(derivePumpAccount(config).address).toBe(pump);
+    expect(deriveWallets(config).map((wallet) => wallet.address)).not.toContain(pump);
+  });
+
+  it('exposes no private key on the returned account', () => {
+    const account = derivePumpAccount(withPump(99)) as unknown as Record<string, unknown>;
+    expect(account.privateKey).toBeUndefined();
+  });
+
+  it('refuses a config without a pump block and a privateKeysRef wallet set', () => {
+    expect(() => derivePumpAccount(buildTestDevnetConfig())).toThrow(WalletDerivationError);
+    const keys = withPump(99);
+    expect(() =>
+      derivePumpAccount({
+        ...keys,
+        users: { ...keys.users, wallets: { privateKeysRef: { env: 'SOME_KEYS' } } }
+      })
+    ).toThrow(/PUMP_WALLET_REQUIRES_MNEMONIC/);
   });
 });

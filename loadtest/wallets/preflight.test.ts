@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ChainClientFactory, ChainClientSet } from './chainClients';
 
-import { deriveWallets } from './derive';
+import { derivePumpAccount, deriveWallets } from './derive';
 import { runPreflight, SYNC_LAG_ENV } from './preflight';
 import { buildTestDevnetConfig, TEST_FUNDER_PRIVATE_KEY, TEST_MNEMONIC } from './testHelpers';
 
@@ -403,4 +403,142 @@ describe('runPreflight — opt-in sync lag tolerance (LOADTEST_PREFLIGHT_SYNC_LA
       expect(codes(result)).toContain('PREFLIGHT_SYNC_LAG_INVALID');
     }
   );
+});
+
+// S53 (heavy-load design §1.3): pump checks only exist when `pump.enabled`.
+describe('runPreflight — L1 deposit pump wallet (S53)', () => {
+  const PUMP_INDEX = 999;
+  const withPump = (over: Record<string, unknown> = {}) => {
+    const config = buildTestDevnetConfig({ usersTotal: 3 });
+    return {
+      ...config,
+      pump: {
+        enabled: true,
+        chainKey: 'L1',
+        destinationNetworkId: 1,
+        walletIndex: PUMP_INDEX,
+        amount: '0',
+        intervalSeconds: 600,
+        maxTotalSpend: '0.07',
+        maxGasPriceGwei: 5,
+        ...over
+      }
+    };
+  };
+  const pumpAddress = (config: ReturnType<typeof withPump>) =>
+    derivePumpAccount(config as never).address;
+
+  // The shared mock funds every wallet with 1 ETH; override the pump wallet only.
+  const factoryWithPumpBalance = (config: ReturnType<typeof withPump>, balance: bigint) => {
+    const base = buildHappyClientFactory(config as never);
+    const pump = pumpAddress(config);
+    const seen: string[] = [];
+    const factory: ChainClientFactory = (chain) => {
+      const set = base(chain);
+      const getBalance = set.public.getBalance as unknown as (a: {
+        address: Address;
+      }) => Promise<bigint>;
+      return {
+        ...set,
+        public: {
+          ...set.public,
+          getBalance: vi.fn(async (args: { address: Address }) => {
+            if (args.address === pump) {
+              seen.push(chain.key);
+              return balance;
+            }
+            return getBalance(args);
+          })
+        }
+      } as unknown as ChainClientSet;
+    };
+    return { factory, seen };
+  };
+
+  it('passes when the pump wallet holds at least maxTotalSpend, reads it on the pump chain, and says so in the table', async () => {
+    const config = withPump();
+    const { factory, seen } = factoryWithPumpBalance(config, parseUnits('0.07', 18));
+    const result = await runPreflight({
+      config: config as never,
+      wallets: deriveWallets(config as never),
+      clientFactory: factory,
+      fetchImpl: buildHappyFetch()
+    });
+    expect(result.ok).toBe(true);
+    expect(result.pumpStatus).toBe('pass');
+    expect(result.table).toContain('pump wallet: pass');
+    expect(seen).toStrictEqual(['L1']);
+  });
+
+  it('PUMP_UNDERFUNDED when the balance is a wei short of maxTotalSpend, naming the wallet and the shortfall', async () => {
+    const config = withPump();
+    const { factory } = factoryWithPumpBalance(config, parseUnits('0.07', 18) - BigInt(1));
+    const result = await runPreflight({
+      config: config as never,
+      wallets: deriveWallets(config as never),
+      clientFactory: factory,
+      fetchImpl: buildHappyFetch()
+    });
+    expect(result.ok).toBe(false);
+    expect(result.pumpStatus).toBe('fail');
+    expect(result.failures).toHaveLength(1);
+    expect(result.failures[0].code).toBe('PUMP_UNDERFUNDED');
+    expect(result.failures[0].message).toContain(pumpAddress(config));
+    expect(result.failures[0].message).toContain('0.07');
+    expect(result.table).toContain('pump wallet: fail');
+  });
+
+  it('a chain id mismatch on the pump chain still fails through the existing per-chain check', async () => {
+    const config = withPump();
+    const { factory } = factoryWithPumpBalance(config, parseUnits('1', 18));
+    const mismatched: ChainClientFactory = (chain) => {
+      const set = factory(chain);
+      return chain.key === 'L1'
+        ? ({ ...set, public: { ...set.public, getChainId: vi.fn(async () => 999) } } as never)
+        : set;
+    };
+    const result = await runPreflight({
+      config: config as never,
+      wallets: deriveWallets(config as never),
+      clientFactory: mismatched,
+      fetchImpl: buildHappyFetch()
+    });
+    expect(result.failures.map((f) => f.code)).toContain('PREFLIGHT_CHAIN_ID');
+  });
+
+  it('a disabled pump block, and no pump block, add nothing: no pumpStatus, no table line, no balance read of the pump wallet', async () => {
+    const disabled = withPump({ enabled: false });
+    const none = buildTestDevnetConfig({ usersTotal: 3 });
+    for (const config of [disabled, none]) {
+      const result = await runPreflight({
+        config: config as never,
+        wallets: deriveWallets(config as never),
+        clientFactory: buildHappyClientFactory(config as never),
+        fetchImpl: buildHappyFetch()
+      });
+      expect(result.ok).toBe(true);
+      expect('pumpStatus' in result).toBe(false);
+      expect(result.table).not.toContain('pump wallet');
+    }
+  });
+
+  it('an unresolvable mnemonic is a PREFLIGHT_PUMP_WALLET failure, not an exception', async () => {
+    const config = withPump();
+    delete process.env[MNEMONIC_ENV];
+    const factory = buildHappyClientFactory(config as never);
+    const wallets = (() => {
+      process.env[MNEMONIC_ENV] = TEST_MNEMONIC;
+      const w = deriveWallets(config as never);
+      delete process.env[MNEMONIC_ENV];
+      return w;
+    })();
+    const result = await runPreflight({
+      config: config as never,
+      wallets,
+      clientFactory: factory,
+      fetchImpl: buildHappyFetch()
+    });
+    process.env[MNEMONIC_ENV] = TEST_MNEMONIC;
+    expect(result.failures.map((f) => f.code)).toContain('PREFLIGHT_PUMP_WALLET');
+  });
 });

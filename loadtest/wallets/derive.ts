@@ -105,3 +105,25 @@ export const deriveFunderAccount = (config: LoadtestConfig): LocalAccount => {
   }
   return privateKeyToAccount(key as `0x${string}`);
 };
+
+/**
+ * S53: the L1 deposit pump's own signer — HD index `pump.walletIndex` (absolute,
+ * the same numbering `users.wallets.startIndex` uses) of the users' mnemonic.
+ * Distinct from every user wallet by the schema's `PUMP_WALLET_OVERLAPS_USERS`
+ * rule (re-checked by the runner after `--users`). Returns the account only; the
+ * private key never leaves this function.
+ */
+export const derivePumpAccount = (config: LoadtestConfig): LocalAccount => {
+  const { pump } = config;
+  if (pump === undefined) {
+    throw new WalletDerivationError('pump is not configured — cannot derive a pump account');
+  }
+  const { wallets } = config.users;
+  if (!('mnemonicRef' in wallets)) {
+    throw new WalletDerivationError(
+      'PUMP_WALLET_REQUIRES_MNEMONIC: the pump wallet is derived from users.wallets.mnemonicRef'
+    );
+  }
+  const mnemonic = resolveSecret(wallets.mnemonicRef, 'users.wallets.mnemonicRef');
+  return mnemonicToAccount(mnemonic, { addressIndex: pump.walletIndex });
+};
