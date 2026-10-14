@@ -16,6 +16,8 @@ export const SC = {
   SC1_MIN_HARD_FAILURES: 5,
   SC1_RATE: 0.02,
   SC1_RATE_MIN_HOPS: 50,
+  /** S58a M1: the rate branch also needs this many hard failures, so one early failure is never a rate. */
+  SC1_RATE_MIN_FAILURES: 2,
   SC2_STALL_MIN: 30,
   SC3_STALL_MIN: 120,
   SC4_WINDOW_MIN: 10,
@@ -175,21 +177,27 @@ const evaluateStall = (
   let inFlight = 0;
   let lastSuccess: number | null = null;
   let firstFiredAt: number | null = null;
+  // S58a H2: the window runs from the later of the last success and the moment the
+  // CURRENT in-flight period began (the count rose from 0). Without the second term a
+  // route that sits idle for a while (ring J's 82>85 hop, which only starts after an
+  // 85>82 hop completes) fires the instant its next hop starts.
+  let periodStart: number | null = null;
+  const windowBase = (): number => Math.max(lastSuccess ?? periodStart ?? 0, periodStart ?? 0);
   const check = (from: number, to: number): void => {
     if (inFlight <= 0 || firstStart === null || firstFiredAt !== null) return;
-    const base = Math.max(lastSuccess ?? firstStart, firstStart);
-    const fireAt = Math.max(from, base + limitMs);
+    const fireAt = Math.max(from, windowBase() + limitMs);
     if (fireAt < to || (to === now && fireAt <= now)) firstFiredAt = fireAt;
   };
   let cursor = events.length > 0 ? events[0].ts : now;
   for (const event of events) {
     check(cursor, event.ts);
+    if (event.delta > 0 && inFlight <= 0) periodStart = event.ts;
     inFlight += event.delta;
     if (event.success) lastSuccess = event.ts;
     cursor = event.ts;
   }
   check(cursor, now);
-  const base = firstStart === null ? now : Math.max(lastSuccess ?? firstStart, firstStart);
+  const base = firstStart === null ? now : windowBase();
   return {
     inFlight,
     stalledMs: inFlight > 0 ? Math.max(0, now - base) : 0,
@@ -228,7 +236,7 @@ export const evaluateStopCriteria = (input: StopCriteriaInput): CriterionResult[
   // SC1
   {
     const title = 'Hard hop failures';
-    const threshold = `>= ${SC.SC1_MIN_HARD_FAILURES} hard failures, or >= ${SC.SC1_RATE * 100}% once ${SC.SC1_RATE_MIN_HOPS} hops have ended`;
+    const threshold = `>= ${SC.SC1_MIN_HARD_FAILURES} hard failures, or >= ${SC.SC1_RATE * 100}% (and >= ${SC.SC1_RATE_MIN_FAILURES} failures) once ${SC.SC1_RATE_MIN_HOPS} hops have ended`;
     if (noData !== null) push(notEvaluable('SC1', title, 'stop', threshold, noData));
     else {
       const ended = [...digest.hops.values()]
@@ -236,17 +244,21 @@ export const evaluateStopCriteria = (input: StopCriteriaInput): CriterionResult[
         .sort((a, b) => (a.endTs as number) - (b.endTs as number));
       let hard = 0;
       let firstFiredAt: number | null = null;
+      // S58a M1: the condition is judged over the whole run so far, not latched at the first
+      // moment it held. The absolute branch is cumulative and never recovers; the rate branch
+      // can (one early failure among 50 hops is 2%, but 0.5% by the end of the run), so a
+      // breach that has since cleared is reported as not fired. The rate branch also needs
+      // at least SC1_RATE_MIN_FAILURES hard failures.
+      const holds = (failures: number, count: number): boolean =>
+        failures >= SC.SC1_MIN_HARD_FAILURES ||
+        (count >= SC.SC1_RATE_MIN_HOPS &&
+          failures >= SC.SC1_RATE_MIN_FAILURES &&
+          failures / count >= SC.SC1_RATE);
       ended.forEach((hop, index) => {
         if (SC1_OUTCOMES.has(hop.outcome as string)) hard += 1;
-        const count = index + 1;
-        if (
-          firstFiredAt === null &&
-          (hard >= SC.SC1_MIN_HARD_FAILURES ||
-            (count >= SC.SC1_RATE_MIN_HOPS && hard / count >= SC.SC1_RATE))
-        ) {
-          firstFiredAt = hop.endTs;
-        }
+        if (firstFiredAt === null && holds(hard, index + 1)) firstFiredAt = hop.endTs;
       });
+      if (!holds(hard, ended.length)) firstFiredAt = null;
       const rate = ended.length > 0 ? hard / ended.length : null;
       push({
         id: 'SC1',
@@ -481,7 +493,7 @@ export const evaluateStopCriteria = (input: StopCriteriaInput): CriterionResult[
   {
     const title = 'Pump spend cap and gas pause';
     const threshold =
-      'enforced inside the tool: cumulative spend <= maxTotalSpend; pauses above maxGasPriceGwei';
+      'enforced inside the tool: cumulative spend < maxTotalSpend; fires when the pump reaches the cap (cap_reached skip or spend >= cap); pauses above maxGasPriceGwei';
     const deposits = digest.pump.deposits;
     const gasSkips = digest.pump.skipped.filter((s) => s.reason === 'gas_price').length;
     if (!digest.pump.started && input.pump == null && deposits.length === 0) {
@@ -499,7 +511,11 @@ export const evaluateStopCriteria = (input: StopCriteriaInput): CriterionResult[
         input.pump?.totalSpendWei ??
         (deposits.length > 0 ? deposits[deposits.length - 1].cumulativeSpendWei : '0');
       const cap = input.pump?.maxTotalSpendWei;
-      const over = cap !== undefined ? BigInt(spent) > BigInt(cap) : null;
+      // S58a L4: the pump stops BEFORE a deposit would take it over the cap, so `spent > cap`
+      // can never hold. "Reaches the cap" is spend >= cap or the pump's own `cap_reached` skip.
+      const capSkips = digest.pump.skipped.filter((s) => s.reason === 'cap_reached').length;
+      const over =
+        capSkips > 0 ? true : cap !== undefined ? BigInt(spent) >= BigInt(cap) : null;
       push({
         id: 'SC11',
         title,

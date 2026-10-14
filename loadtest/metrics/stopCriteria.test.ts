@@ -94,6 +94,34 @@ describe('evaluateStopCriteria', () => {
       expect(sc1.fired).toBe(true);
       expect(sc1.firstFiredAt).toBe(BASE + 50 * 60_000);
     });
+
+    // S58a M1: the rate branch is judged on the whole run so far, not latched.
+    it('one early hard failure among 200 ended hops (0.5 percent) does not keep SC1 fired', () => {
+      const lines = Array.from({ length: 200 }, (_, i) =>
+        hopEnd(i + 1, `u0:a0:l${i}:h0`, R_8285, i === 0 ? 'rpc_error' : 'hop_completed_manual')
+      );
+      const sc1 = evaluate(lines).SC1;
+      expect(sc1.fired).toBe(false);
+      expect(sc1.firstFiredAt).toBeNull();
+      expect(sc1.value).toContain('1 of 200');
+    });
+
+    it('a transient rate breach that the run recovers from is not reported as fired', () => {
+      // 2 failures in the first 50 hops (4 percent at hop 50), then 150 clean hops: 1 percent at the end.
+      const lines = Array.from({ length: 200 }, (_, i) =>
+        hopEnd(i + 1, `u0:a0:l${i}:h0`, R_8285, i < 2 ? 'rpc_error' : 'hop_completed_manual')
+      );
+      expect(evaluate(lines).SC1.fired).toBe(false);
+    });
+
+    it('the rate branch needs at least 2 hard failures (a single failure is never a rate)', () => {
+      expect(SC.SC1_RATE_MIN_FAILURES).toBe(2);
+      // 1 failure in the first 50 hops is 2 percent exactly: still not enough on its own.
+      const lines = Array.from({ length: 50 }, (_, i) =>
+        hopEnd(i + 1, `u0:a0:l${i}:h0`, R_8285, i === 0 ? 'rpc_error' : 'hop_completed_manual')
+      );
+      expect(evaluate(lines).SC1.fired).toBe(false);
+    });
   });
 
   describe('SC2 / SC3 stalls', () => {
@@ -127,6 +155,39 @@ describe('evaluateStopCriteria', () => {
         rec(200, 'tick')
       ];
       expect(evaluate(lines).SC2.fired).toBe(false);
+    });
+
+    // S58a H2: ring J (85>82>85) has 82>85 as hop 1, which only starts after an 85>82 hop
+    // finishes. A quiet stretch with nothing in flight must not count toward the stall limit.
+    it('SC2 does not fire for 82>85 hops that start right after a long idle gap (ring J)', () => {
+      const ringJ = ['BALI_85', 'BALI_82', 'BALI_85'];
+      const R_8582 = 'BALI_85->BALI_82';
+      const lines = [
+        // an 82>85 hop that succeeds at t=12
+        hopStart(0, 'u0:a0:l0:h1'),
+        hopEnd(12, 'u0:a0:l0:h1', R_8285, 'hop_completed_manual'),
+        // 85>82 stays quiet (nothing on 82>85 in flight) until t=75, then new 82>85 hops start
+        hopStart(60, 'u1:a0:l0:h0'),
+        hopEnd(75, 'u1:a0:l0:h0', R_8582, 'hop_completed_manual'),
+        hopStart(75, 'u1:a0:l0:h1'),
+        rec(80, 'tick')
+      ];
+      const sc2 = evaluate(lines, { ring: ringJ }).SC2;
+      expect(sc2.fired).toBe(false);
+      expect(sc2.value).toContain('1 in flight');
+    });
+
+    it('SC2 still fires on a real stall that starts after an idle gap (the window runs from the in-flight start)', () => {
+      const ringJ = ['BALI_85', 'BALI_82', 'BALI_85'];
+      const lines = [
+        hopStart(0, 'u0:a0:l0:h1'),
+        hopEnd(12, 'u0:a0:l0:h1', R_8285, 'hop_completed_manual'),
+        hopStart(75, 'u1:a0:l0:h1'),
+        rec(106, 'tick')
+      ];
+      const sc2 = evaluate(lines, { ring: ringJ }).SC2;
+      expect(sc2.fired).toBe(true);
+      expect(sc2.firstFiredAt).toBe(BASE + 105 * 60_000);
     });
 
     it('is not evaluable when the route is not in the ring', () => {
@@ -245,6 +306,29 @@ describe('evaluateStopCriteria', () => {
     expect(
       evaluate(lines, { pump: { maxTotalSpendWei: '100', totalSpendWei: '140' } }).SC11.fired
     ).toBe(true);
+  });
+
+  // S58a L4: the pump stops BEFORE it would exceed the cap, so `spent > cap` never held.
+  it('SC11 fires when the pump reaches its cap (spend == cap, or a cap_reached skip)', () => {
+    const started = rec(0, 'pump_state', { userId: 'harness:pump', state: 'started' });
+    expect(
+      evaluate([started], { pump: { maxTotalSpendWei: '100', totalSpendWei: '100' } }).SC11.fired
+    ).toBe(true);
+    const capped = rec(5, 'pump_skipped', {
+      userId: 'harness:pump',
+      reason: 'cap_reached',
+      cumulativeSpendWei: '90'
+    });
+    // spend 90 of cap 100: below the cap, but the pump itself said it stopped at the cap.
+    expect(
+      evaluate([started, capped], { pump: { maxTotalSpendWei: '100', totalSpendWei: '90' } }).SC11
+        .fired
+    ).toBe(true);
+    // without results.json the skip alone is enough
+    expect(evaluate([started, capped]).SC11.fired).toBe(true);
+    expect(
+      evaluate([started], { pump: { maxTotalSpendWei: '100', totalSpendWei: '90' } }).SC11.fired
+    ).toBe(false);
   });
 
   it('SC13 is a gate at 25 percent skipped ticks', () => {
