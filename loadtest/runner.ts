@@ -372,7 +372,7 @@ export const classifyActivityPollError = (
 };
 
 const reportDriverError = (
-  ctx: LapRunCtx,
+  ctx: Pick<LapRunCtx, 'collector' | 'userId' | 'mode'>,
   hopId: string,
   error: Pick<DriverError, 'message'> & Partial<Pick<DriverError, 'errorClass'>>
 ): void => {
@@ -384,6 +384,27 @@ const reportDriverError = (
     message: error.message,
     hopId
   });
+};
+
+// S58a M2: `SingleFlightPoller` rejects EVERY joined caller with the same error object, so
+// one failed tracker fetch reached `reportDriverError` once per waiting hop of that wallet
+// (16 laps in flight -> 16 `proxy_5xx` records, SC4 inflated). Remember the error instances
+// already written; a joined hop still backs off, it just does not write the record again.
+const reportedPollFailures = new WeakSet<object>();
+
+/** Classifies a failed activity poll, writes ONE error record per failed fetch, returns the back-off. */
+export const reportActivityPollError = (
+  ctx: Pick<LapRunCtx, 'collector' | 'userId' | 'mode'>,
+  hopId: string,
+  error: unknown
+): number => {
+  const { classified, retryAfterMs } = classifyActivityPollError(error);
+  const isObject = typeof error === 'object' && error !== null;
+  if (!(isObject && reportedPollFailures.has(error))) {
+    if (isObject) reportedPollFailures.add(error);
+    reportDriverError(ctx, hopId, classified);
+  }
+  return retryAfterMs;
 };
 
 const reportEmbeddedErrors = (
@@ -808,9 +829,7 @@ const runLapToCompletion = async (params: { ctx: LapRunCtx; cell: Cell }): Promi
             // background poll would just retry on its next interval too) —
             // only the existing ring timeouts (checked every loop iteration
             // above) can end a hop that is stuck polling.
-            const { classified, retryAfterMs } = classifyActivityPollError(error);
-            reportDriverError(ctx, hop.id, classified);
-            await sleep(retryAfterMs);
+            await sleep(reportActivityPollError(ctx, hop.id, error));
           }
         }
         break;
@@ -826,6 +845,25 @@ const runLapToCompletion = async (params: { ctx: LapRunCtx; cell: Cell }): Promi
   for (const st of measureByHopId.values()) st.probeAbort?.abort();
   return lap;
 };
+
+/**
+ * ` pump=on(<settled>/<planned>,<spend>ETH)` for the status line. The plan is the deposits the
+ * run duration allows; the pump keeps firing during the drain (S58a L9), so once more have settled
+ * than planned the plan follows the count instead of reading e.g. `20/13`.
+ */
+export const pumpStatusSuffix = (
+  settledDeposits: number,
+  committedWei: bigint,
+  durationMinutes: number,
+  intervalSeconds: number
+): string => {
+  const planned = Math.max(
+    Math.floor((durationMinutes * 60) / intervalSeconds) + 1,
+    settledDeposits
+  );
+  return ` pump=on(${settledDeposits}/${planned},${formatEther(committedWei)}ETH)`;
+};
+
 
 // ---------------------------------------------------------------------------
 // S53: harness-side workers (heavy-load design §1.3/§1.4) — the L1 deposit pump
@@ -983,9 +1021,12 @@ const createHarnessWorkers = (params: {
     statusSuffix() {
       if (pump === null || config.pump === undefined) return '';
       const { settledDeposits, committedWei } = pump.progress();
-      const planned =
-        Math.floor((config.load.durationMinutes * 60) / config.pump.intervalSeconds) + 1;
-      return ` pump=on(${settledDeposits}/${planned},${formatEther(committedWei)}ETH)`;
+      return pumpStatusSuffix(
+        settledDeposits,
+        committedWei,
+        config.load.durationMinutes,
+        config.pump.intervalSeconds
+      );
     }
   };
 };
@@ -1011,7 +1052,65 @@ interface UserRuntime {
 // test can assert on the error type without string-matching the message.
 export class MainnetConfirmationRequiredError extends Error {}
 
+/**
+ * S58a M6: a SIGINT listener for the WHOLE run. tsx's child preflight exits the process
+ * (code 130) the moment no SIGINT listener exists, so a listener held only around the main loop
+ * meant that `stop --drain` during the 1-5 min of preflight / harness start-up, or while the
+ * report is written after the loop, killed the run with no `results.json` and no report.
+ *
+ * - before `attach`: SIGINTs are counted, and `attach` returns how many so the caller can
+ *   replay them as drain requests the moment the main loop exists ("stop before start");
+ * - between `attach` and `detach`: the main loop's own handler runs;
+ * - after `detach`: the run is already stopping, a SIGINT is only logged.
+ */
+const createSigintGuard = (logger: (line: string) => void) => {
+  let early = 0;
+  let handler: (() => void) | null = null;
+  let loopOver = false;
+  const onSignal = (): void => {
+    if (handler !== null) {
+      handler();
+    } else if (loopOver) {
+      logger('SIGINT received while the run is already stopping (writing the report); ignored');
+    } else {
+      early += 1;
+      logger(
+        `SIGINT received before the main loop started (${early}); the run drains as soon as it starts`
+      );
+    }
+  };
+  process.on('SIGINT', onSignal);
+  return {
+    attach(loopHandler: () => void): number {
+      handler = loopHandler;
+      return early;
+    },
+    detach(): void {
+      handler = null;
+      loopOver = true;
+    },
+    dispose(): void {
+      process.off('SIGINT', onSignal);
+    }
+  };
+};
+type SigintGuard = ReturnType<typeof createSigintGuard>;
+
 export const runLoadTest = async (options: RunLoadTestOptions): Promise<RunLoadTestResult> => {
+  // R16 (loadtest/REVIEW.md): see `runLoadTestWith`.
+  const logger = options.logger ?? ((line: string) => process.stderr.write(`${line}\n`));
+  const guard = createSigintGuard(logger);
+  try {
+    return await runLoadTestWith(options, guard);
+  } finally {
+    guard.dispose();
+  }
+};
+
+const runLoadTestWith = async (
+  options: RunLoadTestOptions,
+  guard: SigintGuard
+): Promise<RunLoadTestResult> => {
   const { config, activeAssetIndices, configPath, repoRoot, outDir } = options;
   // R16 (loadtest/REVIEW.md): a silent no-op default meant a caller that
   // simply omitted `logger` (any programmatic embedder, not `cli.ts`'s own
@@ -1535,7 +1634,10 @@ export const runLoadTest = async (options: RunLoadTestOptions): Promise<RunLoadT
       if (sigintCount === 1) lapsInFlightAtDrainStart = inflightAtSigint.length;
       scheduler.beginDrain('sigint', inflightAtSigint);
     };
-    process.on('SIGINT', onSigint);
+    // S58a M6: the guard has held the process-wide listener since the run began; hand it the
+    // loop's handler, and replay any SIGINT that arrived during preflight / start-up.
+    const earlySigints = guard.attach(onSigint);
+    for (let i = 0; i < earlySigints; i += 1) onSigint();
 
     const PUMP_INTERVAL_MS = 1000;
     const STATUS_INTERVAL_MS = 5000;
@@ -1618,7 +1720,7 @@ export const runLoadTest = async (options: RunLoadTestOptions): Promise<RunLoadT
         scheduler.beginDrain('fatal', inflightAtFatal);
       }
     } finally {
-      process.off('SIGINT', onSigint);
+      guard.detach();
     }
 
     // S53: the pump and samplers stop when the main loop exits (end of drain, or

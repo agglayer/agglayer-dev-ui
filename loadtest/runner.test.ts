@@ -7,7 +7,7 @@
 // regression this finding is about is specifically the `fund: false` case,
 // since the `fund: true` case was already covered (indirectly) by
 // `wallets/fund.test.ts`'s existing `MAINNET_CONFIRMATION_REQUIRED` tests.
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { Hop } from './core/types';
 import type { ClaimSubmission, TxStepResult } from './core/userDriver';
@@ -19,6 +19,8 @@ import {
   hopMeasurementRecord,
   MainnetConfirmationRequiredError,
   OBSERVE_ACTIVITY_DEFAULT_RETRY_MS,
+  pumpStatusSuffix,
+  reportActivityPollError,
   runLoadTest
 } from './runner';
 import {
@@ -26,7 +28,7 @@ import {
   TEST_FUNDER_PRIVATE_KEY,
   TEST_MNEMONIC
 } from './wallets/testHelpers';
-import { NON_TERMINAL_INTERVAL_MS } from './workers/headless/uiCallset';
+import { NON_TERMINAL_INTERVAL_MS, SingleFlightPoller } from './workers/headless/uiCallset';
 
 const setTestSecretEnv = (): void => {
   process.env.LOADTEST_TEST_MNEMONIC = TEST_MNEMONIC;
@@ -212,5 +214,67 @@ describe('classifyActivityPollError — what the runner does with a failed activ
     expect(out.retryAfterMs).toBe(OBSERVE_ACTIVITY_DEFAULT_RETRY_MS);
     expect(OBSERVE_ACTIVITY_DEFAULT_RETRY_MS).toBe(1000);
     expect(out.classified.errorClass).toBe('internal');
+  });
+});
+
+// S58a M2: the single-flight activity poller hands every joined caller the SAME rejection.
+// Each waiting hop then reports it, so one failed fetch became one error record per in-flight
+// lap of that wallet (16 laps -> 16 `proxy_5xx`), inflating SC4. It is one failed fetch.
+describe('reportActivityPollError — one error record per failed fetch, not per waiting hop (S58a M2)', () => {
+  const ctxWith = (error: ReturnType<typeof vi.fn>) =>
+    ({ collector: { error }, userId: 'u0', mode: 'headless' }) as unknown as LapRunCtx;
+
+  it('16 hops joined onto one failed poll write one error record, and every hop still backs off', async () => {
+    let realFetches = 0;
+    const poller = new SingleFlightPoller<number[]>({
+      sleepFn: async () => {},
+      isFatal: (e) => e instanceof ClassifiedFetchError && e.errorClass === 'tracker_not_ready'
+    });
+    const fetchFn = async (): Promise<number[]> => {
+      realFetches += 1;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      throw new ClassifiedFetchError({ errorClass: 'proxy_5xx', message: 'HTTP 502' }, 502);
+    };
+    const results = await Promise.allSettled(
+      Array.from({ length: 16 }, () => poller.run(() => 0, fetchFn))
+    );
+    const error = vi.fn();
+    const ctx = ctxWith(error);
+    const retries = results.map((r, i) =>
+      reportActivityPollError(ctx, `u0:a0:l${i}:h0`, (r as PromiseRejectedResult).reason)
+    );
+
+    expect(realFetches).toBe(3); // 3 attempts of ONE shared chain
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(error.mock.calls[0][0]).toMatchObject({ errorClass: 'proxy_5xx', userId: 'u0' });
+    expect(retries).toStrictEqual(Array.from({ length: 16 }, () => NON_TERMINAL_INTERVAL_MS));
+  });
+
+  it('two separate failed fetches are two records (the dedupe is per error instance)', () => {
+    const error = vi.fn();
+    const ctx = ctxWith(error);
+    reportActivityPollError(ctx, 'h0', new ClassifiedFetchError({ errorClass: 'proxy_5xx', message: 'a' }, 502));
+    reportActivityPollError(ctx, 'h0', new ClassifiedFetchError({ errorClass: 'proxy_5xx', message: 'a' }, 502));
+    expect(error).toHaveBeenCalledTimes(2);
+  });
+
+  it('a non-object rejection is still reported (nothing to dedupe on)', () => {
+    const error = vi.fn();
+    const ctx = ctxWith(error);
+    reportActivityPollError(ctx, 'h0', 'boom');
+    reportActivityPollError(ctx, 'h0', 'boom');
+    expect(error).toHaveBeenCalledTimes(2);
+  });
+});
+
+// S58a L9: the plan counted the run duration only, but the pump keeps firing during the drain
+// (up to hopMs after the last lap start), so a long drain read as `20/13`.
+describe('pumpStatusSuffix — the status-line pump plan never reads settled > planned (S58a L9)', () => {
+  const ETH1 = BigInt(10) ** BigInt(18);
+  it('plans floor(duration / interval) + 1 deposits while the run is inside its duration', () => {
+    expect(pumpStatusSuffix(3, ETH1 / BigInt(100), 120, 600)).toBe(' pump=on(3/13,0.01ETH)');
+  });
+  it('grows the plan with the drain instead of showing 20/13', () => {
+    expect(pumpStatusSuffix(20, BigInt(0), 120, 600)).toBe(' pump=on(20/20,0ETH)');
   });
 });
