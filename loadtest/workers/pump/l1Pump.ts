@@ -141,6 +141,9 @@ export const createL1Pump = (options: L1PumpOptions): L1Pump => {
 
   let started = false;
   let stopped = false;
+  // Re-entrancy guard: a second `tick()` while one is mid-send would read the
+  // same nonce, so it is dropped (the loop is sequential; this protects direct callers).
+  let ticking = false;
   let capReached = false;
   let lastTickAt: number | null = null;
   let spentWei = BigInt(0);
@@ -244,9 +247,10 @@ export const createL1Pump = (options: L1PumpOptions): L1Pump => {
   };
 
   const tick = async (): Promise<void> => {
-    if (stopped || capReached) return;
+    if (stopped || capReached || ticking) return;
     const now = clock.now();
     if (pumpMsUntilDue(schedule, lastTickAt, now) > 0) return;
+    ticking = true;
     lastTickAt = now;
     try {
       if (pendingTx !== null) await trySettle();
@@ -318,6 +322,8 @@ export const createL1Pump = (options: L1PumpOptions): L1Pump => {
       await trySettle();
     } catch (error) {
       recordSendError(error);
+    } finally {
+      ticking = false;
     }
   };
 

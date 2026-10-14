@@ -589,6 +589,50 @@ describe('l1Pump: stop', () => {
   });
 });
 
+describe('l1Pump: re-entrancy', () => {
+  it('a second tick() while one is mid-send is dropped, so two sends can never share a nonce', async () => {
+    const world = fakeWorld();
+    const base = fakeClients(world);
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let sendCalls = 0;
+    const pump = createL1Pump({
+      chain: CHAIN,
+      sender: SENDER,
+      pump: {
+        destinationNetworkId: 82,
+        amount: '0',
+        intervalSeconds: 60,
+        maxTotalSpend: '0.07',
+        maxGasPriceGwei: 5
+      },
+      clients: {
+        ...base,
+        sendTransaction: async (args) => {
+          sendCalls += 1;
+          await gate;
+          return base.sendTransaction(args);
+        }
+      },
+      collector: createCollector({ clock: { now: () => Date.now() } }),
+      clock: { now: () => Date.now() },
+      receiptTimeoutMs: 60_000
+    });
+
+    const first = pump.tick();
+    await vi.advanceTimersByTimeAsync(0);
+    // Even a minute later (due again), the first send is still in flight.
+    await vi.advanceTimersByTimeAsync(60_000);
+    await pump.tick();
+    expect(sendCalls).toBe(1);
+    release();
+    await first;
+    expect(world.sends).toHaveLength(1);
+  });
+});
+
 describe('l1Pump: progress and configuration', () => {
   it('progress() reports settled deposits and the counted spend (a pending deposit at its worst case)', async () => {
     const h = harness();
