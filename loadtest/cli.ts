@@ -16,7 +16,11 @@ import {
   parseLoadtestConfig,
   serializeLoadtestConfig
 } from './config/schema';
+import { generateCampaignReport, parseRunSpecs } from './metrics/html/campaign';
+import { generateRunReport, renderReportAfterRun, runNameOf } from './metrics/html/index';
+import { digestFromFile } from './metrics/html/ndjsonDigest';
 import { renderSummaryMd } from './metrics/report';
+import { evaluateStopCriteria } from './metrics/stopCriteria';
 import { runLoadTest } from './runner';
 import { buildUi } from './ui/build';
 import { serveUi } from './ui/serve';
@@ -41,7 +45,9 @@ const printUsage = (): void => {
       '  pnpm loadtest run [--config <path>] [--users N] [--browser N] [--rate Y]',
       '                    [--minutes Z] [--assets eth,erc20] [--fund]',
       '                    [--i-know-this-is-mainnet] [--out <dir>]',
-      '  pnpm loadtest report --dir <dir>',
+      '  pnpm loadtest report --dir <dir> [--html] [--html-out <file>] [--max-bytes N]',
+      '  pnpm loadtest campaign-report --out <file.html> --run <label>=<dir>[,<dir>] [--run ...]',
+      '  pnpm loadtest check-stop --dir <dir> [--dir <dir>] [--config <path>] [--json]',
       ''
     ].join('\n')
   );
@@ -56,6 +62,18 @@ const parseFlagValue = (argv: string[], flag: string): string | undefined => {
 };
 
 const hasFlag = (argv: string[], flag: string): boolean => argv.includes(flag);
+
+/** Every value of a repeatable flag (`--dir a --dir b`). */
+const parseFlagValues = (argv: string[], flag: string): string[] => {
+  const values: string[] = [];
+  argv.forEach((arg, index) => {
+    if (arg !== flag) return;
+    const value = argv[index + 1];
+    if (value === undefined) throw new Error(`${flag} requires a value`);
+    values.push(value);
+  });
+  return values;
+};
 
 // Flags that consume the following argv slot as their value — needed so
 // the positional-config-path scan below doesn't mistake `--users`'s value
@@ -340,16 +358,30 @@ const runRun = async (argv: string[]): Promise<void> => {
   const outArg = parseFlagValue(argv, '--out');
   const outDir = path.resolve(REPO_ROOT, outArg ?? config.output.dir);
 
-  const result = await runLoadTest({
-    config,
-    activeAssetIndices,
-    configPath,
-    repoRoot: REPO_ROOT,
-    fund: hasFlag(argv, '--fund'),
-    mainnetConfirmed: hasFlag(argv, '--i-know-this-is-mainnet'),
-    outDir,
-    logger: (line) => process.stdout.write(`${line}\n`)
-  });
+  const runStartedAtMs = Date.now();
+  let result: Awaited<ReturnType<typeof runLoadTest>>;
+  try {
+    result = await runLoadTest({
+      config,
+      activeAssetIndices,
+      configPath,
+      repoRoot: REPO_ROOT,
+      fund: hasFlag(argv, '--fund'),
+      mainnetConfirmed: hasFlag(argv, '--i-know-this-is-mainnet'),
+      outDir,
+      logger: (line) => process.stdout.write(`${line}\n`)
+    });
+  } finally {
+    // S54: the HTML report is written for every run that produced a results.json
+    // (PASS, FAIL, aborted, or a fatal error after the report files were written).
+    await renderReportAfterRun({
+      outDir,
+      runStartedAtMs,
+      log: (line) => process.stdout.write(`${line}\n`),
+      warn: (line) => process.stderr.write(`${line}\n`),
+      redact: redactError
+    });
+  }
 
   process.stdout.write(
     `run: ${result.aborted ? `ABORTED (${result.abortCause ?? 'unknown cause'})` : 'complete'} -> ${path.relative(process.cwd(), result.outDir)}\n`
@@ -363,20 +395,141 @@ const runRun = async (argv: string[]): Promise<void> => {
 // (`{ref:"env:NAME"}` instead of `{env:"NAME"}`); feeding it back through
 // `renderSummaryMd` (which redacts again, a no-op on that shape) is exactly
 // what makes this byte-identical to the original run's `summary.md`.
-const runReport = (argv: string[]): void => {
+const runReport = async (argv: string[]): Promise<void> => {
   const dirArg = parseFlagValue(argv, '--dir');
   if (dirArg === undefined) throw new Error('report requires --dir <dir>');
   const dir = path.resolve(process.cwd(), dirArg);
+  const htmlOnly = hasFlag(argv, '--html');
 
   const resultsPath = path.join(dir, 'results.json');
   const results = JSON.parse(fs.readFileSync(resultsPath, 'utf8')) as ResultsJson;
-  const config = results.config as LoadtestConfig;
 
-  const summaryMd = renderSummaryMd(results, config);
-  const summaryPath = path.join(dir, 'summary.md');
-  fs.writeFileSync(summaryPath, summaryMd);
+  if (!htmlOnly) {
+    const config = results.config as LoadtestConfig;
+    const summaryMd = renderSummaryMd(results, config);
+    const summaryPath = path.join(dir, 'summary.md');
+    fs.writeFileSync(summaryPath, summaryMd);
+    process.stdout.write(`report: wrote ${path.relative(process.cwd(), summaryPath)}\n`);
+  }
 
-  process.stdout.write(`report: wrote ${path.relative(process.cwd(), summaryPath)}\n`);
+  const maxBytesArg = parseFlagValue(argv, '--max-bytes');
+  const maxBytes = maxBytesArg === undefined ? undefined : Number.parseInt(maxBytesArg, 10);
+  if (maxBytes !== undefined && (!Number.isFinite(maxBytes) || maxBytes <= 0)) {
+    throw new Error(`--max-bytes must be a positive integer, got "${maxBytesArg}"`);
+  }
+  const htmlOut = parseFlagValue(argv, '--html-out');
+  const generated = await generateRunReport({
+    dir,
+    maxBytes,
+    outPath: htmlOut === undefined ? undefined : path.resolve(process.cwd(), htmlOut)
+  });
+  process.stdout.write(
+    `report: wrote ${path.relative(process.cwd(), generated.htmlPath)} (${generated.bytes} bytes${generated.notes.length > 0 ? `, size cap applied: ${generated.notes.join(' ')}` : ''})\n`
+  );
+};
+
+// S54 — the campaign roll-up page from several run directories.
+const runCampaignReport = async (argv: string[]): Promise<void> => {
+  const out = parseFlagValue(argv, '--out');
+  if (out === undefined) throw new Error('campaign-report requires --out <file.html>');
+  const runs = parseRunSpecs(parseFlagValues(argv, '--run')).map((spec) => ({
+    label: spec.label,
+    dirs: spec.dirs.map((d) => path.resolve(process.cwd(), d))
+  }));
+  const generated = await generateCampaignReport({
+    outPath: path.resolve(process.cwd(), out),
+    runs
+  });
+  process.stdout.write(
+    `campaign-report: wrote ${path.relative(process.cwd(), generated.htmlPath)} (${generated.bytes} bytes)\n`
+  );
+};
+
+// S54 — read-only evaluation of the heavy-load stop criteria (design §3). Never
+// sends a signal; the exit code is 0 even when a criterion fires.
+const readCheckStopConfig = (
+  dir: string,
+  configArg: string | undefined
+): Record<string, unknown> => {
+  const candidates =
+    configArg !== undefined
+      ? [path.resolve(process.cwd(), configArg)]
+      : [
+          path.join(dir, 'results.json'),
+          path.join(dir, '..', 'config.json'),
+          path.join(dir, 'config.json')
+        ];
+  for (const candidate of candidates) {
+    if (!fs.existsSync(candidate)) continue;
+    const parsed = JSON.parse(fs.readFileSync(candidate, 'utf8')) as Record<string, unknown>;
+    return (
+      (candidate.endsWith('results.json') ? (parsed.config as Record<string, unknown>) : parsed) ??
+      {}
+    );
+  }
+  return {};
+};
+
+const runCheckStop = async (argv: string[]): Promise<void> => {
+  const dirs = parseFlagValues(argv, '--dir');
+  if (dirs.length === 0) throw new Error('check-stop requires --dir <out dir> (repeatable)');
+  const configArg = parseFlagValue(argv, '--config');
+  const asJson = hasFlag(argv, '--json');
+  const output: { dir: string; criteria: ReturnType<typeof evaluateStopCriteria> }[] = [];
+  for (const dirArg of dirs) {
+    const dir = path.resolve(process.cwd(), dirArg);
+    const config = readCheckStopConfig(dir, configArg) as {
+      ring?: string[];
+      chains?: { key: string; networkId: number }[];
+      users?: { funder?: { gasPerChain?: Record<string, string> } };
+    };
+    const digest = await digestFromFile(path.join(dir, 'activity.ndjson'));
+    const resultsPath = path.join(dir, 'results.json');
+    const results = fs.existsSync(resultsPath)
+      ? (JSON.parse(fs.readFileSync(resultsPath, 'utf8')) as ResultsJson)
+      : undefined;
+    const ready: Record<string, number[]> = {};
+    for (const h of results?.measurements?.hops ?? []) {
+      if (
+        h.bridge.minedObservedAt !== null &&
+        h.readyObservedAt !== null &&
+        h.outcome.startsWith('hop_completed')
+      ) {
+        (ready[h.hopRoute] ??= []).push(h.readyObservedAt - h.bridge.minedObservedAt);
+      }
+    }
+    output.push({
+      dir: runNameOf(dir),
+      criteria: evaluateStopCriteria({
+        digest,
+        ring: config.ring ?? [],
+        chains: config.chains,
+        gasPerChain: config.users?.funder?.gasPerChain,
+        pump:
+          results?.pump === undefined
+            ? null
+            : {
+                maxTotalSpendWei: results.pump.maxTotalSpendWei,
+                totalSpendWei: results.pump.totalSpendWei
+              },
+        readyWaitByRoute: ready
+      })
+    });
+  }
+  if (asJson) {
+    process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
+    return;
+  }
+  for (const { dir, criteria } of output) {
+    process.stdout.write(`== ${dir}\n`);
+    for (const c of criteria) {
+      const state =
+        c.fired === null ? (c.kind === 'outside' ? 'OUTSIDE' : 'N/A') : c.fired ? 'FIRED' : 'ok';
+      process.stdout.write(
+        `${c.id.padEnd(5)} ${state.padEnd(8)} ${c.title}: ${c.value}${c.note === '' ? '' : ` [${c.note}]`}\n`
+      );
+    }
+  }
 };
 
 const main = async (): Promise<void> => {
@@ -405,7 +558,13 @@ const main = async (): Promise<void> => {
       await runRun(rest);
       return;
     case 'report':
-      runReport(rest);
+      await runReport(rest);
+      return;
+    case 'campaign-report':
+      await runCampaignReport(rest);
+      return;
+    case 'check-stop':
+      await runCheckStop(rest);
       return;
     default:
       printUsage();

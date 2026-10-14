@@ -43,6 +43,7 @@ import type * as headlessModule from './workers/headless/headlessUser';
 
 import { parseLoadtestConfig } from './config/schema';
 import { ClassifiedFetchError } from './metrics/errors';
+import { generateRunReport, renderReportAfterRun } from './metrics/html/index';
 import { runLoadTest } from './runner';
 import {
   buildTestDevnetConfig,
@@ -1141,6 +1142,15 @@ describe('runLoadTest — optional heavy-load features through the runner (S53)'
     const status = logs.find((l) => l.startsWith('[status]'));
     expect(status).toBeDefined();
     expect(status).toMatch(/ inflightByRoute=\S+ pump=on\(\d+\/1,[\d.]+ETH\)$/);
+
+    // --- S54: the real artifacts of a heavy-load run render to the HTML report ---
+    const generated = await generateRunReport({ dir });
+    const html = fs.readFileSync(generated.htmlPath, 'utf8');
+    expect(html).toContain('PUMP ON');
+    expect(html).toContain(`data-metric="pump.deposits">${pump.deposits.length}<`);
+    expect(html).toContain(`data-metric="l1.leaves">${tree.leaves.length}<`);
+    expect(html).toContain('lowest wallet');
+    expect(html).not.toMatch(/0x[0-9a-fA-F]{64}/);
   }, 90_000);
 
   it('a pump that cannot send never fails a user hop: the failure is a send_error skip and one rpc_error without a hopId', async () => {
@@ -1222,5 +1232,67 @@ describe('runLoadTest — optional heavy-load features through the runner (S53)'
     expect('pump' in results).toBe(false);
     expect(pumpWorld.sends).toHaveLength(0);
     expect(readNdjson(dir).some((l) => String(l.kind).startsWith('pump_'))).toBe(false);
+  }, 90_000);
+});
+
+describe('runLoadTest artifacts render to the HTML report (S54)', () => {
+  const fixture = buildRing('eth');
+  const withActivityLog = (config: LoadtestConfig): LoadtestConfig => ({
+    ...config,
+    output: { ...config.output, activityLog: true }
+  });
+
+  it('a real run (no heavy-load blocks) writes report.html next to results.json, with the numbers of results.json', async () => {
+    const startedAtMs = Date.now();
+    const { results, outDir: dir } = await runRing(
+      fixture,
+      {},
+      { config: withActivityLog(fixture.config) }
+    );
+    const logs: string[] = [];
+    const generated = await renderReportAfterRun({
+      outDir: dir,
+      runStartedAtMs: startedAtMs,
+      log: (l) => logs.push(l),
+      warn: (l) => logs.push(`WARN ${l}`),
+      redact: String
+    });
+    expect(generated?.htmlPath).toBe(path.join(dir, 'report.html'));
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toMatch(/^report: .*report\.html \(\d+ bytes\)$/);
+    const html = fs.readFileSync(path.join(dir, 'report.html'), 'utf8');
+    const laps = results.laps.byOutcome as Record<string, number>;
+    expect(html).toContain(`data-metric="laps.done">${laps.LAP_DONE}<`);
+    expect(html).toContain('PASS');
+    expect(html).not.toMatch(/https?:\/\//);
+    // the other artifacts are still there
+    expect(fs.existsSync(path.join(dir, 'summary.md'))).toBe(true);
+  }, 90_000);
+
+  it('a stale results.json from an earlier run is not rendered, and a render failure never throws', async () => {
+    const { outDir: dir } = await runRing(fixture, {}, { config: withActivityLog(fixture.config) });
+    const logs: string[] = [];
+    // "this run" started an hour after results.json was written
+    const stale = await renderReportAfterRun({
+      outDir: dir,
+      runStartedAtMs: Date.now() + 3_600_000,
+      log: (l) => logs.push(l),
+      warn: (l) => logs.push(`WARN ${l}`),
+      redact: String
+    });
+    expect(stale).toBeNull();
+    expect(logs[0]).toContain('no results.json written by this run');
+    expect(fs.existsSync(path.join(dir, 'report.html'))).toBe(false);
+
+    fs.writeFileSync(path.join(dir, 'results.json'), '{ not json');
+    const broken = await renderReportAfterRun({
+      outDir: dir,
+      runStartedAtMs: 0,
+      log: (l) => logs.push(l),
+      warn: (l) => logs.push(`WARN ${l}`),
+      redact: (e) => (e instanceof Error ? e.message : String(e))
+    });
+    expect(broken).toBeNull();
+    expect(logs.some((l) => l.startsWith('WARN report: HTML report failed:'))).toBe(true);
   }, 90_000);
 });
