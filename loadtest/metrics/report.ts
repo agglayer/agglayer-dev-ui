@@ -29,6 +29,7 @@ import type { MeasurementsBlock } from './measurement';
 
 import { isSuccessOutcome } from '../core/types';
 import { buildMeasurements, renderMeasurementsSection } from './measurement';
+import { redactEndpointClass, redactUrlForDisplay } from './redactReport';
 
 export const RESULTS_SCHEMA_VERSION = 1;
 
@@ -457,7 +458,8 @@ const renderConfiguration = (config: LoadtestConfig): string => {
 
   return [
     `- env: ${config.env}`,
-    `- aggkitProxyUrl: ${config.aggkitProxyUrl}`,
+    // S53: a proxy URL carrying userinfo, a query or a token-shaped path is never printed in full.
+    `- aggkitProxyUrl: ${redactUrlForDisplay(config.aggkitProxyUrl)}`,
     `- ring: ${ringLine}`,
     '',
     '**Assets**',
@@ -748,13 +750,14 @@ const renderTrackerActivityHeadline = (results: ResultsJson): string => {
   ].join('\n');
 };
 
-const renderEndpointLatencies = (results: ResultsJson): string => {
+const renderEndpointLatencies = (results: ResultsJson, config: LoadtestConfig): string => {
   const classes = Object.keys(results.http).sort();
   if (classes.length === 0) return 'No HTTP samples recorded.';
   const rows = classes.map((endpointClass) => {
     const entry = results.http[endpointClass];
     return [
-      endpointClass,
+      // S53 F1: an `rpc/<segment>` class recorded by an older tool can hold a provider key.
+      redactEndpointClass(endpointClass, config),
       describeHttpStats(entry.browser.ui),
       describeHttpStats(entry.browser.harness),
       describeHttpStats(entry.headless.ui),
@@ -823,7 +826,7 @@ const renderAutoclaimPolicy = (results: ResultsJson): string =>
     ]
   );
 
-const renderErrors = (results: ResultsJson): string => {
+const renderErrors = (results: ResultsJson, config: LoadtestConfig): string => {
   const { notReady, benignExternalAsset } = results.errors.suppressed;
   const suppressedTotal = notReady + benignExternalAsset;
 
@@ -855,7 +858,7 @@ const renderErrors = (results: ResultsJson): string => {
             String(e.count),
             e.firstSeen,
             e.lastSeen,
-            e.endpointClass ?? '-',
+            e.endpointClass === undefined ? '-' : redactEndpointClass(e.endpointClass, config),
             e.sample
           ])
         );
@@ -1008,10 +1011,10 @@ export const renderSummaryMd = (results: ResultsJson, config: LoadtestConfig): s
       [renderHopOutcomes(results), '', renderHopReliabilityByRouteMode(results)].join('\n')
     ].join('\n\n'),
     ['## Phase latencies', renderPhaseLatencies(results)].join('\n\n'),
-    ['## Endpoint latencies', renderEndpointLatencies(results)].join('\n\n'),
+    ['## Endpoint latencies', renderEndpointLatencies(results, config)].join('\n\n'),
     ['## Gate stalls', renderGateStalls(results)].join('\n\n'),
     ['## Autoclaim policy', renderAutoclaimPolicy(results)].join('\n\n'),
-    ['## Errors', renderErrors(results)].join('\n\n'),
+    ['## Errors', renderErrors(results, config)].join('\n\n'),
     ['## Resources', renderResources(results)].join('\n\n'),
     ['## Environment', renderEnvironment(results)].join('\n\n'),
     // S45 C4: appended AFTER `## Environment` so the existing section order is unchanged.

@@ -9,11 +9,13 @@ import type { ObservedRow } from '../../core/types';
 import {
   anyRowNonTerminal,
   BADGE_INTERVAL_MS,
+  buildChainKeyResolver,
   classifyEndpoint,
   effectivePollIntervalMs,
   initialActivityCadenceState,
   installTimingFetch,
   isActivityFetchDue,
+  isTokenLikeSegment,
   isZeroAddress,
   KeyedSerialQueue,
   mapActivityResponseText,
@@ -279,6 +281,116 @@ describe('classifyEndpoint', () => {
 
   it('falls back to the chain segment alone when the body is not JSON-RPC', () => {
     expect(classifyEndpoint('http://127.0.0.1:8555/l2rpc-001')).toBe('rpc/l2rpc-001');
+  });
+});
+
+// S53 / heavy-load design F1: RPC endpoint classes must never carry the URL's
+// path segment when that segment can be an API key. Every key below is fake.
+describe('classifyEndpoint — chain-key naming and token-shaped segments (F1)', () => {
+  const TOKEN = 'AbCdEf0123456789TokenXyz';
+  const body = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [] });
+  const chains = [
+    { key: 'SEPOLIA', rpcUrl: 'https://l1.example.invalid' },
+    { key: 'BALI_82', rpcUrl: `https://rpc.example.invalid/${TOKEN}` },
+    { key: 'BALI_85', rpcUrl: 'http://10.0.0.5:8545/' },
+    { key: 'DEVNET_A', rpcUrl: 'http://127.0.0.1:8555/l2rpc-001' }
+  ];
+  const resolve = buildChainKeyResolver(chains);
+
+  it('names RPC traffic by chain key when a resolver recognises the URL', () => {
+    expect(classifyEndpoint(`https://rpc.example.invalid/${TOKEN}`, body, resolve)).toBe(
+      'rpc/BALI_82/eth_call'
+    );
+    expect(classifyEndpoint('https://l1.example.invalid', body, resolve)).toBe(
+      'rpc/SEPOLIA/eth_call'
+    );
+    expect(classifyEndpoint('https://l1.example.invalid/', body, resolve)).toBe(
+      'rpc/SEPOLIA/eth_call'
+    );
+    expect(classifyEndpoint('http://10.0.0.5:8545', body, resolve)).toBe('rpc/BALI_85/eth_call');
+    expect(classifyEndpoint('http://127.0.0.1:8555/l2rpc-001', body, resolve)).toBe(
+      'rpc/DEVNET_A/eth_call'
+    );
+    expect(classifyEndpoint(`https://rpc.example.invalid/${TOKEN}`, undefined, resolve)).toBe(
+      'rpc/BALI_82'
+    );
+  });
+
+  it('never writes the keyed path segment, with or without a resolver', () => {
+    for (const resolver of [resolve, undefined]) {
+      const cls = classifyEndpoint(`https://rpc.example.invalid/${TOKEN}`, body, resolver);
+      expect(cls).not.toContain(TOKEN);
+    }
+    expect(classifyEndpoint(`https://rpc.example.invalid/${TOKEN}`, body)).toBe(
+      'rpc/redacted/eth_call'
+    );
+    expect(classifyEndpoint(`https://rpc.example.invalid/v3/${TOKEN}`, body)).toBe(
+      'rpc/redacted/eth_call'
+    );
+  });
+
+  it('keeps the legacy name for a short, non-token segment and for a bare host (no resolver)', () => {
+    expect(classifyEndpoint('http://127.0.0.1:8555/l1rpc', body)).toBe('rpc/l1rpc/eth_call');
+    expect(classifyEndpoint('https://l1.example.invalid', body)).toBe(
+      'rpc/l1.example.invalid/eth_call'
+    );
+    expect(classifyEndpoint('http://10.0.0.5:8545', body)).toBe('rpc/10.0.0.5/eth_call');
+  });
+
+  it('falls back to the legacy rule for a URL the resolver does not know, and ignores other origins or paths', () => {
+    expect(classifyEndpoint('http://127.0.0.1:8555/l1rpc', body, resolve)).toBe(
+      'rpc/l1rpc/eth_call'
+    );
+    expect(resolve('https://rpc.example.invalid/some-other-path')).toBeNull();
+    expect(resolve('https://other.example.invalid/' + TOKEN)).toBeNull();
+    expect(resolve('not a url')).toBeNull();
+  });
+
+  it('does not touch bridge/tracker classing', () => {
+    expect(
+      classifyEndpoint(
+        'http://proxy/aggkitapi/bridge/v1/claim-proof?network_id=1',
+        undefined,
+        resolve
+      )
+    ).toBe('bridge/claim-proof[1]');
+    expect(
+      classifyEndpoint('http://proxy/aggkitapi/tracker/v1/activity/from/0xabc', undefined, resolve)
+    ).toBe('tracker/activity');
+  });
+
+  it('isTokenLikeSegment: 16+ characters of [A-Za-z0-9_-], never a dotted host', () => {
+    expect(isTokenLikeSegment(TOKEN)).toBe(true);
+    expect(isTokenLikeSegment('a'.repeat(16))).toBe(true);
+    expect(isTokenLikeSegment('a'.repeat(15))).toBe(false);
+    expect(isTokenLikeSegment('l2rpc-001')).toBe(false);
+    expect(isTokenLikeSegment('rpc.example.invalid')).toBe(false);
+  });
+
+  it('installTimingFetch records the chain-key class (and never the key) for an RPC request', async () => {
+    const original = globalThis.fetch;
+    globalThis.fetch = (async () => new Response('{}', { status: 200 })) as typeof fetch;
+    const samples: { endpointClass: string }[] = [];
+    const handle = installTimingFetch(
+      {
+        recordHttpSample: (input: { endpointClass: string }) => samples.push(input),
+        recordUncontextedRequest: () => {}
+      } as unknown as Parameters<typeof installTimingFetch>[0],
+      undefined,
+      { resolveChainKey: resolve }
+    );
+    try {
+      await runWithFetchContext({ userId: 'u0', mode: 'headless' }, async () => {
+        await globalThis.fetch(`https://rpc.example.invalid/${TOKEN}`, {
+          method: 'POST',
+          body
+        });
+      });
+    } finally {
+      handle.uninstall();
+      globalThis.fetch = original;
+    }
+    expect(samples.map((s) => s.endpointClass)).toEqual(['rpc/BALI_82/eth_call']);
   });
 });
 

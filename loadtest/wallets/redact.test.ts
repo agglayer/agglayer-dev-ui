@@ -78,6 +78,89 @@ describe('redactSecrets', () => {
   });
 });
 
+// S53 / heavy-load design F2. All secrets below are obviously fake placeholders.
+describe('redactSecrets — URL rule (F2)', () => {
+  const TOKEN = 'AbCdEf0123456789TokenXyz';
+
+  it('reduces a URL whose path carries a provider key to scheme://host/<redacted>', () => {
+    const redacted = redactSecrets(
+      `HTTP request failed.\nURL: https://rpc.example.invalid/${TOKEN}\nDetails: boom`
+    );
+    expect(redacted).not.toContain(TOKEN);
+    expect(redacted).toContain('URL: https://rpc.example.invalid/<redacted>');
+    expect(redacted).toContain('Details: boom');
+  });
+
+  it('redacts a versioned key path (`/v3/<key>`) and keeps the port', () => {
+    const redacted = redactSecrets(`fetch failed for http://node.example.invalid:8545/v3/${TOKEN}`);
+    expect(redacted).toBe('fetch failed for http://node.example.invalid:8545/<redacted>');
+  });
+
+  it('redacts a query-string token', () => {
+    const redacted = redactSecrets('GET https://h.example.invalid/?apikey=SECRETQ failed');
+    expect(redacted).not.toContain('SECRETQ');
+    expect(redacted).toBe('GET https://h.example.invalid/<redacted> failed');
+  });
+
+  it('redacts a path-less URL that only has a query or a fragment', () => {
+    expect(redactSecrets('https://h.example.invalid?key=SECRETQ')).toBe(
+      'https://h.example.invalid/<redacted>'
+    );
+    expect(redactSecrets('https://h.example.invalid#SECRETF')).toBe(
+      'https://h.example.invalid/<redacted>'
+    );
+  });
+
+  it('drops userinfo (user:pass@host) and keeps only the host', () => {
+    const redacted = redactSecrets('connect to https://user:p4ss@h.example.invalid/x refused');
+    expect(redacted).not.toContain('p4ss');
+    expect(redacted).not.toContain('user:');
+    expect(redacted).toBe('connect to https://h.example.invalid/<redacted> refused');
+    expect(redactSecrets('https://user:p4ss@h.example.invalid')).toBe(
+      'https://h.example.invalid/<redacted>'
+    );
+  });
+
+  it('leaves a bare origin (with or without a trailing slash) alone: no secret there', () => {
+    expect(redactSecrets('proxy http://127.0.0.1:8555 is down')).toBe(
+      'proxy http://127.0.0.1:8555 is down'
+    );
+    expect(redactSecrets('proxy https://aggkit-proxy.example.invalid/ is down')).toBe(
+      'proxy https://aggkit-proxy.example.invalid/ is down'
+    );
+  });
+
+  it('does not swallow trailing sentence punctuation or closing brackets', () => {
+    expect(redactSecrets(`see https://h.example.invalid/${TOKEN}.`)).toBe(
+      'see https://h.example.invalid/<redacted>.'
+    );
+    expect(redactSecrets(`(https://h.example.invalid/${TOKEN}), then`)).toBe(
+      '(https://h.example.invalid/<redacted>), then'
+    );
+  });
+
+  it('redacts every URL in a message and a URL inside a JSON string', () => {
+    const redacted = redactSecrets(
+      `{"a":"https://one.example.invalid/${TOKEN}","b":"https://two.example.invalid/x?k=1"}`
+    );
+    expect(redacted).toBe(
+      '{"a":"https://one.example.invalid/<redacted>","b":"https://two.example.invalid/<redacted>"}'
+    );
+  });
+
+  it('still applies the key, mnemonic and hex rules to the same message', () => {
+    const redacted = redactSecrets(`https://h.example.invalid/${TOKEN} key ${PRIVATE_KEY}`);
+    expect(redacted).not.toContain(PRIVATE_KEY);
+    expect(redacted).toContain('https://h.example.invalid/<redacted>');
+    expect(redacted).toContain(`0x…${PRIVATE_KEY.slice(-4)}`);
+  });
+
+  it('redactError applies it to a thrown viem-style error', () => {
+    const error = new Error(`HTTP request failed.\n\nURL: https://rpc.example.invalid/${TOKEN}`);
+    expect(redactError(error)).not.toContain(TOKEN);
+  });
+});
+
 describe('redactError', () => {
   it('formats an Error message, redacted', () => {
     expect(redactError(new Error(`send failed, key ${PRIVATE_KEY}`))).toBe(

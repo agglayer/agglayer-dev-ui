@@ -38,8 +38,43 @@ const BARE_HEX_KEY_PATTERN = /\b[0-9a-fA-F]{64}\b/g;
 // stake.
 const MNEMONIC_PATTERN = /\b(?:[a-z]{3,8}\s+){11,23}[a-z]{3,8}\b/g;
 
+/**
+ * A path segment that could be a provider API key: 16+ characters of
+ * `[A-Za-z0-9_-]`. Hostnames contain dots and are never token-shaped. One rule
+ * shared by the run-time endpoint naming (`workers/headless/uiCallset.ts`) and
+ * the render-time rewrites (`metrics/redactReport.ts`), so a name written during
+ * a run and a name rewritten later never disagree.
+ */
+export const isTokenLikeSegment = (segment: string): boolean =>
+  /^[A-Za-z0-9_-]{16,}$/.test(segment);
+
+// S53 / heavy-load design F2: an RPC provider key lives in the URL itself
+// (`https://host/<key>`, `https://host/v3/<key>`, `?apikey=...`, or
+// `user:pass@host`), and viem transport errors embed `URL: <rpcUrl>` in their
+// message — none of the patterns above would catch that. Any http(s) URL in
+// free text that carries anything beyond a bare origin (userinfo, a path other
+// than `/`, a query or a fragment) is reduced to `scheme://host[:port]/<redacted>`.
+// A bare origin (`http://127.0.0.1:8545`) is left alone: it holds no secret and
+// keeps diagnostics readable. Trailing sentence punctuation is not part of the URL.
+const URL_PATTERN = /\bhttps?:\/\/[^\s"'<>`)\]}]+/gi;
+const URL_TRAILING_PUNCTUATION = /[.,;:!?]+$/;
+const URL_PARTS = /^(https?):\/\/([^/?#]*)([\s\S]*)$/i;
+
+const redactUrlMatch = (match: string): string => {
+  const trailing = URL_TRAILING_PUNCTUATION.exec(match)?.[0] ?? '';
+  const url = trailing === '' ? match : match.slice(0, -trailing.length);
+  const parts = URL_PARTS.exec(url);
+  if (parts === null) return match;
+  const [, scheme, authority, rest] = parts;
+  const hasUserinfo = authority.includes('@');
+  if (!hasUserinfo && (rest === '' || rest === '/')) return match;
+  const hostPort = authority.slice(authority.lastIndexOf('@') + 1);
+  return `${scheme.toLowerCase()}://${hostPort}/<redacted>${trailing}`;
+};
+
 export const redactSecrets = (text: string): string =>
   text
+    .replace(URL_PATTERN, redactUrlMatch)
     .replace(HEX_RUN_PATTERN, (match) => `0x…${match.slice(-4)}`)
     .replace(BARE_HEX_KEY_PATTERN, (match) => `…${match.slice(-4)}`)
     .replace(MNEMONIC_PATTERN, () => '<redacted mnemonic>');

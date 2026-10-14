@@ -892,7 +892,11 @@ describe('measurements — results.json `measurements` key and the summary secti
 
     expect(results.measurements?.probeIntervalMs).toBe(5000);
     expect(results.measurements?.hops).toHaveLength(1);
-    expect(results.measurements?.claimGas[0]).toMatchObject({ toNetworkId: 85, claimKind: 'eth', n: 1 });
+    expect(results.measurements?.claimGas[0]).toMatchObject({
+      toNetworkId: 85,
+      claimKind: 'eth',
+      n: 1
+    });
     expect(results.measurements?.stageLatency[0].deltas.claimProof).toStrictEqual({
       n: 1,
       min: 2000,
@@ -909,7 +913,9 @@ describe('measurements — results.json `measurements` key and the summary secti
       summary.indexOf('## Environment')
     );
     expect(summary).toContain('| 85 | eth | 1 |');
-    expect(summary).toContain('T3b-T3 tracker READY lag after claim-proof | 1 / 1000 / 1000 / 1000');
+    expect(summary).toContain(
+      'T3b-T3 tracker READY lag after claim-proof | 1 / 1000 / 1000 / 1000'
+    );
   });
 
   it('regenerates byte-identically from results.json (the `report --dir` path)', () => {
@@ -927,5 +933,71 @@ describe('measurements — results.json `measurements` key and the summary secti
     expect(renderSummaryMd(results, config)).toMatch(
       /## Claim gas and stage latency\n\nNo measurements recorded\.\n$/
     );
+  });
+});
+
+// S53 / heavy-load design F1 and §5: `summary.md` must not echo a provider key
+// through the proxy URL line or through an `rpc/<segment>` endpoint class, and a
+// keyless run must still render exactly as before. Every key below is fake.
+describe('renderSummaryMd — redaction of URLs and endpoint classes (S53)', () => {
+  const TOKEN = 'AbCdEf0123456789TokenXyz';
+
+  const keyedRun = () => {
+    const base = buildDevnetConfig();
+    const config: LoadtestConfig = {
+      ...base,
+      aggkitProxyUrl: 'https://proxy.example.invalid/gw?apikey=SECRETQ',
+      chains: base.chains.map((chain, index) =>
+        index === 0 ? { ...chain, rpcUrl: `https://rpc.example.invalid/${TOKEN}` } : chain
+      )
+    };
+    const collector = createCollector();
+    for (const endpointClass of [`rpc/${TOKEN}/eth_call`, 'rpc/l2rpc-001/eth_getBalance']) {
+      collector.recordHttpSample({
+        userId: 'u0',
+        mode: 'headless',
+        endpointClass,
+        method: 'POST',
+        status: 200,
+        durationMs: 5,
+        attempt: 0
+      });
+    }
+    collector.error({
+      userId: 'u0',
+      mode: 'headless',
+      errorClass: 'rpc_error',
+      message: 'RPC error: boom',
+      endpointClass: `rpc/${TOKEN}/eth_call`
+    });
+    return { config, results: buildResultsJson({ snapshot: collector.snapshot(), config }) };
+  };
+
+  it('prints neither the proxy URL query nor the keyed endpoint segment', () => {
+    const { config, results } = keyedRun();
+    const summary = renderSummaryMd(results, config);
+    expect(summary).not.toContain(TOKEN);
+    expect(summary).not.toContain('SECRETQ');
+    expect(summary).toContain('- aggkitProxyUrl: https://proxy.example.invalid/<redacted>');
+    expect(summary).toContain('rpc/L1/eth_call');
+  });
+
+  it('leaves a short path name (`l2rpc-001`) and a secret-free proxy URL exactly as before', () => {
+    const { config, results } = keyedRun();
+    const summary = renderSummaryMd(results, {
+      ...config,
+      aggkitProxyUrl: 'http://127.0.0.1:8555/aggkitapi'
+    });
+    expect(summary).toContain('- aggkitProxyUrl: http://127.0.0.1:8555/aggkitapi\n');
+    expect(summary).toContain('| rpc/l2rpc-001/eth_getBalance |');
+  });
+
+  it('regenerating from a keyed results.json (the `report --dir` path) also drops the key', () => {
+    const { config, results } = keyedRun();
+    const reloaded = JSON.parse(JSON.stringify(results)) as typeof results;
+    const summary = renderSummaryMd(reloaded, reloaded.config as LoadtestConfig);
+    expect(summary).not.toContain(TOKEN);
+    expect(summary).not.toContain('SECRETQ');
+    expect(config.chains[0].rpcUrl).toContain(TOKEN);
   });
 });
