@@ -56,6 +56,8 @@ interface FakeWorld {
   /** When true the receipt never arrives (the wait rejects as a timeout). */
   receiptNever: boolean;
   sendError: Error | null;
+  /** S58a M3: the node accepts and propagates the tx (the nonce moves on), but the reply is lost and the send rejects. */
+  broadcastThenError: Error | null;
   sends: Parameters<L1PumpClients['sendTransaction']>[0][];
   nonceReads: number;
   inFlightSends: number;
@@ -72,6 +74,7 @@ const fakeWorld = (over: Partial<FakeWorld> = {}): FakeWorld => ({
   receiptStatus: 'success',
   receiptNever: false,
   sendError: null,
+  broadcastThenError: null,
   sends: [],
   nonceReads: 0,
   inFlightSends: 0,
@@ -96,6 +99,7 @@ const fakeClients = (world: FakeWorld): L1PumpClients => ({
       if (world.sendError !== null) throw world.sendError;
       world.sends.push(args);
       world.nextNonce += 1;
+      if (world.broadcastThenError !== null) throw world.broadcastThenError;
       return `0x${world.sends.length.toString(16).padStart(64, '0')}` as Hex;
     } finally {
       world.inFlightSends -= 1;
@@ -520,6 +524,33 @@ describe('l1Pump: spend cap', () => {
     // 528 000 gas limit x 5 gwei + 0 amount.
     expect(skip.cumulativeSpendWei).toBe((BigInt(528_000) * BigInt(5) * GWEI).toString());
     await h.pump.stop({ waitForReceipt: false });
+  });
+
+  // S58a M3: a send that errors AFTER the node accepted the tx still costs gas. The next tick
+  // reads the pending nonce (already moved on) and would send again, so the spend must count.
+  it('a send that errors after the tx was broadcast is counted at its worst case, so the cap still binds', async () => {
+    const h = harness({ broadcastThenError: new Error('HTTP request failed. Status: 504') });
+    h.pump.start();
+    await vi.advanceTimersByTimeAsync(0);
+    const worst = BigInt(528_000) * BigInt(5) * GWEI;
+    expect(h.pump.progress().committedWei).toBe(worst);
+
+    // Keep failing the same way for 10 hours of ticks: 0.07 ETH cap / 0.00264 worst case = 26 txs at most.
+    for (let i = 0; i < 60; i += 1) await vi.advanceTimersByTimeAsync(600_000);
+    expect(h.world.sends.length).toBeLessThanOrEqual(26);
+    expect(h.pump.progress().committedWei).toBeLessThanOrEqual(BigInt(7) * ETH / BigInt(100));
+    expect(h.records('pump_skipped').map((r) => r.reason)).toContain('cap_reached');
+    await h.pump.stop({ waitForReceipt: false });
+  });
+
+  it('a send that is rejected before broadcast (the pending nonce did not move) counts nothing', async () => {
+    const h = harness({ sendError: new Error('insufficient funds for gas * price + value') });
+    h.pump.start();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(600_000);
+    expect(h.world.sends).toHaveLength(0);
+    expect(h.pump.progress().committedWei).toBe(BigInt(0));
+    await h.pump.stop();
   });
 
   it('a cap too small for even one worst-case deposit sends nothing and stops at once', async () => {

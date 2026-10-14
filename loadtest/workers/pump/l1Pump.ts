@@ -149,11 +149,35 @@ export const createL1Pump = (options: L1PumpOptions): L1Pump => {
   let spentWei = BigInt(0);
   let settledDeposits = 0;
   let pendingTx: PendingTx | null = null;
+  // S58a M3: worst-case cost of sends that errored AFTER the node may have accepted the tx
+  // (reply lost: timeout, 502, reset). The hash is unknown, so they can never be settled;
+  // they stay counted at their worst case for the rest of the run.
+  let uncertainSendWei = BigInt(0);
   let loopDone: Promise<void> = Promise.resolve();
   let wake: (() => void) | null = null;
   const pumpTxHashes = new Set<string>();
 
-  const committedWei = (): bigint => spentWei + (pendingTx?.worstCaseWei ?? BigInt(0));
+  const committedWei = (): bigint =>
+    spentWei + (pendingTx?.worstCaseWei ?? BigInt(0)) + uncertainSendWei;
+
+  /**
+   * A send that rejected may still have been broadcast. The pending nonce tells: if it moved
+   * past the nonce this send used, the node has the tx; if the check itself fails, assume it did.
+   */
+  const countUncertainSend = async (nonce: number, worstCaseWei: bigint): Promise<void> => {
+    let broadcast = true;
+    try {
+      broadcast = (await clients.getTransactionCount({ address: sender })) > nonce;
+    } catch {
+      // unknown: stay conservative
+    }
+    if (broadcast) {
+      uncertainSendWei += worstCaseWei;
+      logger(
+        `pump: send errored but the pending nonce moved on; counting ${formatEther(worstCaseWei)} ETH at its worst case (${formatEther(uncertainSendWei)} ETH uncertain so far)`
+      );
+    }
+  };
 
   const stateRecord = (state: 'started' | 'stopped') => ({
     kind: 'state' as const,
@@ -305,16 +329,22 @@ export const createL1Pump = (options: L1PumpOptions): L1Pump => {
       const priority = await clients.estimateMaxPriorityFeePerGas();
       const sentAt = clock.now();
       // `maxFeePerGas` is the pause threshold itself, so a sent tx can never pay more.
-      const hash = await clients.sendTransaction({
-        to: bridge,
-        data,
-        value: schedule.amountWei,
-        gas: decision.gasLimit,
-        maxFeePerGas: schedule.maxGasPriceWei,
-        maxPriorityFeePerGas:
-          priority < schedule.maxGasPriceWei ? priority : schedule.maxGasPriceWei,
-        nonce
-      });
+      let hash: Hex;
+      try {
+        hash = await clients.sendTransaction({
+          to: bridge,
+          data,
+          value: schedule.amountWei,
+          gas: decision.gasLimit,
+          maxFeePerGas: schedule.maxGasPriceWei,
+          maxPriorityFeePerGas:
+            priority < schedule.maxGasPriceWei ? priority : schedule.maxGasPriceWei,
+          nonce
+        });
+      } catch (error) {
+        await countUncertainSend(nonce, decision.worstCaseWei);
+        throw error;
+      }
       // Registered at send time, not at settlement, so a poller that sees the
       // leaf before the receipt wait returns still attributes it to the pump.
       pumpTxHashes.add(hash.toLowerCase());
