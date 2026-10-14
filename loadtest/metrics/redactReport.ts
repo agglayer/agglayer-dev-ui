@@ -59,6 +59,30 @@ export const redactUrlForDisplay = (url: string): string => {
   return secretShaped ? `${parsed.protocol}//${parsed.host}/<redacted>` : url;
 };
 
+/**
+ * What `results.json` stores for a chain's `rpcUrl` (S54): a URL that carries
+ * userinfo, a query, a fragment or any path (`https://host/<api key>`,
+ * `/v3/<key>`, `?apikey=...`) is cut down to `scheme://host[:port]/<redacted>`,
+ * so a run never writes a keyed provider URL into `results.json`. A bare origin
+ * (`http://203.0.113.10:8545`, a public node) is kept as is. Unparseable input
+ * becomes `<redacted url>`.
+ */
+export const maskRpcUrl = (url: string): string => {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return '<redacted url>';
+  }
+  const hasMore =
+    (parsed.pathname !== '/' && parsed.pathname !== '') ||
+    parsed.search !== '' ||
+    parsed.hash !== '' ||
+    parsed.username !== '' ||
+    parsed.password !== '';
+  return hasMore ? `${parsed.protocol}//${parsed.host}/<redacted>` : url;
+};
+
 // ---------------------------------------------------------------------------
 // Secret references
 // ---------------------------------------------------------------------------

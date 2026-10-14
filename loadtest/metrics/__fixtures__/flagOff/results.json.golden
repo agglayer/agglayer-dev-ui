@@ -24,7 +24,7 @@
         "key": "L1",
         "chainId": 271828,
         "networkId": 0,
-        "rpcUrl": "http://127.0.0.1:8555/l1rpc",
+        "rpcUrl": "http://127.0.0.1:8555/<redacted>",
         "bridgeAddress": "0xC8cbEBf950B9Df44d987c8619f092beA980fF038",
         "explorerUrl": "",
         "nativeSymbol": "ETH"
@@ -33,7 +33,7 @@
         "key": "L2A",
         "chainId": 20201,
         "networkId": 1,
-        "rpcUrl": "http://127.0.0.1:8555/l2rpc-001",
+        "rpcUrl": "http://127.0.0.1:8555/<redacted>",
         "bridgeAddress": "0xC8cbEBf950B9Df44d987c8619f092beA980fF038",
         "explorerUrl": "",
         "nativeSymbol": "ETH"
@@ -42,7 +42,7 @@
         "key": "L2B",
         "chainId": 20202,
         "networkId": 2,
-        "rpcUrl": "http://127.0.0.1:8555/l2rpc-002",
+        "rpcUrl": "http://127.0.0.1:8555/<redacted>",
         "bridgeAddress": "0xC8cbEBf950B9Df44d987c8619f092beA980fF038",
         "explorerUrl": "",
         "nativeSymbol": "ETH"

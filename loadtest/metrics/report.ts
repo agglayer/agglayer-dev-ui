@@ -34,7 +34,7 @@ import type { MeasurementsBlock } from './measurement';
 
 import { isSuccessOutcome } from '../core/types';
 import { buildMeasurements, renderMeasurementsSection } from './measurement';
-import { redactEndpointClass, redactUrlForDisplay } from './redactReport';
+import { maskRpcUrl, redactEndpointClass, redactUrlForDisplay } from './redactReport';
 
 export const RESULTS_SCHEMA_VERSION = 1;
 
@@ -200,6 +200,17 @@ const isSecretRefShape = (value: unknown): value is { env: string } | { file: st
   );
 };
 
+// S54: URL-valued config fields. `rpcUrl` (a provider key lives in its path or
+// query) is masked to the host by `maskRpcUrl`; the other URLs only when they
+// carry userinfo, a query or a token-shaped segment (`redactUrlForDisplay`), so
+// a keyless config is stored exactly as before.
+const URL_FIELD_MASK: Readonly<Record<string, (url: string) => string>> = {
+  rpcUrl: maskRpcUrl,
+  explorerUrl: redactUrlForDisplay,
+  aggkitProxyUrl: redactUrlForDisplay,
+  uiBaseUrl: redactUrlForDisplay
+};
+
 export const redactConfigForReport = (value: unknown): unknown => {
   if (isSecretRefShape(value)) {
     const ref = 'env' in value ? `env:${value.env}` : `file:${value.file}`;
@@ -210,7 +221,9 @@ export const redactConfigForReport = (value: unknown): unknown => {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>).map(([k, v]) => [
         k,
-        redactConfigForReport(v)
+        typeof v === 'string' && URL_FIELD_MASK[k] !== undefined && v !== ''
+          ? URL_FIELD_MASK[k](v)
+          : redactConfigForReport(v)
       ])
     );
   }

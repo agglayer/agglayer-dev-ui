@@ -84,6 +84,80 @@ describe('redactConfigForReport — DESIGN §6.1 "every secretRef replaced by {r
   });
 });
 
+describe('redactConfigForReport — RPC URLs are masked to the host (S54)', () => {
+  // Obviously fake: the host is a reserved .invalid name and the "key" spells out its purpose.
+  const FAKE_KEY = 'FAKEKEYFAKEKEYFAKEKEY0123456789';
+
+  it('keeps only scheme and host for a URL carrying a path token, a query or userinfo', () => {
+    const input = {
+      chains: [
+        { key: 'A', rpcUrl: `https://rpc.example.invalid/${FAKE_KEY}` },
+        { key: 'B', rpcUrl: `https://rpc.example.invalid/v3/${FAKE_KEY}` },
+        { key: 'C', rpcUrl: `https://rpc.example.invalid:8443/?apikey=${FAKE_KEY}` },
+        { key: 'D', rpcUrl: `https://user:${FAKE_KEY}@rpc.example.invalid` }
+      ]
+    };
+    const out = JSON.stringify(redactConfigForReport(input));
+    expect(out).not.toContain(FAKE_KEY);
+    expect(redactConfigForReport(input)).toStrictEqual({
+      chains: [
+        { key: 'A', rpcUrl: 'https://rpc.example.invalid/<redacted>' },
+        { key: 'B', rpcUrl: 'https://rpc.example.invalid/<redacted>' },
+        { key: 'C', rpcUrl: 'https://rpc.example.invalid:8443/<redacted>' },
+        { key: 'D', rpcUrl: 'https://rpc.example.invalid/<redacted>' }
+      ]
+    });
+  });
+
+  it('leaves a bare-origin RPC URL (a public node, no token) and an unset URL untouched', () => {
+    const input = {
+      chains: [
+        { key: 'A', rpcUrl: 'http://127.0.0.1:8545' },
+        { key: 'B', rpcUrl: 'https://rpc.example.invalid/' },
+        { key: 'C', rpcUrl: '' }
+      ]
+    };
+    expect(redactConfigForReport(input)).toStrictEqual(input);
+  });
+
+  it('masks an unparseable RPC URL instead of storing it', () => {
+    expect(redactConfigForReport({ rpcUrl: `not a url ${FAKE_KEY}` })).toStrictEqual({
+      rpcUrl: '<redacted url>'
+    });
+  });
+
+  it('applies the display redaction to the other URL fields only when they hold a secret shape', () => {
+    const out = redactConfigForReport({
+      aggkitProxyUrl: 'http://proxy.example.invalid/aggkitapi',
+      explorerUrl: `https://explorer.example.invalid/?apikey=${FAKE_KEY}`
+    }) as Record<string, string>;
+    expect(out.aggkitProxyUrl).toBe('http://proxy.example.invalid/aggkitapi');
+    expect(out.explorerUrl).toBe('https://explorer.example.invalid/<redacted>');
+  });
+
+  it('never stores the key in the results.json a run writes', () => {
+    const base = buildDevnetConfig();
+    const keyed: LoadtestConfig = {
+      ...base,
+      chains: base.chains.map((chain, index) =>
+        index === 0 ? { ...chain, rpcUrl: `https://rpc.example.invalid/${FAKE_KEY}` } : chain
+      )
+    };
+    const collector = createCollector({ clock: { now: () => 1_000 } });
+    collector.runStart({
+      toolVersion: 't',
+      sdkVersion: 's',
+      host: { cores: 1, totalMemMb: 1, platform: 'linux' },
+      rampUpSeconds: 0
+    });
+    const results = buildResultsJson({ snapshot: collector.snapshot(), config: keyed });
+    expect(JSON.stringify(results)).not.toContain(FAKE_KEY);
+    expect(renderSummaryMd(results, keyed)).not.toContain(FAKE_KEY);
+    const chains = (results.config as { chains: { rpcUrl: string }[] }).chains;
+    expect(chains[0].rpcUrl).toBe('https://rpc.example.invalid/<redacted>');
+  });
+});
+
 describe('requestedFromConfig / achievedFromSnapshot / checkThroughputIdentity (DESIGN §5.5 invariant 1)', () => {
   it('derives requested load from config', () => {
     const config = buildDevnetConfig();
