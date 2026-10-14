@@ -301,11 +301,62 @@ const gasSchema = z
 // unchanged. `stageProbeIntervalMs` is the poll interval of the harness-origin
 // stage probe (headless users only) and the resolution reported next to the
 // stage-latency table.
+//
+// S53 (heavy-load design §1.4): every field is optional so a block can carry
+// only the new samplers. A field that is absent means that measurement is not
+// taken and nothing it would write appears in `results.json` / `activity.ndjson`:
+//   - `walletBalanceIntervalMs` (M1): periodic `eth_getBalance` of every user
+//     wallet on every non-L1 ring chain.
+//   - `l1InfoTree` (M3): polls the L1 GER manager's `UpdateL1InfoTreeV2` logs.
+//   - `httpWindowMs` (M4): per-window HTTP status/latency records (ndjson only).
+//   - `claimPreState` (M9): wrapped-token supply and recipient balance read
+//     just before a wrapped-token claim.
 const measurementSchema = z
   .object({
-    stageProbeIntervalMs: z.number().int().min(1000)
+    stageProbeIntervalMs: z.number().int().min(1000).optional(),
+    walletBalanceIntervalMs: z.number().int().min(60_000).optional(),
+    l1InfoTree: z
+      .object({
+        pollIntervalMs: z.number().int().min(15_000),
+        gerManagerAddress: nonZeroAddressString.optional()
+      })
+      .strict()
+      .optional(),
+    httpWindowMs: z.number().int().min(10_000).optional(),
+    claimPreState: z.boolean().optional()
+  })
+  .strict()
+  .refine((value) => Object.values(value).some((field) => field !== undefined), {
+    // Keeps the pre-S53 behaviour that an empty `measurement: {}` is rejected
+    // (it used to fail on the missing `stageProbeIntervalMs`).
+    message: 'MEASUREMENT_EMPTY: measurement must set at least one field'
+  });
+
+// S53 (heavy-load design §1.3): the optional L1 deposit pump. A harness-side
+// loop that sends one `bridgeAsset(destination, self, amount, 0x0, true, 0x)`
+// on the L1 every `intervalSeconds` from a dedicated wallet, so the L1 info
+// tree keeps gaining leaves while the users bridge. `enabled: false` behaves
+// exactly like an absent block, so a template can carry it switched off. The
+// cross-field codes are enforced in `crossFieldValidation` below and re-checked
+// by the runner once `--users` has been applied (`pumpWalletOverlap`).
+const pumpSchema = z
+  .object({
+    enabled: z.boolean(),
+    chainKey: chainKeyString,
+    destinationNetworkId: z.number().int().min(0),
+    walletIndex: z.number().int().min(0),
+    // `0` is accepted by the bridge (design F7), so no dust is left behind.
+    amount: nonNegativeDecimalString.default('0'),
+    // Floor enforced as `PUMP_INTERVAL_TOO_SHORT` in `crossFieldValidation`.
+    intervalSeconds: z.number().int().positive(),
+    maxTotalSpend: positiveDecimalString,
+    maxGasPriceGwei: z.number().positive()
   })
   .strict();
+
+export type LoadtestPump = z.infer<typeof pumpSchema>;
+
+export const PUMP_MIN_INTERVAL_SECONDS = 60;
 
 // `YYYYMMDDTHHMMSSZ` — DESIGN §2.1's "ISO-8601 basic timestamp".
 const isoBasicTimestamp = (): string =>
@@ -344,6 +395,7 @@ const rawConfigSchema = z
     timeouts: timeoutsSchema,
     gas: gasSchema,
     measurement: measurementSchema.optional(),
+    pump: pumpSchema.optional(),
     output: outputSchema
   })
   .strict();
@@ -385,6 +437,24 @@ const getRingHops = (ring: string[]): string[] => {
     hops.push(formatHopLabel(ring[index], ring[index + 1]));
   }
   return hops;
+};
+
+/**
+ * `PUMP_WALLET_OVERLAPS_USERS` message, or `null` when the pump wallet sits
+ * outside the user wallet range `[startIndex, startIndex + total)`. Shared by
+ * the schema and the runner (which re-runs it after `--users` has changed
+ * `users.total`, so a larger user count cannot silently reach the pump index).
+ */
+export const pumpWalletOverlap = (
+  users: Pick<LoadtestUsers, 'total' | 'wallets'>,
+  pump: Pick<LoadtestPump, 'walletIndex'>
+): string | null => {
+  if (!('mnemonicRef' in users.wallets)) return null;
+  const { startIndex } = users.wallets;
+  if (pump.walletIndex >= startIndex && pump.walletIndex < startIndex + users.total) {
+    return `pump.walletIndex ${pump.walletIndex} falls inside the user wallet range [${startIndex}, ${startIndex + users.total}) — the pump wallet must not also be a user`;
+  }
+  return null;
 };
 
 const crossFieldValidation = (value: RawLoadtestConfig, ctx: z.RefinementCtx): void => {
@@ -617,6 +687,45 @@ const crossFieldValidation = (value: RawLoadtestConfig, ctx: z.RefinementCtx): v
         `env is "${value.env}" but the L1 chain ("${l1Chain.key}") has chainId ${ETHEREUM_MAINNET_CHAIN_ID} (Ethereum mainnet) — this would skip R0's mainnet confirmation gate on real mainnet chain ids`,
         ['chains']
       );
+    }
+  }
+
+  // --- S53 pump block (skipped entirely when `enabled` is false) ----------
+  if (value.pump !== undefined && value.pump.enabled) {
+    const { pump } = value;
+    const pumpChain = value.chains.find((chain) => chain.key === pump.chainKey);
+    if (pumpChain === undefined || pumpChain.networkId !== 0) {
+      addIssue(
+        'PUMP_CHAIN_NOT_L1',
+        `pump.chainKey "${pump.chainKey}" must name the chain with networkId 0 (the L1)`,
+        ['pump', 'chainKey']
+      );
+    }
+    const destination = value.chains.find((chain) => chain.networkId === pump.destinationNetworkId);
+    if (destination === undefined || destination.networkId === 0) {
+      addIssue(
+        'PUMP_DESTINATION_UNKNOWN',
+        `pump.destinationNetworkId ${pump.destinationNetworkId} must be the networkId of a configured chain other than the L1`,
+        ['pump', 'destinationNetworkId']
+      );
+    }
+    if (pump.intervalSeconds < PUMP_MIN_INTERVAL_SECONDS) {
+      addIssue(
+        'PUMP_INTERVAL_TOO_SHORT',
+        `pump.intervalSeconds ${pump.intervalSeconds} is below the ${PUMP_MIN_INTERVAL_SECONDS}s floor`,
+        ['pump', 'intervalSeconds']
+      );
+    }
+    if (!('mnemonicRef' in value.users.wallets)) {
+      addIssue(
+        'PUMP_WALLET_REQUIRES_MNEMONIC',
+        'the pump wallet is derived from users.wallets.mnemonicRef at pump.walletIndex, so a privateKeysRef wallet set cannot be combined with a pump',
+        ['pump', 'walletIndex']
+      );
+    } else {
+      const overlap = pumpWalletOverlap(value.users, pump);
+      if (overlap !== null)
+        addIssue('PUMP_WALLET_OVERLAPS_USERS', overlap, ['pump', 'walletIndex']);
     }
   }
 
