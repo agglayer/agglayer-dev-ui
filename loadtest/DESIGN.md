@@ -149,6 +149,21 @@ the schema may not have defaults that are lost on write-back.
 | `browser.recycleContextAfterLaps` | int ≥1 | no | `10` | §7.4 |
 | `timeouts.*` | ints (ms) | no | §3.3 table | every key has a default; all overridable |
 | `gas.bridgeGasOffset` | int ≥0 | no | `300000` | headless only (§9.4) |
+| `measurement` | object (optional) | no | absent = off | strict; at least one field when present (`MEASUREMENT_EMPTY`). Every field below is optional; an absent field takes no measurement and writes nothing |
+| `measurement.stageProbeIntervalMs` | int ≥1000 | no | — | harness-origin stage probe, headless users only (S45) |
+| `measurement.walletBalanceIntervalMs` | int ≥60000 | no | — | periodic `eth_getBalance` of every user wallet on every non-L1 ring chain (heavy-load M1; feeds SC9) |
+| `measurement.l1InfoTree` | `{pollIntervalMs, gerManagerAddress?}` | no | — | `pollIntervalMs` ≥15000; polls the L1 GER manager's `UpdateL1InfoTreeV2` logs; `gerManagerAddress` (non-zero) skips discovery through the L1 bridge (M3) |
+| `measurement.httpWindowMs` | int ≥10000 | no | — | per-window HTTP status/latency records, ndjson only (M4) |
+| `measurement.claimPreState` | bool | no | — | read wrapped-token supply and recipient balance just before a wrapped-token claim, headless only (M9) |
+| `pump` | object (optional) | no | absent = off | the L1 deposit pump (§4.6); strict. `enabled: false` behaves like an absent block |
+| `pump.enabled` | bool | iff `pump` | — | — |
+| `pump.chainKey` | chain key | iff `pump` | — | must name the chain with `networkId 0` (`PUMP_CHAIN_NOT_L1`) |
+| `pump.destinationNetworkId` | int ≥0 | iff `pump` | — | the `networkId` of a configured non-L1 chain (`PUMP_DESTINATION_UNKNOWN`) |
+| `pump.walletIndex` | int ≥0 | iff `pump` | — | mnemonic index of the pump wallet; outside `[startIndex, startIndex + users.total)` (`PUMP_WALLET_OVERLAPS_USERS`, re-checked after `--users`); requires `mnemonicRef` wallets (`PUMP_WALLET_REQUIRES_MNEMONIC`) |
+| `pump.amount` | decimal string ≥0 | no | `"0"` | ETH per deposit; the bridge accepts 0 |
+| `pump.intervalSeconds` | int >0 | iff `pump` | — | ≥60 (`PUMP_INTERVAL_TOO_SHORT`) |
+| `pump.maxTotalSpend` | decimal string >0 | iff `pump` | — | ETH; hard spend cap for the run. Preflight needs the pump wallet to hold at least this much (`PUMP_UNDERFUNDED`) |
+| `pump.maxGasPriceGwei` | number >0 | iff `pump` | — | pause threshold and `maxFeePerGas` of every pump tx |
 | `output.dir` | path | no | `loadtest-results/<ISO-8601 basic timestamp>` | `validate` **warns** (does not fail) when `output.dir` is inside the repo and not matched by `.gitignore`. `.gitignore` has no `loadtest` entry today — S04 adds `loadtest.config.json` and `loadtest-results/` |
 | `output.activityLog` | bool | no | `true` | writes `activity.ndjson` |
 
@@ -660,6 +675,35 @@ never calls them.
 
 ---
 
+### 4.6 The L1 deposit pump (S53)
+
+Optional (`pump` block, §2.1), off by default. A harness-side loop (`workers/pump/l1Pump.ts`,
+schedule in `core/pumpSchedule.ts`) sending one `bridgeAsset(destinationNetworkId, self,
+amount, 0x0, forceUpdateGlobalExitRoot = true, 0x)` on the L1 per `intervalSeconds` from the
+mnemonic wallet at `pump.walletIndex`. Without `forceUpdateGlobalExitRoot` the GER would not
+change and the deposit would add no L1 info-tree leaf.
+
+- **Not user traffic.** It never touches a hop, lap, tick or the verdict; records are `pump_*`
+  ndjson kinds and the `results.json` `pump` block (§6.1); its RPC requests run in a `harness`
+  fetch context.
+- **One tx in flight.** The nonce is read from `pending` before each send; a tick while a
+  deposit has no receipt is skipped (`previous_pending`).
+- **Spend cap.** Committed spend = actual cost of settled deposits plus the worst case
+  (`1.2 x estimate x maxFeePerGas + amount`) of a pending one. When the next deposit could
+  exceed `maxTotalSpend` the pump stops (`cap_reached`). `maxGasPriceGwei` is both the pause
+  threshold (`gas_price` skip) and the `maxFeePerGas` of every pump tx, so a sent tx can never
+  pay more.
+- **Funding.** `fund` does not fund the pump wallet. Preflight fails `PUMP_UNDERFUNDED` when it
+  holds less than `maxTotalSpend` on the L1 (this is the tool half of SC10).
+- **Lifetime.** Starts after the L1 info-tree baseline is read, stops at the end of the run
+  after the drain (bounded receipt wait); on a failure path it stops without waiting.
+
+**Measurement caveat.** A pump-off baseline means *no tool deposits*, not *no new L1 info-tree
+leaves*: under load the PP network settles certificates often and each settlement that changes
+its exit root adds a leaf that also unblocks 85-origin hops. The comparison is therefore only
+readable with `measurement.l1InfoTree` on in both runs, which counts the leaves in the window
+and attributes each to the pump or to another source (`fromPump`).
+
 ## 5. Metrics and error taxonomy
 
 ### 5.1 Phase timers (histograms: p50/p90/p99/max, count)
@@ -723,6 +767,7 @@ is the only signal available — and those cases are listed here explicitly.
 | Class | Trigger | Notes |
 |---|---|---|
 | `not_ready` | `/bridge/v1/l1-info-tree-index` 404/500 with the documented "not been included on the L1 Info Tree yet" body; `/bridge/v1/injected-l1-info-leaf` 404 "GER not yet injected"; `/bridge/v1/claim-proof` 404 "has not indexed" | **Not an error.** Same allowlist `tests/bridge/console-hygiene.spec.ts:66-77` already applies. Counted as a gate stall (§5.4), excluded from the error report |
+| `tracker_not_ready` | **S53 (heavy-load F3/F4).** `/tracker/v1/activity` answers **503** with a body containing "not ready yet" (an address the tracker has not registered yet) | **Not a failure and not `proxy_5xx`.** Never fails a hop, excluded from SC4, own row in the errors table. The headless activity poller does not retry it after 300 ms; the runner backs off to the UI cadence (5 s). Keyed on the body text, so a differently worded 503 fails safe into `proxy_5xx` |
 | `proxy_4xx` | any other 4xx from `{proxy}/…` | 400 = missing `network_id`; 404 = unknown network (aggkit-proxy contract, plan §2) |
 | `proxy_5xx` | any other 5xx from `{proxy}/…` | 502 = backend down |
 | `activity_warning` | **S40 (finding C13).** A per-network `warnings[]` entry on a *successful* (200) `tracker/activity` response, e.g. "bridge service for network N is not fully synchronized, some bridges may still be missing" | Recorded as `activity_warning[network_id=N]: …`; **not** `proxy_5xx` (no 5xx occurred) and never fails a hop. Appears in the error-by-class table |
@@ -821,6 +866,33 @@ Written to `output.dir` (default `loadtest-results/<timestamp>/`, gitignored).
 }
 ```
 
+**Heavy-load additions (S53/S54).** All are optional and absent when the feature is off, so a
+run without a `pump` or `measurement` block keeps the shape above (flag-off golden test):
+
+- `pump` (only when the pump ran): `enabled`, `sender`, `destinationNetworkId`, `amountWei`,
+  `intervalSeconds`, `maxTotalSpendWei`, `maxGasPriceWei`, `deposits[]`
+  (`txHash`, `blockNumber`, `depositCount`, `status`, `gasUsed`, `effectiveGasPrice`, `costWei`,
+  `sentAt`, `minedObservedAt`), `skipped{gas_price, cap_reached, previous_pending, send_error}`,
+  `totalSpendWei`, `pendingAtStop`.
+- `walletBalances[]` (`measurement.walletBalanceIntervalMs`): `ts`, `chainKey`, `n`, `minWei`,
+  `medianWei`, `maxWei`, `lowest[]`.
+- `l1InfoTree` (`measurement.l1InfoTree`): `gerManagerAddress`, `baselineLeafCount`, `leaves[]`
+  (`blockNumber`, `leafCount`, `txHash`, `minTimestamp`, `fromPump`), `pollErrors`.
+- `measurements.hops[].claim.preState` (`measurement.claimPreState`):
+  `{wrappedSupplyBefore, recipientBalanceBefore}`; `measurements.hops[].approve`
+  (`txHash`, `gas`) whenever a `measurement` block is present.
+- RPC endpoint classes in `http` are named `rpc/<CHAIN_KEY>/<method>` (§6.4).
+- `exports`: `computeVerdict(results)` (the §6.3 headline) and `failureRates(results)`
+  (`lapFailureRate`, `hardHopFailureRate`), so the strict verdict can be read next to the rates.
+
+**Config redaction in `results.json`.** `config` is the validated config with (a) every secret
+reference re-shaped to `{"ref": "env:NAME"}`, (b) every `chains[].rpcUrl` that has a path, query,
+fragment or userinfo cut to `scheme://host[:port]/<redacted>` (a bare origin is kept), and (c)
+`explorerUrl`, `aggkitProxyUrl` and `uiBaseUrl` masked the same way only when they look
+secret-shaped (userinfo, query, fragment or a token-like path segment). A run directory written
+before S54 may still hold the unmasked URL; it is not rewritten, and every human-facing report
+(`summary.md`, `report.html`) redacts at render time (`metrics/redactReport.ts`).
+
 ### 6.2 `activity.ndjson`
 
 Append-only, one JSON object per line, flushed as events occur so a killed
@@ -832,6 +904,17 @@ plus kind-specific fields. Kinds:
 `activity_row` (hash, status, tracking step name), `claim_attempt`,
 `error`, `hop_end` (outcome), `lap_end` (outcome), `resource_sample`,
 `run_end`.
+
+**Written vs still not written (as of S53).** The kinds actually written are: `run_start`,
+`user_ready`, `tick`, `tick_skipped`, `hop_state`, `error`, `hop_end`, `lap_end`,
+`resource_sample`, `run_end`, `hop_measurement` (one per hop, S45), plus the S53 kinds
+`tx_sent` and `tx_receipt` (**only when a `measurement` block is configured**, one per approve,
+bridge and claim tx, so SC5 has a denominator), `pump_state`, `pump_deposit`, `pump_skipped`
+(pump on), `wallet_balance` (`walletBalanceIntervalMs`), `l1_info_leaf` and
+`l1_info_poll_error` (`l1InfoTree`), and `http_window` (`httpWindowMs`). **Still not written**,
+though the kinds list above names them: **`activity_row`** and **`claim_attempt`** (their
+collector methods have no caller). They are a known DESIGN/code mismatch, deferred; nothing in
+the reports reads them.
 
 Carrying the T-number is what makes the run auditable against §3.2: S20 can
 assert every `hop_state` line names a transition that exists in this document.
@@ -859,6 +942,63 @@ acceptance):
    and one redacted sample each.
 10. `## Resources` — peak/mean tool RSS and CPU, per-browser-process RSS.
 11. `## Environment` — tool version, SDK version, image tags, host facts.
+
+### 6.4 `report.html` (S54)
+
+The human entrypoint of a run; `results.json`, `activity.ndjson` and `summary.md` are for
+debugging and scripting. Written to `<out>/report.html` by `run` in a `finally` (aborted and
+failed runs included; a render failure only logs a warning), and regenerated from an existing
+run with `pnpm loadtest report --dir <out> --html [--html-out <file>] [--max-bytes N]`.
+Code: `metrics/html/` (`model.ts` builds a pure model from `results.json` plus a streaming digest
+of `activity.ndjson`; `render.ts`, `svg.ts`, `styles.ts` and `client.ts` turn it into one page).
+
+Sections, in order: Verdict (banner, run identity, strict verdict, failure rates), Key figures,
+Throughput, Hop outcomes, Latency distributions per route, Lap and hop timeline, Claim gas, Gate
+stalls, Errors by class, Proxy and endpoint health, Tool resources over time, Pump activity,
+Stop criteria (post-hoc), Wallet balances, Configuration (redacted), Environment and report
+notes.
+
+Guarantees:
+
+1. **Offline.** One file: inline CSS, inline SVG, one inline script, no library, no `<link>`,
+   no image URL, no font URL. The CSP meta tag is `default-src 'none'; style-src
+   'unsafe-inline'; img-src data:; script-src <hash of the one script>`; the page also reads
+   with scripts disabled.
+2. **Bounded size.** Default cap 4 MiB. Over the cap the renderer re-runs at a higher
+   downsampling tier (timeline rows, per-hop points); the applied tiers are stated in the
+   verdict banner and in the Environment section.
+3. **Escaping.** Every dynamic value goes through `metrics/html/escape.ts`; the embedded JSON is
+   made `</script>`-safe.
+4. **Redaction.** The configuration shown is an allowlist view (`CONFIG_KEY_POLICY` in
+   `metrics/redactReport.ts`; a test fails when a schema leaf has no policy). URLs print as host
+   only, secret refs as `env:NAME` / `file:<basename>`, tx hashes abbreviated, endpoint classes
+   by chain key. Before writing, `assertNoSecrets` throws `ReportSecretError` (naming a field or
+   a kind, never the value) if the HTML contains a URL path segment/userinfo/query value of the
+   unredacted config, a 64-hex string, or a mnemonic-shaped data string; then no file is written.
+
+`pnpm loadtest campaign-report --out <file.html> --run <label>=<dir>[,<dir>] [--run ...]` renders
+the roll-up page (`metrics/html/campaign.ts`): one row per label (several dirs under a label
+are pooled, e.g. the I and J rings of a stage) with verdict, failure rates, pump state, stop
+criteria fired, per-route ready-wait, L1 leaves per hour and comparison charts, linking to each
+run's `report.html` by relative path.
+
+### 6.5 Stop criteria SC1-SC13 (S54)
+
+`metrics/stopCriteria.ts` evaluates the campaign's stop criteria **read-only** over a digest of
+`activity.ndjson` plus `results.json` where present. It sends no signal and stops nothing; the
+operator decides. Thresholds (exported as `SC`): SC1 at least 5 hard hop failures
+(`HARD_HOP_FAILURE_OUTCOMES`) or at least 2% of ended hops once 50 ended; SC2 no successful
+82>85 hop for 30 min with one in flight; SC3 the same for 85>82 at 120 min; SC4 at least 30
+`proxy_5xx`/`proxy_4xx` errors in a 10 min window (`tracker_not_ready`, `not_ready` and
+`activity_warning` excluded); SC5 at least 20 `nonce_conflict`; SC6 `toolRssMb` > 4096 for 3
+samples; SC7 `eventLoopDelayP99Ms` > 500 for 12 samples; SC8 `toolCpuPct` > 90 for 60 samples;
+SC9 a wallet below 20% of `gasPerChain`; SC10 funding floor and SC12 shared Bali health are
+**outside the tool** (reported as `OUTSIDE`); SC11 pump spend reached `maxTotalSpend`; SC13
+`tick_skipped` at least 25% of ticks (a gate: do not advance the stage). A criterion with no
+data is `N/A`, not `ok`.
+
+The `check-stop` command prints them (`pnpm loadtest check-stop --dir <out> [--dir <out>]
+[--config <path>] [--json]`, exit code always 0), and `report.html` shows them post-hoc.
 
 ---
 
