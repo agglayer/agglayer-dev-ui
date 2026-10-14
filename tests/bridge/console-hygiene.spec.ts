@@ -65,6 +65,13 @@ const textIncludes = (issue: CapturedIssue, needle: string) => issue.text.includ
 
 const ALLOWLIST: AllowlistEntry[] = [
   {
+    row: 'dev-mode',
+    note: "Token icon fetch (getTokenIconUrl, app/utils/tokens.ts) to assets.sequence.info for a devnet ERC20 that the public CDN doesn't know: it answers with a non-image body and Chromium logs net::ERR_BLOCKED_BY_ORB. Only shows once the devnet ERC20 is listed in the activity (i.e. after erc20-approve-bridge has run against the same devnet); the <img> falls back to the placeholder icon.",
+    matches: (issue) =>
+      urlIncludes(issue, 'assets.sequence.info/images/tokens/') &&
+      textIncludes(issue, 'ERR_BLOCKED_BY_ORB')
+  },
+  {
     row: 'triage row 1',
     note: 'aggkit /l1-info-tree-index 500 ("not yet included") -- documented, intentional not-ready polling contract; SDK treats it as null, not suppressible from dev-ui/SDK (browser logs any non-2xx fetch regardless of JS handling).',
     matches: (issue) => urlIncludes(issue, '/bridge/v1/l1-info-tree-index')
