@@ -261,19 +261,12 @@ export const renderCampaignHtml = (m: CampaignModel): string => {
           { t: 'Run' },
           { t: 'Ring' },
           { t: 'Wallets', num: true },
-          { t: 'Rate', num: true },
-          { t: 'Min', num: true },
+          { t: 'Load (rate, min)', num: true },
           { t: 'Pump' },
           { t: 'Verdict' },
-          { t: 'Lap fail', num: true },
-          { t: 'Hop fail', num: true },
+          { t: 'Lap / hop fail', num: true },
           { t: 'Achieved', num: true },
           { t: 'Backpressure', num: true },
-          { t: 'Ready p50 / p90 / max' },
-          { t: 'Leaves', num: true },
-          { t: 'Pump deposits', num: true },
-          { t: 'Peak RSS', num: true },
-          { t: 'Event-loop p99', num: true },
           { t: 'Stop criteria fired' },
           { t: 'Report' }
         ],
@@ -282,19 +275,41 @@ export const renderCampaignHtml = (m: CampaignModel): string => {
           td(r.runName),
           td(r.ring, { wrap: true }),
           td(r.wallets, { num: true, v: r.wallets }),
-          td(r.rate, { num: true }),
-          td(r.minutes, { num: true }),
+          td(`${r.rate} / ${r.minutes}`, { num: true }),
           td(r.pump.toUpperCase()),
           td(r.verdict, {
             wrap: true,
             cls: r.level === 'pass' ? 'good' : r.level === 'fail' ? 'bad' : ''
           }),
-          td(pct(r.lapFailureRate), { num: true }),
-          td(pct(r.hardHopFailureRate), { num: true }),
+          td(`${pct(r.lapFailureRate)} / ${pct(r.hardHopFailureRate)}`, { num: true }),
           td(r.achievedRate.toFixed(3), { num: true, v: r.achievedRate }),
           td(r.backpressurePct === null ? 'n/a' : `${r.backpressurePct.toFixed(1)}%`, {
             num: true
           }),
+          td(r.fired.length === 0 ? 'none' : r.fired.join(', '), {
+            cls: r.fired.length === 0 ? 'good' : 'bad'
+          }),
+          r.link === null
+            ? td('n/a', { cls: 'muted', title: "Report is outside this page's directory tree" })
+            : `<td><a href="${esc(r.link)}">report</a></td>`
+        ]),
+        { label: 'One row per process', sortable: true, compact: true }
+      ) +
+        note(
+          "One row per process (one ring on one wallet range). The report link is relative and only present when the run directory sits under this page's own directory."
+        ) +
+        '<h3>Measurements per process</h3>' +
+        table(
+          [
+            { t: 'Stage' },
+            { t: 'Run' },
+            { t: 'Ready wait median / p90 / max' },
+            { t: 'Leaves / pump deposits', num: true },
+            { t: 'Peak RSS / loop p99', num: true }
+          ],
+          m.rows.map((r) => [
+            td(r.label),
+            td(r.runName),
           td(
             r.readyByRoute.length === 0
               ? 'n/a (no measurement)'
@@ -306,27 +321,16 @@ export const renderCampaignHtml = (m: CampaignModel): string => {
                   .join('; '),
             { wrap: true }
           ),
-          td(r.leaves === null ? 'n/a (not sampled)' : r.leaves, { num: true }),
-          td(r.pumpDeposits === null ? 'n/a' : r.pumpDeposits, { num: true }),
-          td(r.peakRssMb === null ? 'n/a' : `${r.peakRssMb.toFixed(0)} MB`, {
-            num: true,
-            v: r.peakRssMb ?? -1
-          }),
-          td(r.worstEventLoopMs === null ? 'n/a' : `${r.worstEventLoopMs.toFixed(0)} ms`, {
-            num: true,
-            v: r.worstEventLoopMs ?? -1
-          }),
-          td(r.fired.length === 0 ? 'none' : r.fired.join(', '), {
-            cls: r.fired.length === 0 ? 'good' : 'bad'
-          }),
-          r.link === null
-            ? td(r.runName, { cls: 'muted', title: "Report is outside this page's directory tree" })
-            : `<td><a href="${esc(r.link)}">report</a></td>`
-        ]),
-        { label: 'One row per process', sortable: true, compact: true }
-      ) +
-        note(
-          "One row per process (one ring on one wallet range). The report link is relative and only present when the run directory sits under this page's own directory."
+          td(
+            `${r.leaves === null ? 'n/a' : r.leaves} / ${r.pumpDeposits === null ? 'n/a' : r.pumpDeposits}`,
+            { num: true }
+          ),
+          td(
+            `${r.peakRssMb === null ? 'n/a' : `${r.peakRssMb.toFixed(0)} MB`} / ${r.worstEventLoopMs === null ? 'n/a' : `${r.worstEventLoopMs.toFixed(0)} ms`}`,
+            { num: true, v: r.peakRssMb ?? -1 }
+          ),
+          ]),
+          { label: 'Measurements per process', sortable: true, compact: true }
         )
     )
   );
@@ -447,6 +451,10 @@ export const renderCampaignHtml = (m: CampaignModel): string => {
           )
     }`;
   }
+  const noData = m.stages.filter((s) => !withData.includes(s));
+  if (withData.length > 0 && noData.length > 0) {
+    charts = `${note(`Not in the charts or the stage table: ${noData.map((s) => s.label).join(', ')} (no per-hop ready-wait measurement in that run, so there is nothing to pool).`)}${charts}`;
+  }
   parts.push(section('charts', 'Comparison charts', charts));
 
   // resources per stage
@@ -457,7 +465,7 @@ export const renderCampaignHtml = (m: CampaignModel): string => {
       'Tool resources per stage',
       rs.length === 0
         ? empty('No resource samples.')
-        : `<h3>Peak tool RSS (MB)</h3>${hbarStack({ aria: 'Peak tool RSS per stage', rows: rs.map((s) => ({ label: `${s.label} (${s.wallets} wallets)`, segments: [{ name: 'peak RSS', slot: 0, value: s.peakRssMb ?? 0 }] })), valueFmt: (v) => `${fmtInt(Math.round(v))}` })}<h3>Worst event-loop p99 (ms)</h3>${hbarStack({ aria: 'Worst event-loop p99 per stage', rows: rs.map((s) => ({ label: `${s.label} (${s.wallets} wallets)`, segments: [{ name: 'worst p99', slot: 2, value: s.worstEventLoopMs ?? 0 }] })), valueFmt: (v) => `${fmtInt(Math.round(v))}` })}`
+        : `<h3>Peak tool RSS (MB)</h3>${hbarStack({ aria: 'Peak tool RSS per stage', rows: rs.map((s) => ({ label: `${s.label} (${s.wallets} ${s.wallets === 1 ? 'wallet' : 'wallets'})`, segments: [{ name: 'peak RSS', slot: 0, value: s.peakRssMb ?? 0 }] })), valueFmt: (v) => `${fmtInt(Math.round(v))}` })}<h3>Worst event-loop p99 (ms)</h3>${hbarStack({ aria: 'Worst event-loop p99 per stage', rows: rs.map((s) => ({ label: `${s.label} (${s.wallets} ${s.wallets === 1 ? 'wallet' : 'wallets'})`, segments: [{ name: 'worst p99', slot: 2, value: s.worstEventLoopMs ?? 0 }] })), valueFmt: (v) => `${fmtInt(Math.round(v))}` })}`
     )
   );
   return parts.join('\n');
