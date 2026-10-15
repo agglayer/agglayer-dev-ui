@@ -239,7 +239,7 @@ export const deriveDevnetConfig = (options: DeriveDevnetOptions): DeriveDevnetRe
       pageLoadMs: 30_000,
       walletConnectMs: 15_000
     },
-    gas: { bridgeGasOffset: 300_000 }
+    gas: { bridgeGasOffset: 300_000, claimGasOffset: 60_000 }
   };
 
   // DESIGN §2.2: name the value to export, never print or copy the key

@@ -610,3 +610,28 @@ describe('gas headroom parity between the UI and the headless worker', () => {
     expect(BigInt(config.gas.bridgeGasOffset)).toBe(BRIDGE_GAS_BUFFER);
   });
 });
+
+describe('gas.claimGasOffset', () => {
+  it('defaults to 60000 and bridgeGasOffset is unchanged', () => {
+    const doc = validDevnetDoc();
+    delete doc.gas;
+    const config = parseLoadtestConfig(doc);
+    expect(config.gas).toStrictEqual({ bridgeGasOffset: 300_000, claimGasOffset: 60_000 });
+  });
+
+  it('accepts an explicit non-negative integer (0 disables the margin)', () => {
+    for (const value of [0, 1, 123_456]) {
+      const doc = validDevnetDoc();
+      doc.gas = { claimGasOffset: value };
+      expect(parseLoadtestConfig(doc).gas.claimGasOffset).toBe(value);
+    }
+  });
+
+  it('rejects negative, fractional and non-numeric values', () => {
+    for (const value of [-1, 1.5, '60000']) {
+      const doc = validDevnetDoc();
+      doc.gas = { claimGasOffset: value };
+      expect(() => parseLoadtestConfig(doc)).toThrow();
+    }
+  });
+});

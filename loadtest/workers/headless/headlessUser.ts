@@ -187,6 +187,11 @@ export interface HeadlessUserOptions {
   aggkitProxyUrl: string;
   /** DESIGN §9.4/finding C5 — headless-only, applied to the bridge send only. */
   bridgeGasOffset: number;
+  /**
+   * Headless-only additive margin on the CLAIM send's gas limit (unused gas is
+   * refunded). Absent = 0. Intentional deviation from the UI, which has none.
+   */
+  claimGasOffset?: number;
   collector: Collector;
   clock?: { now(): number };
   /**
@@ -244,6 +249,7 @@ export class HeadlessUser implements UserDriver {
   private readonly assets: readonly LoadtestAsset[];
   private readonly aggkitProxyUrl: string;
   private readonly bridgeGasOffset: number;
+  private readonly claimGasOffset: number;
   private readonly collector: Collector;
   private readonly clock: { now(): number };
   private readonly seedTokenList: boolean;
@@ -352,6 +358,7 @@ export class HeadlessUser implements UserDriver {
     this.assets = options.assets ?? [];
     this.aggkitProxyUrl = options.aggkitProxyUrl.replace(/\/$/, '');
     this.bridgeGasOffset = options.bridgeGasOffset;
+    this.claimGasOffset = options.claimGasOffset ?? 0;
     this.collector = options.collector;
     this.clock = options.clock ?? { now: () => Date.now() };
     this.seedTokenList = options.seedTokenList ?? true;
@@ -800,9 +807,11 @@ export class HeadlessUser implements UserDriver {
       // S53 M9: read right before the send so the state is as close as possible
       // to what the claim will act on (still approximate: it lands a few blocks later).
       const preState = this.claimPreState ? await this.readClaimPreState(hop, toChain) : undefined;
+      const claimGasOverride = await this.claimGasLimit(toChain.key, claimTxParams);
       const { step: claimStep, rawReceipt: claimReceipt } = await this.sendAndWait(
         toChain.key,
-        claimTxParams
+        claimTxParams,
+        { gasOverride: claimGasOverride }
       );
       // Measurement (S45 C1): first claim of an ERC20 deploys the wrapper —
       // detected from the logs already in hand (NewWrappedToken emitted by the
@@ -1101,6 +1110,36 @@ export class HeadlessUser implements UserDriver {
    * precedent and the same real-user framing: one wallet does not have
    * several bridges in flight against one chain at once.
    */
+  /**
+   * Claim gas limit = SDK `gas` (or one eth_estimateGas if the params carry
+   * none) + `claimGasOffset`. A first-mint claim deploys the wrapped token, and
+   * concurrent claims change that state between estimate and execution
+   * (zero-state mint ~228k vs ~177-194k nonzero), so the bare estimate can run
+   * out of gas. Returns undefined (viem's own estimate) when the offset is 0 or
+   * no estimate is obtainable.
+   */
+  private async claimGasLimit(
+    chainKey: string,
+    txParams: TransactionParams
+  ): Promise<bigint | undefined> {
+    if (this.claimGasOffset <= 0) return undefined;
+    let base: bigint | undefined = txParams.gas !== undefined ? BigInt(txParams.gas) : undefined;
+    if (base === undefined) {
+      try {
+        const mapped = mapTransactionRequest(txParams);
+        base = await this.chainRuntime(chainKey).public.estimateGas({
+          account: this.address,
+          to: mapped.to,
+          data: mapped.data,
+          value: mapped.value
+        });
+      } catch {
+        return undefined;
+      }
+    }
+    return base + BigInt(this.claimGasOffset);
+  }
+
   private async sendAndWait(
     chainKey: string,
     txParams: TransactionParams,

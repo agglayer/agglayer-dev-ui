@@ -149,6 +149,7 @@ the schema may not have defaults that are lost on write-back.
 | `browser.recycleContextAfterLaps` | int ≥1 | no | `10` | §7.4 |
 | `timeouts.*` | ints (ms) | no | §3.3 table | every key has a default; all overridable |
 | `gas.bridgeGasOffset` | int ≥0 | no | `300000` | headless only (§9.4) |
+| `gas.claimGasOffset` | int ≥0 | no | `60000` | headless only, claim send only (§9.4); additive margin on the SDK claim `gas` (or one `eth_estimateGas`); `0` = viem's own estimate, as the UI does |
 | `measurement` | object (optional) | no | absent = off | strict; at least one field when present (`MEASUREMENT_EMPTY`). Every field below is optional; an absent field takes no measurement and writes nothing |
 | `measurement.stageProbeIntervalMs` | int ≥1000 | no | — | harness-origin stage probe, headless users only (S45) |
 | `measurement.walletBalanceIntervalMs` | int ≥60000 | no | — | periodic `eth_getBalance` of every user wallet on every non-L1 ring chain (heavy-load M1; feeds SC9) |
@@ -1524,6 +1525,7 @@ Reported, not silently corrected. Each is falsifiable at the cited line.
 | Divergence | Browser | Headless | Why |
 |---|---|---|---|
 | `gas.bridgeGasOffset` | applied as `BRIDGE_GAS_BUFFER` (S36) | applied | C5 — closed |
+| `gas.claimGasOffset` | **not applied** (UI claim has no margin) | applied (+60 000 on the claim gas limit) | Stage-2 ring J: 4/64 first-mint claims reverted out-of-gas (limit 202 542 vs ~228k needed when concurrent claims changed state between estimate and execution). Intentional, load-test-only: it keeps the harness measuring throughput instead of the estimate race. The race itself is a **separate product finding** (the real UI can hit it) |
 | `page_load`, `wallet_connect` phases | measured | absent | no page |
 | `console_error` capture | yes | n/a | no console |
 | `seedTokenList` | always (custom-token seeding is how the UI selects the devnet ERC20); a transient, per-hop seeding gap still yields a small residual `token-mappings[0]` count (0.75/user observed) | config `headless.seedTokenList`, default `true` | C6 |

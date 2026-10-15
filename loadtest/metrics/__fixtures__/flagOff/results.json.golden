@@ -128,7 +128,8 @@
       "walletConnectMs": 15000
     },
     "gas": {
-      "bridgeGasOffset": 300000
+      "bridgeGasOffset": 300000,
+      "claimGasOffset": 60000
     },
     "output": {
       "dir": "loadtest-results/golden",

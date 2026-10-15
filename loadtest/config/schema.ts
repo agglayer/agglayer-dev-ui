@@ -292,10 +292,13 @@ const timeoutsSchema = z
 
 const gasSchema = z
   .object({
-    bridgeGasOffset: z.number().int().min(0).default(300_000)
+    bridgeGasOffset: z.number().int().min(0).default(300_000),
+    // Headless-only gas margin added to the claim send's gas limit (additive,
+    // like bridgeGasOffset). Intentional deviation from the real UI (no margin).
+    claimGasOffset: z.number().int().min(0).default(60_000)
   })
   .strict()
-  .default({ bridgeGasOffset: 300_000 });
+  .default({ bridgeGasOffset: 300_000, claimGasOffset: 60_000 });
 
 // S45 C2: optional measurement block. Absent = no stage probe, behaviour
 // unchanged. `stageProbeIntervalMs` is the poll interval of the harness-origin

@@ -1355,6 +1355,7 @@ const runLoadTestWith = async (
           assets: config.assets,
           aggkitProxyUrl: config.aggkitProxyUrl,
           bridgeGasOffset: config.gas.bridgeGasOffset,
+          claimGasOffset: config.gas.claimGasOffset,
           collector,
           clock,
           // R4 (loadtest/REVIEW.md): bounds viem's receipt wait to the same

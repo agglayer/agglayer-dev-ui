@@ -121,10 +121,12 @@ is a validated, worked example (Sepolia <-> Bokuto):
   "load": { "bridgesPerMinutePerUser": 1, "durationMinutes": 5, "rampUpSeconds": 30 },
   "browser": { "contextsPerBrowser": 1, "headless": true, "trace": true },
   "timeouts": { "txReceiptMs": 120000, "readyToClaimMs": 1800000, "claimedMs": 1800000, "hopMs": 2400000, "lapMs": 5400000 },
-  "gas": { "bridgeGasOffset": 300000 },
+  "gas": { "bridgeGasOffset": 300000, "claimGasOffset": 60000 },
   "output": { "dir": "loadtest-results/testnet-smoke", "activityLog": true }
 }
 ```
+
+`gas.claimGasOffset` (default `60000`, headless only) is an additive gas-limit margin on claim sends: the SDK claim `gas` (or one `eth_estimateGas`) plus the offset. It is an intentional deviation from the real UI, which has no margin: concurrent first-mint claims change state between estimate and execution (~228k zero-state mint vs ~177-194k) and can run out of gas at the bare estimate. Unused gas is refunded. Set `0` to send with viem's own estimate like the UI.
 
 To adapt this for a real run:
 

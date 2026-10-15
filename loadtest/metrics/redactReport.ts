@@ -224,6 +224,7 @@ export const CONFIG_KEY_POLICY: Readonly<Record<string, ConfigKeyPolicy>> = {
   'timeouts.pageLoadMs': 'show',
   'timeouts.walletConnectMs': 'show',
   'gas.bridgeGasOffset': 'show',
+  'gas.claimGasOffset': 'show',
   'measurement.stageProbeIntervalMs': 'show',
   'measurement.walletBalanceIntervalMs': 'show',
   'measurement.l1InfoTree.pollIntervalMs': 'show',
@@ -343,7 +344,7 @@ export const allowlistedConfigView = (
       'pageLoadMs',
       'walletConnectMs'
     ]),
-    gas: pickDefined(asRecord(c.gas), ['bridgeGasOffset']),
+    gas: pickDefined(asRecord(c.gas), ['bridgeGasOffset', 'claimGasOffset']),
     ...(measurement !== undefined
       ? {
           measurement: {
