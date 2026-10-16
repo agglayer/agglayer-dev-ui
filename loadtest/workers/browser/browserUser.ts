@@ -122,7 +122,12 @@ import {
   classifyUiAssertionError
 } from '../../metrics/errors';
 import { defaultChainClientFactory } from '../../wallets/chainClients';
-import { mapActivityResponseText, runWithFetchContext, sleep } from '../headless/uiCallset';
+import {
+  confirmClaimedRows,
+  mapActivityResponseText,
+  runWithFetchContext,
+  sleep
+} from '../headless/uiCallset';
 import { isCrashLikeError } from './pool';
 import { installBrowserTiming, recordSessionPhase } from './timing';
 
@@ -734,7 +739,16 @@ export class BrowserUser implements UserDriver {
         const url = `${this.aggkitProxyUrl}/tracker/v1/activity/from/${this.address}?includeTracking=true&${HARNESS_POLL_MARKER_PARAM}=${HARNESS_POLL_MARKER_VALUE}`;
         const text: string = await this.fetchActivityTextWithRetry(url);
 
-        const { rows, warnings } = mapActivityResponseText(text);
+        const mapped = mapActivityResponseText(text);
+        const { warnings } = mapped;
+        // Issue #53: never trust an unproven tracker `claimed` (see confirmClaimedRows).
+        const rows = await confirmClaimedRows(mapped.rows, async (row) => {
+          const toChain = this.chains.find((chain) => chain.networkId === row.destinationNetwork);
+          if (toChain === undefined) return false;
+          return this.native
+            .bridge(toChain.bridgeAddress as Address, toChain.chainId)
+            .isClaimed({ leafIndex: row.depositCount, sourceBridgeNetwork: row.sourceNetwork });
+        });
         for (const warning of warnings) {
           const classified = classifyActivityWarning({
             networkId: warning.network_id,

@@ -84,3 +84,84 @@ describe('HeadlessUser.observeActivity — tracker failures keep their class (F3
     expect((error as ClassifiedFetchError).errorClass).toBe('proxy_4xx');
   });
 });
+
+// Issue #53 (ring K, deposits 1345 / 1986): a tracker row reading `claimed`
+// without a claim object, while the destination bridge's `isClaimed` is false,
+// ended the hop as `hop_completed_auto` and stranded the deposit.
+describe('HeadlessUser.observeActivity — unproven tracker `claimed` is not trusted (#53)', () => {
+  const claimedBody = (withClaimObject: boolean) =>
+    JSON.stringify({
+      bridges: [
+        {
+          bridge: {
+            tx_hash: '0xbbbb000000000000000000000000000000000000000000000000000000000001',
+            amount: '10000000000000',
+            block_num: 100,
+            block_pos: 0,
+            block_timestamp: 1_700_000_000,
+            bridge_hash: '0xhash',
+            deposit_count: 1345,
+            destination_address: USER,
+            destination_network: 1,
+            from_address: USER,
+            global_index: '5',
+            leaf_type: 0,
+            metadata: '0x',
+            origin_address: '0x0000000000000000000000000000000000000000',
+            origin_network: 0,
+            to_address: USER,
+            txn_sender: USER
+          },
+          bridge_network_id: 0,
+          claimed: 'true',
+          ...(withClaimObject
+            ? { claim: { tx_hash: '0xc1a1', block_num: 7, block_timestamp: 8, global_index: '5' } }
+            : {}),
+          creation_timestamp: 1,
+          last_updated_timestamp: 2
+        }
+      ]
+    });
+
+  const stubChain = async (isClaimed: () => Promise<boolean>) => {
+    const user = await build();
+    const bridge = vi.fn(() => ({ isClaimed }));
+    (user as unknown as { native: unknown }).native = { bridge };
+    return { user, bridge };
+  };
+
+  it('demotes a CLAIMED row with no claim object to PENDING when isClaimed is false on the destination', async () => {
+    const { user, bridge } = await stubChain(async () => false);
+    stubFetch(() => new Response(claimedBody(false), { status: 200 }));
+
+    const rows = await user.observeActivity();
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.status).toBe('PENDING');
+    expect(bridge).toHaveBeenCalled();
+  });
+
+  it('demotes it when the on-chain read throws (an error is never "claimed")', async () => {
+    const { user } = await stubChain(async () => {
+      throw new Error('rpc down');
+    });
+    stubFetch(() => new Response(claimedBody(false), { status: 200 }));
+
+    expect((await user.observeActivity())[0]?.status).toBe('PENDING');
+  });
+
+  it('keeps CLAIMED when the destination confirms isClaimed', async () => {
+    const { user } = await stubChain(async () => true);
+    stubFetch(() => new Response(claimedBody(false), { status: 200 }));
+
+    expect((await user.observeActivity())[0]?.status).toBe('CLAIMED');
+  });
+
+  it('keeps CLAIMED, with no RPC read, when the tracker row carries a claim object', async () => {
+    const { user, bridge } = await stubChain(async () => false);
+    stubFetch(() => new Response(claimedBody(true), { status: 200 }));
+
+    expect((await user.observeActivity())[0]?.status).toBe('CLAIMED');
+    expect(bridge).not.toHaveBeenCalled();
+  });
+});

@@ -590,6 +590,30 @@ export const mapActivityResponseText = (text: string): MappedActivity => {
 };
 
 /**
+ * Issue #53: a tracker row reading `claimed`/`claim_status: claimed` was taken
+ * at face value, so a tracker that said "claimed" for a deposit that was NOT
+ * claimed on the destination (ring K: deposits 1345 and 1986, `isClaimed`
+ * false, no claim object, `claim-proof` available) ended the hop as
+ * `hop_completed_auto` and stranded the funds. A CLAIMED row is now trusted
+ * only when it carries a claim object (`claimTransactionHash`) or the
+ * destination bridge's `isClaimed` confirms it; otherwise it is demoted to
+ * PENDING so the hop keeps waiting (and ends with the existing timeout class
+ * rather than a false success). A failing on-chain read counts as "not
+ * confirmed" - never as claimed. Rows with a claim object cost no RPC call.
+ */
+export const confirmClaimedRows = async (
+  rows: readonly ObservedRow[],
+  isClaimedOnChain: (row: ObservedRow) => Promise<boolean>
+): Promise<ObservedRow[]> =>
+  Promise.all(
+    rows.map(async (row): Promise<ObservedRow> => {
+      if (row.status !== 'CLAIMED' || row.claimTransactionHash !== undefined) return row;
+      const confirmed = await isClaimedOnChain(row).catch(() => false);
+      return confirmed ? row : { ...row, status: 'PENDING' };
+    })
+  );
+
+/**
  * True while any observed row still has work left (drives the
  * burst->5s/10s decay). R20 (loadtest/REVIEW.md): this used to also
  * exclude `'ERROR'` rows, an UNDECLARED divergence from the real UI —

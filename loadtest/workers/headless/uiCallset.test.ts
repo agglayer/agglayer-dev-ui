@@ -11,6 +11,7 @@ import {
   BADGE_INTERVAL_MS,
   buildChainKeyResolver,
   classifyEndpoint,
+  confirmClaimedRows,
   effectivePollIntervalMs,
   initialActivityCadenceState,
   installTimingFetch,
@@ -962,5 +963,25 @@ describe('installTimingFetch — R11/R14 (loadtest/REVIEW.md)', () => {
     expect(globalThis.fetch).not.toBe(original);
     handle.uninstall();
     expect(globalThis.fetch).toBe(original);
+  });
+});
+
+describe('confirmClaimedRows (issue #53)', () => {
+  it('leaves non-CLAIMED rows and claim-object rows untouched without any on-chain read', async () => {
+    const withClaim: ObservedRow = { ...makeRow('CLAIMED'), claimTransactionHash: '0xc1a1' };
+    const rows = [makeRow('PENDING'), makeRow('READY_TO_CLAIM'), makeRow('ERROR'), withClaim];
+    const check = async () => {
+      throw new Error('must not be called');
+    };
+    expect(await confirmClaimedRows(rows, check)).toEqual(rows);
+  });
+
+  it('demotes an unproven CLAIMED row to PENDING unless the chain confirms it', async () => {
+    const [no, yes] = await Promise.all([
+      confirmClaimedRows([makeRow('CLAIMED')], async () => false),
+      confirmClaimedRows([makeRow('CLAIMED')], async () => true)
+    ]);
+    expect(no[0]?.status).toBe('PENDING');
+    expect(yes[0]?.status).toBe('CLAIMED');
   });
 });

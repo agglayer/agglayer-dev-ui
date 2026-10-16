@@ -648,6 +648,14 @@ detected; a service claim that lands after the tool has observed `READY` shows u
 `hop_completed_raced` / `claimRaceLost`. If such a hop ends `timeout_ready_to_claim` or
 `aborted_drain` it was **not reached**, which is not a pass.
 
+**A tracker `claimed` is verified before a hop completes (issue #53).** A tracker row that
+reads `claimed` / `claim_status: claimed` is trusted only if it carries a claim object (claim
+tx hash) or the destination bridge's `isClaimed` returns true (`confirmClaimedRows` in
+`workers/headless/uiCallset.ts`, applied to every activity read in both modes). Otherwise the row
+is treated as `PENDING` and the hop keeps waiting, ending with the usual timeout outcome instead
+of a false `hop_completed_auto`. A failing `isClaimed` read counts as not claimed. Rows with a
+claim object cost no extra RPC call.
+
 **A `PASS` headline is not an autoclaim pass.** The headline only says the run was
 not aborted and started at least one lap. Read `policy.autoclaimOverdue` and
 `policy.unexpectedAutoclaim` as well.

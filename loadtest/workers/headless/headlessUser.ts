@@ -79,6 +79,7 @@ import {
   anyRowNonTerminal,
   initialActivityCadenceState,
   KeyedSerialQueue,
+  confirmClaimedRows,
   mapActivityResponseText,
   noteActivityFetched,
   noteBridgeSubmitted,
@@ -653,7 +654,10 @@ export class HeadlessUser implements UserDriver {
 
     // DESIGN §9.2: text, then the big-int-safe parse — NEVER response.json().
     const text = await response.text();
-    const { rows, warnings } = mapActivityResponseText(text);
+    const mapped = mapActivityResponseText(text);
+    const { warnings } = mapped;
+    // Issue #53: never trust an unproven tracker `claimed` (see confirmClaimedRows).
+    const rows = await confirmClaimedRows(mapped.rows, (row) => this.isClaimedOnDestination(row));
 
     // Finding C13: per-network warnings are a partial-fanout signal, not
     // silence — recorded so a broken upstream bridge service is visible
@@ -1024,6 +1028,16 @@ export class HeadlessUser implements UserDriver {
   // -------------------------------------------------------------------------
   // Internals
   // -------------------------------------------------------------------------
+
+  private isClaimedOnDestination(row: ObservedRow): Promise<boolean> {
+    const toChain = [...this.chainsByKey.values()].find(
+      (chain) => chain.networkId === row.destinationNetwork
+    );
+    if (toChain === undefined) return Promise.resolve(false);
+    return this.native
+      .bridge(toChain.bridgeAddress as Address, toChain.chainId)
+      .isClaimed({ leafIndex: row.depositCount, sourceBridgeNetwork: row.sourceNetwork });
+  }
 
   private chainByKey(key: string): LoadtestChain {
     const chain = this.chainsByKey.get(key);
