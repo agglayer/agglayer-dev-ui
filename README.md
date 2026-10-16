@@ -207,39 +207,56 @@ top comment for the full explanation and follow-up.
 
 ### Devnet-Specific Tests
 
-**`tests/bridge/claim-autoclaim.spec.ts`** — L1→L2-1 auto-claim
-- Devnet-only (skipped in testnet mode)
-- Asserts the deposit reaches Completed (CLAIMED) state via external L1ToL2BridgeDetector
-- This devnet's aggkit build auto-claims such deposits within seconds (~67s observed latency)
-- See the file's top comment for why autoclaim is expected behavior here
+The vendored devnet runs aggkit `v0.11.0-rc17`, which removed the built-in autoclaim component
+([agglayer/aggkit#1901](https://github.com/agglayer/aggkit/pull/1901)). Nothing on the devnet claims
+on the user's behalf, so every devnet flow claims manually through the UI: wait for the row to reach
+"Ready to claim", click `Claim tokens`, then wait for "Completed". `config/config.ci.devnet.json` sets
+`expectedAutoclaim: false` on every route so the UI offers the claim button immediately instead of
+showing the autoclaim grace-window note. (Real environments that do have an autoclaimer keep their
+`expectedAutoclaim` settings in `config.json`; only the devnet fixture changed.)
 
-**`tests/bridge/l2-to-l2.spec.ts`** — L2-1→L2-2 auto-claim
+**`tests/bridge/claim-l1-to-l2.spec.ts`** — L1→L2-1 manual claim (formerly `claim-autoclaim.spec.ts`)
+- Devnet-only (skipped in testnet mode)
+- Asserts the deposit reaches "Ready to claim", **stays** "Ready to claim" for a 90s guard window, and only reaches Completed (CLAIMED) after the spec clicks `Claim tokens`
+- The guard window proves the devnet really has no autoclaimer: if a future snapshot silently reintroduces one, the row would complete on its own and the spec fails
+- Typical wall time: ~160s (deposit -> ready, 90s guard, claim)
+- Shared claim flow: `BridgePage.waitForReadyAndClaim` in `tests/bridge/models/bridge-page.ts`
+
+**`tests/bridge/l2-to-l2.spec.ts`** — L2-1→L2-2 manual claim
 - Devnet-only, 2-L2 mode only
-- Asserts the deposit reaches Completed (CLAIMED) state via external L2ToLxBridgeDetector
-- Timeout budget: `E2E_L2_TO_L2_CLAIM_TIMEOUT_MS` (300s default, see notes on certificate cadence below)
-- **Certificate cadence note:** AggKit's aggsender enforces `MinimumNewCertificateInterval: 5m0s` between certificate windows. A deposit submitted just after a window closes can wait up to 5 minutes for the next one. The 300s timeout leaves **zero margin** against unlucky timing. If timeouts occur, budget 7–8 minutes instead, or keep L1 block production fast enough to stay ahead of L2 block height.
+- Funds its own L1→L2-1 balance (manual claim via `fundLocalBalanceTree`), then asserts the L2→L2 deposit reaches "Ready to claim", claims it, and reaches Completed (CLAIMED)
+- Typical wall time: ~225s
+- Timeout budget for the ready leg: `E2E_L2_TO_L2_CLAIM_TIMEOUT_MS` (600s default, see notes on certificate cadence below); the claim confirmation has its own `E2E_CLAIM_TIMEOUT_MS` budget
+- **Certificate cadence note:** AggKit's aggsender enforces `MinimumNewCertificateInterval: 5m0s` between certificate windows. A deposit submitted just after a window closes can wait up to 5 minutes for the next one. A 300s timeout would leave **zero margin** against unlucky timing, hence the 600s default. If timeouts occur, budget more, or keep L1 block production fast enough to stay ahead of L2 block height.
 
 **`tests/bridge/manual-claim.spec.ts`** — L2-1→L1 manual claim
 - Devnet-only, required for both single-L2 and 2-L2 enclaves
-- Now funds its own L1→L2-1 top-up deposit (via `claim-autoclaim.spec.ts` flow) before testing the L2→L1 withdrawal
+- Funds its own L1→L2-1 top-up deposit (a manual claim, same flow as `claim-l1-to-l2.spec.ts`) before testing the L2→L1 withdrawal
 - This makes the spec independent of run order and other specs' side effects
-- Typical latency: ~3.9–8.3 minutes until "Ready to claim" (certificate settlement + L1 info tree sync)
+- Typical latency: ~3.9–8.3 minutes until "Ready to claim" (certificate settlement + L1 info tree sync); ~5 minutes end to end
 - **Shared wallet state note:** The E2E wallet's balance and the enclave's transaction/certificate history accumulate across test runs on the same enclave. This spec now tops up its own balance, so isolation is preserved; future specs requiring absolute balance assertions should account for this accumulation.
+
+**`tests/bridge/tracker.spec.ts`** — bridge tracker progress bar and timeline
+- Devnet-only; claims manually (via `waitForReadyAndClaim`) while sampling the tracker steps
+- Expects the aggkit rc17 step paths: **5 steps for L1→L2 and 8 for L2→L2**, each with the new `WaitingL1InfoLeafAvailable` step before `WaitingClaim`
+- Typical wall time: ~1.4 min (L1→L2) and ~4.0 min (L2→L2)
+
+A full `tests/bridge` run against a fresh devnet takes ~17 minutes (12 tests); the whole suite stays far below the 75-minute CI limit.
 
 ### E2E Specs by Mode
 
-| Spec | Mode | Assertion |
-|------|------|-----------|
-| smoke | all | Page loads, wallet connects |
-| token-selector | all | Token selector shows symbol + balance |
-| native-bridge | all | Native token bridge works |
-| erc20-approve-bridge | all | ERC20 approval + bridge works |
-| claim-autoclaim | devnet | L1→L2 autoclaim reaches Completed |
-| l2-to-l2 | devnet (2-L2 only) | L2→L2 autoclaim reaches Completed |
-| manual-claim | devnet | L2→L1 manual claim reaches Completed |
-| partial-failure | devnet | UI partial-failure notice surfaces |
-| preflight | devnet | Chain sync-status, E2E wallet funded |
-| tracker | devnet | Bridge tracker progress bar + detail timeline render correctly |
+|         Spec         |        Mode        |                                          Assertion                                           |
+| :------------------: | :----------------: | :------------------------------------------------------------------------------------------: |
+|        smoke         |        all         |                                 Page loads, wallet connects                                  |
+|    token-selector    |        all         |                            Token selector shows symbol + balance                             |
+|    native-bridge     |        all         |                                  Native token bridge works                                   |
+| erc20-approve-bridge |        all         |                                ERC20 approval + bridge works                                 |
+|    claim-l1-to-l2    |       devnet       |     L1→L2 stays "Ready to claim" (no autoclaimer), then a manual claim reaches Completed     |
+|       l2-to-l2       | devnet (2-L2 only) |                             L2→L2 manual claim reaches Completed                             |
+|     manual-claim     |       devnet       |                             L2→L1 manual claim reaches Completed                             |
+|   partial-failure    |       devnet       |                              UI partial-failure notice surfaces                              |
+|      preflight       |       devnet       |                             Chain sync-status, E2E wallet funded                             |
+|       tracker        |       devnet       | Bridge tracker progress bar + detail timeline render correctly (5/8 steps with manual claim) |
 
 ## Bridge Tracking
 
@@ -248,8 +265,8 @@ Each non-`CLAIMED` transaction row polls aggkit's `tracker/v1` API (via the SDK'
 renders its step-by-step progress:
 
 - **`app/components/transactions/trackerProgressBar.tsx`** — a row of dots + connector lines in
-  the activity list, one dot per expected step of that bridge's route: 4 steps for L1→L2, 6 for
-  L2→L1, 7 for L2→L2.
+  the activity list, one dot per expected step of that bridge's route: 5 steps for L1→L2, 7 for
+  L2→L1, 8 for L2→L2 (aggkit rc17 paths, each with `WaitingL1InfoLeafAvailable` before `WaitingClaim`; rc8 had 4, 6 and 7).
 - **`app/components/transactions/trackerDetail.tsx`** — the full timeline (same dots, plus label,
   status, start/end dates, and a per-step result detail) shown in the transaction details modal.
 

@@ -28,13 +28,23 @@ test.skip(
 // (app/__fixtures__/tracker.ts), which ship the full ordered `all_steps`
 // array (later entries `pending`) as soon as the tracker resolves the route,
 // well before any step actually starts.
-const L1_TO_L2_STEP_NAMES = ['WaitingGERUpdate', 'WaitingGERInjection', 'WaitingClaim', 'Claimed'];
+//
+// aggkit rc17 (bridgetracker/domain/path.go ExpectedPath) inserts
+// WaitingL1InfoLeafAvailable right before WaitingClaim on every route.
+const L1_TO_L2_STEP_NAMES = [
+  'WaitingGERUpdate',
+  'WaitingGERInjection',
+  'WaitingL1InfoLeafAvailable',
+  'WaitingClaim',
+  'Claimed'
+];
 const L2_TO_L2_STEP_NAMES = [
   'WaitingLERUpdate',
   'PendingInclusion',
   'CertificatePending',
   'WaitL1SettledGER',
   'WaitingGERInjection',
+  'WaitingL1InfoLeafAvailable',
   'WaitingClaim',
   'Claimed'
 ];
@@ -50,19 +60,24 @@ const L2_TO_L2_STEP_LABEL_PATTERNS = [
   /Waiting for the certificate to settle/,
   /Waiting for settlement to confirm on L1/,
   /Waiting for the exit root to reach .+/,
+  // WaitingL1InfoLeafAvailable has no label in app/utils/trackerSteps.ts yet
+  // (the SDK's AggkitBridgeStep union lacks it, so the app renders "Unrecognized
+  // step"); deliberately not pinned here -- step identity is asserted via
+  // data-step above.
+  /.+/,
   /Finalizing claim data for .+/,
   /Claimed/
 ];
 
-test('L1→L2 tracker progress bar shows 4 steps, advances, then disappears on Completed', async ({
+test('L1→L2 tracker progress bar shows 5 steps, advances, then disappears on Completed', async ({
   page
 }) => {
-  // Merged bar-appear + at-least-one-done-dot poll, then a final wait for
-  // Completed -- both bounded by E2E_CLAIM_TIMEOUT_MS (the same devnet
-  // send->claimed budget claim-autoclaim.spec.ts uses for this exact route).
+  // Merged bar-appear + at-least-one-done-dot poll, then a manual claim
+  // (ready wait + claim confirmation) -- each bounded by E2E_CLAIM_TIMEOUT_MS
+  // (the same devnet budget claim-l1-to-l2.spec.ts uses for this exact route).
   // +90s for everything else in the journey (connect, fill, submit,
   // navigate, the modal-free assertions in between).
-  test.setTimeout(2 * E2E_CLAIM_TIMEOUT_MS + 90_000);
+  test.setTimeout(3 * E2E_CLAIM_TIMEOUT_MS + 90_000);
 
   const bridgePage = new BridgePage({ page });
 
@@ -87,15 +102,14 @@ test('L1→L2 tracker progress bar shows 4 steps, advances, then disappears on C
 
   const trackerBar = bridgePage.getTrackerBar(transactionHash);
 
-  // Single poll loop covering both "the bar renders with its 4 dots" and
+  // Single poll loop covering both "the bar renders with its 5 dots" and
   // "at least one dot reaches done" -- the tracker needs its own poll cycle
   // to resolve `all_steps` (registered -> running), so the bar may not exist
   // for the first refresh or two. Per-step mid-flight status strings are
-  // recorded as annotations rather than asserted: L1->L2 can autoclaim in
-  // ~35s against this hook's own 5s poll interval (useBridgeTracking.ts), and
-  // per S7 the bar disappears entirely the instant the row reaches CLAIMED --
-  // a fast-enough autoclaim can beat this poll to ever observing a 'done'
-  // dot, which is recorded rather than failed.
+  // recorded as annotations rather than asserted (the hook polls on its own 5s
+  // interval, useBridgeTracking.ts), and per S7 the bar disappears entirely the
+  // instant the row reaches CLAIMED -- a row that completes before this poll
+  // observes a 'done' dot is recorded rather than failed.
   const capturedStepNames: string[] = [];
   const observedStatusSnapshots: string[] = [];
   let sawDoneDot = false;
@@ -140,7 +154,7 @@ test('L1→L2 tracker progress bar shows 4 steps, advances, then disappears on C
     )
     .toBe(true);
 
-  // Route shape: exactly 4 dots, in the fixed step_name order the tracker
+  // Route shape: exactly 5 dots, in the fixed step_name order the tracker
   // resolves them in (this is the acceptance-criterion assertion, not a
   // timing-sensitive one -- the full ordered array is present from the
   // first non-null `all_steps` response, see the comment above).
@@ -160,32 +174,21 @@ test('L1→L2 tracker progress bar shows 4 steps, advances, then disappears on C
   });
   expect(sawDoneDot || completedBeforeDoneDot).toBe(true);
 
+  // No autoclaimer on the devnet: claim by hand to reach Completed.
+  await bridgePage.waitForReadyAndClaim(transactionHash, {
+    readyTimeoutMs: E2E_CLAIM_TIMEOUT_MS,
+    claimTimeoutMs: E2E_CLAIM_TIMEOUT_MS
+  });
+
   // Terminal assertion (S7's chosen behavior): once the row reaches
   // Completed, useBridgeTracking's query is disabled (status === 'CLAIMED')
   // and trackerProgressBar.tsx renders nothing -- the bar must be gone, not
-  // just stale. (No-op wait if completedBeforeDoneDot already made this
-  // true above.)
-  await expect
-    .poll(
-      async () => {
-        await bridgePage.refreshActivity();
-        return row
-          .getByText('Completed')
-          .isVisible()
-          .catch(() => false);
-      },
-      {
-        message: 'Waiting for the row to reach Completed (CLAIMED)',
-        timeout: E2E_CLAIM_TIMEOUT_MS,
-        intervals: [5_000]
-      }
-    )
-    .toBe(true);
+  // just stale.
 
   await expect(trackerBar).toHaveCount(0);
 });
 
-test('L2-1→L2-2 tracker: 7-step bar, modal detail mid-flight, disappears on Completed', async ({
+test('L2-1→L2-2 tracker: 8-step bar, modal detail mid-flight, disappears on Completed', async ({
   page
 }) => {
   // L2->L2 requires a second devnet L2 -- same guard l2-to-l2.spec.ts uses.
@@ -198,9 +201,10 @@ test('L2-1→L2-2 tracker: 7-step bar, modal detail mid-flight, disappears on Co
   // for the tracked L2->L2 send->claimed leg (this route's long window is
   // exactly why the mid-flight modal assertion below lives on this test
   // rather than the fast L1->L2 one), plus one E2E_CLAIM_TIMEOUT_MS round
-  // trip for the L1->L2-1 top-up, plus 120s slack for the rest of the
-  // journey (connect, fill, submit, navigate, modal open/close).
-  test.setTimeout(E2E_L2_TO_L2_CLAIM_TIMEOUT_MS + E2E_CLAIM_TIMEOUT_MS + 120_000);
+  // trip (ready + claim) for the L1->L2-1 top-up, plus one E2E_CLAIM_TIMEOUT_MS
+  // to confirm the manual claim of the tracked deposit, plus 120s slack for the
+  // rest of the journey (connect, fill, submit, navigate, modal open/close).
+  test.setTimeout(E2E_L2_TO_L2_CLAIM_TIMEOUT_MS + 3 * E2E_CLAIM_TIMEOUT_MS + 120_000);
 
   const [fromChainId, toChainId] = E2E_L2_CHAIN_IDS;
 
@@ -244,7 +248,7 @@ test('L2-1→L2-2 tracker: 7-step bar, modal detail mid-flight, disappears on Co
 
   const trackerBar = bridgePage.getTrackerBar(transactionHash);
 
-  // Wait for the bar to resolve its 7 dots, capturing the step order on
+  // Wait for the bar to resolve its 8 dots, capturing the step order on
   // first sighting -- see the L1->L2 test above for why this needs its own
   // poll rather than a single refreshActivity().
   const capturedStepNames: string[] = [];
@@ -265,7 +269,7 @@ test('L2-1→L2-2 tracker: 7-step bar, modal detail mid-flight, disappears on Co
         return true;
       },
       {
-        message: 'Waiting for the tracker to resolve the L2->L2 route and render its 7 dots',
+        message: 'Waiting for the tracker to resolve the L2->L2 route and render its 8 dots',
         // This route's dominant latency term (source-side certificate
         // settlement, see E2E_L2_TO_L2_CLAIM_TIMEOUT_MS's comment in
         // app/constants/e2e.ts) is downstream of route resolution, so
@@ -314,22 +318,10 @@ test('L2-1→L2-2 tracker: 7-step bar, modal detail mid-flight, disappears on Co
     description: midFlightStatuses.join(',')
   });
 
-  await expect
-    .poll(
-      async () => {
-        await bridgePage.refreshActivity();
-        return row
-          .getByText('Completed')
-          .isVisible()
-          .catch(() => false);
-      },
-      {
-        message: 'Waiting for the L2-1->L2-2 deposit to reach Completed (CLAIMED)',
-        timeout: E2E_L2_TO_L2_CLAIM_TIMEOUT_MS,
-        intervals: [5_000]
-      }
-    )
-    .toBe(true);
+  await bridgePage.waitForReadyAndClaim(transactionHash, {
+    readyTimeoutMs: E2E_L2_TO_L2_CLAIM_TIMEOUT_MS,
+    claimTimeoutMs: E2E_CLAIM_TIMEOUT_MS
+  });
 
   // Terminal assertion (S7's chosen behavior): bar disappears on CLAIMED.
   await expect(trackerBar).toHaveCount(0);

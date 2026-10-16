@@ -33,7 +33,7 @@ import type {
   WalletClient
 } from 'viem';
 
-import { decodeEventLog, parseAbiItem, parseUnits } from 'viem';
+import { decodeEventLog, erc20Abi, parseAbiItem, parseUnits } from 'viem';
 
 import type {
   AggkitBridgeAggregator as AggkitBridgeAggregatorType,
@@ -49,6 +49,9 @@ import type {
   AllowanceRead,
   BridgeSubmission,
   ClaimInputsResult,
+  ClaimPreState,
+  ClaimStageProbeParams,
+  ClaimStageProbeResult,
   ClaimSubmission,
   DriverError,
   HopReadState,
@@ -62,14 +65,21 @@ import type { ActivityCadenceState } from './uiCallset';
 import { toClaimProof } from '../../../app/services/claimProof';
 import { mapTransactionRequest } from '../../../app/utils/transaction';
 import { toRowKey } from '../../core/types';
-import { classifyHttpError, classifyRpcError, classifySubmitError } from '../../metrics/errors';
+import {
+  ClassifiedFetchError,
+  classifyActivityWarning,
+  classifyHttpError,
+  classifyRpcError,
+  classifySubmitError
+} from '../../metrics/errors';
 import { defaultChainClientFactory } from '../../wallets/chainClients';
-import { redactSecrets } from '../../wallets/redact';
+import { detectWrapperDeployed, extractReceiptGas } from './receiptGas';
 import {
   IS_CLAIMED_RECHECK_DELAYS_MS,
   anyRowNonTerminal,
   initialActivityCadenceState,
   KeyedSerialQueue,
+  confirmClaimedRows,
   mapActivityResponseText,
   noteActivityFetched,
   noteBridgeSubmitted,
@@ -131,6 +141,24 @@ const toSdkChainConfig = (chain: LoadtestChain) => ({
   bridgeAddress: chain.bridgeAddress
 });
 
+/** `setTimeout` that resolves early (never rejects) when `signal` aborts. */
+const abortableSleep = (ms: number, signal?: AbortSignal): Promise<void> =>
+  new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve();
+      return;
+    }
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+
 const messageOf = (error: unknown): string => {
   if (error && typeof error === 'object') {
     const anyErr = error as { shortMessage?: unknown; details?: unknown; message?: unknown };
@@ -160,6 +188,11 @@ export interface HeadlessUserOptions {
   aggkitProxyUrl: string;
   /** DESIGN §9.4/finding C5 — headless-only, applied to the bridge send only. */
   bridgeGasOffset: number;
+  /**
+   * Headless-only additive margin on the CLAIM send's gas limit (unused gas is
+   * refunded). Absent = 0. Intentional deviation from the UI, which has none.
+   */
+  claimGasOffset?: number;
   collector: Collector;
   clock?: { now(): number };
   /**
@@ -190,6 +223,15 @@ export interface HeadlessUserOptions {
    * as before).
    */
   receiptTimeoutMs?: number;
+  /**
+   * S53 M9 (`measurement.claimPreState`): just before sending the claim of a
+   * wrapped ERC-20 (destination is not the token's origin network and the
+   * wrapper already exists), read the wrapped token's `totalSupply()` and the
+   * recipient's `balanceOf()` on the destination at `latest` and return them as
+   * `ClaimSubmission.preState`. Harness-origin reads, best effort: a failed read
+   * never affects the claim. Off by default.
+   */
+  claimPreState?: boolean;
 }
 
 /**
@@ -208,11 +250,14 @@ export class HeadlessUser implements UserDriver {
   private readonly assets: readonly LoadtestAsset[];
   private readonly aggkitProxyUrl: string;
   private readonly bridgeGasOffset: number;
+  private readonly claimGasOffset: number;
   private readonly collector: Collector;
   private readonly clock: { now(): number };
   private readonly seedTokenList: boolean;
   /** R4 — see `HeadlessUserOptions.receiptTimeoutMs`'s doc. */
   private readonly receiptTimeoutMs?: number;
+  /** S53 M9 — see `HeadlessUserOptions.claimPreState`'s doc. */
+  private readonly claimPreState: boolean;
 
   private chainsByKey = new Map<string, LoadtestChain>();
   private runtimes = new Map<string, ChainRuntime>();
@@ -280,7 +325,15 @@ export class HeadlessUser implements UserDriver {
   // no "don't bother retrying, the whole session is gone" case — every
   // failure here is a plain network/HTTP error, so the default (always
   // retryable, bounded to 3 attempts) is the right behaviour.
-  private readonly activityPoller = new SingleFlightPoller<ObservedRow[]>();
+  //
+  // S53 (design F3): `tracker_not_ready` is the tracker saying "retry after
+  // <interval>" for a first-time address — hammering it again 300 ms later is
+  // exactly the wrong response, so it is not retried here; the runner backs
+  // off to the UI's own cadence instead. Every other failure keeps the retry.
+  private readonly activityPoller = new SingleFlightPoller<ObservedRow[]>({
+    isFatal: (error) =>
+      error instanceof ClassifiedFetchError && error.errorClass === 'tracker_not_ready'
+  });
 
   // S29 (reverses R3, `loadtest/REVIEW.md`): serializes every
   // nonce-consuming send THIS user issues, per chain — see `sendAndWait`'s
@@ -306,10 +359,12 @@ export class HeadlessUser implements UserDriver {
     this.assets = options.assets ?? [];
     this.aggkitProxyUrl = options.aggkitProxyUrl.replace(/\/$/, '');
     this.bridgeGasOffset = options.bridgeGasOffset;
+    this.claimGasOffset = options.claimGasOffset ?? 0;
     this.collector = options.collector;
     this.clock = options.clock ?? { now: () => Date.now() };
     this.seedTokenList = options.seedTokenList ?? true;
     this.receiptTimeoutMs = options.receiptTimeoutMs;
+    this.claimPreState = options.claimPreState ?? false;
   }
 
   async init(): Promise<void> {
@@ -350,7 +405,10 @@ export class HeadlessUser implements UserDriver {
     return runWithFetchContext({ userId: this.userId, mode: this.mode }, async () => {
       const fromChain = this.chainByKey(hop.fromChainKey);
       const toChain = this.chainByKey(hop.toChainKey);
-      const isNative = hop.assetKind === 'eth';
+      // Design B: on a gas-token chain `eth` is held as the chain's WETH, so
+      // bridging it out burns WETH (token = WETH, no msg.value, no approval).
+      const isWethBurn = hop.assetKind === 'eth' && hop.fromWethToken !== undefined;
+      const isNative = hop.assetKind === 'eth' && !isWethBurn;
       const amountWei = parseUnits(hop.amount, hop.decimals);
 
       // P8: eth_gasPrice, 15s cache, display-only — the UI's shown fee uses
@@ -370,7 +428,9 @@ export class HeadlessUser implements UserDriver {
       // so it's a headless-only addition, cached indefinitely per chain.
       const fromTokenAddress = isNative
         ? undefined
-        : await this.resolveTokenAddress(hop, fromChain);
+        : isWethBurn
+          ? (hop.fromWethToken as Address)
+          : await this.resolveTokenAddress(hop, fromChain);
 
       // P7: balance read, 15s cache, no refetch-on-mount.
       await this.balanceCache.get(
@@ -387,7 +447,7 @@ export class HeadlessUser implements UserDriver {
       let allowance: AllowanceRead | null = null;
       let approve: TxStepResult | null = null;
 
-      if (!isNative) {
+      if (!isNative && !isWethBurn) {
         const tokenAddress = fromTokenAddress as Address;
         const allowanceStartedAt = this.clock.now();
         // P9: keyed including the amount string — a fresh cache entry (and
@@ -437,6 +497,23 @@ export class HeadlessUser implements UserDriver {
               destinationAddress: this.address,
               amount: amountWei.toString(),
               token: ZERO_ADDRESS,
+              forceUpdateGlobalExitRoot: true
+            },
+            this.address
+          );
+      } else if (isWethBurn) {
+        // The bridge's own mintable WETH is burned by `bridgeAsset`
+        // (privileged burn): `Bridge.buildBridgeAsset` with `token = WETH`
+        // sets no `value`, and no approval is needed (the dev-ui app does
+        // the same on a `wethToken` chain).
+        bridgeTxParams = await this.native
+          .bridge(fromChain.bridgeAddress, fromChain.chainId)
+          .buildBridgeAsset(
+            {
+              destinationNetwork: toChain.networkId,
+              destinationAddress: this.address,
+              amount: amountWei.toString(),
+              token: fromTokenAddress as Address,
               forceUpdateGlobalExitRoot: true
             },
             this.address
@@ -492,6 +569,19 @@ export class HeadlessUser implements UserDriver {
       }
 
       const decoded = this.decodeBridgeEvent(fromChain.bridgeAddress as Address, rawReceipt.logs);
+      // SD4: on a hop touching a gas-token chain, the leaf identity is the
+      // observable that catches a silent change of asset (e.g. bridging the
+      // gas token with token=0x0 instead of the WETH).
+      if (decoded && hop.expectedOrigin !== undefined) {
+        const matches =
+          Number(decoded.originNetwork) === hop.expectedOrigin.networkId &&
+          decoded.originAddress.toLowerCase() === hop.expectedOrigin.address.toLowerCase();
+        if (!matches) {
+          throw new Error(
+            `ASSET_IDENTITY_MISMATCH: hop ${hop.hopRoute} bridge leaf origin is (${decoded.originNetwork}, ${decoded.originAddress}), expected (${hop.expectedOrigin.networkId}, ${hop.expectedOrigin.address})`
+          );
+        }
+      }
       if (decoded) {
         this.depositInfo.set(toRowKey(bridgeStep.txHash, decoded.depositCount), {
           amount: decoded.amount,
@@ -549,24 +639,39 @@ export class HeadlessUser implements UserDriver {
         status: response.status,
         bodyText
       });
-      throw new Error(classified.message);
+      // S53 (design F3): keep the class (and the tracker's own `Retry-After`,
+      // recorded but not obeyed — the UI's behaviour on a 503 is unverified,
+      // so this keeps parity) instead of flattening to a plain Error that the
+      // runner would re-classify as `internal`.
+      const retryAfter = response.headers.get('retry-after');
+      throw new ClassifiedFetchError(
+        retryAfter === null
+          ? classified
+          : { ...classified, message: `${classified.message} (Retry-After: ${retryAfter})` },
+        response.status
+      );
     }
 
     // DESIGN §9.2: text, then the big-int-safe parse — NEVER response.json().
     const text = await response.text();
-    const { rows, warnings } = mapActivityResponseText(text);
+    const mapped = mapActivityResponseText(text);
+    const { warnings } = mapped;
+    // Issue #53: never trust an unproven tracker `claimed` (see confirmClaimedRows).
+    const rows = await confirmClaimedRows(mapped.rows, (row) => this.isClaimedOnDestination(row));
 
     // Finding C13: per-network warnings are a partial-fanout signal, not
     // silence — recorded so a broken upstream bridge service is visible
     // rather than looking like "no rows for that network".
     for (const warning of warnings) {
+      const classified = classifyActivityWarning({
+        networkId: warning.network_id,
+        message: warning.message
+      });
       this.collector.error({
         userId: this.userId,
         mode: this.mode,
-        errorClass: 'proxy_5xx',
-        message: redactSecrets(
-          `activity_warning[network_id=${warning.network_id}]: ${warning.message}`
-        ),
+        errorClass: classified.errorClass,
+        message: classified.message,
         endpointClass: 'tracker/activity'
       });
     }
@@ -703,7 +808,24 @@ export class HeadlessUser implements UserDriver {
       };
 
       const claimTxParams = await bridge.buildClaimAsset(claimParams, this.address);
-      const { step: claimStep } = await this.sendAndWait(toChain.key, claimTxParams);
+      // S53 M9: read right before the send so the state is as close as possible
+      // to what the claim will act on (still approximate: it lands a few blocks later).
+      const preState = this.claimPreState ? await this.readClaimPreState(hop, toChain) : undefined;
+      const claimGasOverride = await this.claimGasLimit(toChain.key, claimTxParams);
+      const { step: claimStep, rawReceipt: claimReceipt } = await this.sendAndWait(
+        toChain.key,
+        claimTxParams,
+        { gasOverride: claimGasOverride }
+      );
+      // Measurement (S45 C1): first claim of an ERC20 deploys the wrapper —
+      // detected from the logs already in hand (NewWrappedToken emitted by the
+      // destination bridge), no extra RPC.
+      if (claimStep.receipt?.gas !== undefined && claimReceipt) {
+        claimStep.receipt.gas.wrapperDeployed = detectWrapperDeployed(
+          toChain.bridgeAddress,
+          claimReceipt.logs
+        );
+      }
 
       // Finding C3: the post-throw retry loop. Also applied, defensively,
       // to a mined-but-reverted receipt (DESIGN T24/T25) — the live UI only
@@ -718,8 +840,156 @@ export class HeadlessUser implements UserDriver {
         isClaimedRecheck = await this.isClaimedRetryLoop(bridge, row);
       }
 
-      return { isClaimedBefore, isClaimedTiming, claimInputs, claim: claimStep, isClaimedRecheck };
+      return {
+        isClaimedBefore,
+        isClaimedTiming,
+        claimInputs,
+        claim: claimStep,
+        isClaimedRecheck,
+        ...(preState !== undefined ? { preState } : {})
+      };
     });
+  }
+
+  /**
+   * S53 M9: the wrapped token's `totalSupply()` and the recipient's `balanceOf()`
+   * on the destination chain, or `undefined` when this claim is not a wrapped-token
+   * mint candidate (an ETH hop, a claim on the token's origin network, a wrapper
+   * that is not deployed yet) or a read fails. Never throws.
+   */
+  private async readClaimPreState(
+    hop: HopSpec,
+    toChain: LoadtestChain
+  ): Promise<ClaimPreState | undefined> {
+    if (hop.assetKind !== 'erc20') return undefined;
+    const originNetworkId = this.assets[hop.assetIndex]?.originNetworkId;
+    if (originNetworkId === undefined || toChain.networkId === originNetworkId) return undefined;
+    return runWithFetchContext(
+      { userId: this.userId, mode: this.mode, origin: 'harness' },
+      async () => {
+        try {
+          const wrapped = await this.resolveTokenAddress(hop, toChain);
+          // Zero address: the wrapper does not exist yet, so this claim deploys it.
+          if (wrapped.toLowerCase() === ZERO_ADDRESS.toLowerCase()) return undefined;
+          const publicClient = this.chainRuntime(toChain.key).public;
+          const [supply, balance] = await Promise.all([
+            publicClient.readContract({
+              address: wrapped,
+              abi: erc20Abi,
+              functionName: 'totalSupply'
+            }),
+            publicClient.readContract({
+              address: wrapped,
+              abi: erc20Abi,
+              functionName: 'balanceOf',
+              args: [this.address]
+            })
+          ]);
+          return {
+            wrappedSupplyBefore: supply.toString(),
+            recipientBalanceBefore: balance.toString()
+          };
+        } catch {
+          return undefined;
+        }
+      }
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // probeClaimStages() — S45 C2, measurement only. NOT part of `UserDriver`;
+  // the runner calls it behind a mode guard when `measurement.
+  // stageProbeIntervalMs` is configured. Polls the three claim-path endpoints
+  // in the pinned SDK's own `getClaimInputs` order (l1-info-tree-index on the
+  // source -> injected-l1-info-leaf on the destination -> claim-proof on the
+  // source), never re-polling a stage that is already available. Every request
+  // runs under a `harness`-origin fetch context so it lands in the harness
+  // bucket of the endpoint tables, never the UI-parity numbers. Resolves
+  // (never rejects) with whatever stages were reached.
+  // -------------------------------------------------------------------------
+  async probeClaimStages(params: ClaimStageProbeParams): Promise<ClaimStageProbeResult> {
+    const { sourceNetwork, destinationNetwork, depositCount, intervalMs, deadlineAt, signal } =
+      params;
+    const result: ClaimStageProbeResult = {
+      l1InfoTreeIndexAt: null,
+      l1InfoTreeIndex: null,
+      injectedLeafAt: null,
+      injectedLeafIndex: null,
+      claimProofAt: null,
+      polls: 0
+    };
+    // L1 (network 0) has no dedicated aggkit client — route it through the
+    // other end's instance, as the SDK's own `clientForRecordingNetwork` does.
+    const clientFor = (networkId: number, other: number) =>
+      this.aggregator.clientFor(networkId === 0 ? other : networkId);
+    const sourceClient = clientFor(sourceNetwork, destinationNetwork);
+
+    return runWithFetchContext(
+      { userId: this.userId, mode: this.mode, origin: 'harness' },
+      async () => {
+        while (!signal?.aborted && this.clock.now() < deadlineAt) {
+          try {
+            if (result.l1InfoTreeIndexAt === null) {
+              result.polls += 1;
+              const probe = await sourceClient.getL1InfoTreeIndex({
+                networkId: sourceNetwork,
+                depositCount
+              });
+              if (probe.ready) {
+                result.l1InfoTreeIndexAt = this.clock.now();
+                result.l1InfoTreeIndex = probe.value;
+              }
+            }
+            if (result.l1InfoTreeIndexAt !== null && result.injectedLeafAt === null) {
+              if (destinationNetwork === 0) {
+                // L1 destination: the leaf AT the index, no injection to wait for.
+                result.injectedLeafAt = this.clock.now();
+                result.injectedLeafIndex = result.l1InfoTreeIndex;
+              } else {
+                result.polls += 1;
+                const probe = await clientFor(destinationNetwork, sourceNetwork).getInjectedL1InfoLeaf({
+                  networkId: destinationNetwork,
+                  leafIndex: result.l1InfoTreeIndex as number
+                });
+                if (probe.ready) {
+                  result.injectedLeafAt = this.clock.now();
+                  result.injectedLeafIndex = probe.value.l1_info_tree_index;
+                  // Present on newer aggkit only (absent in the S43 live payload).
+                  const extra = probe.value as unknown as {
+                    injected_l2_block_num?: unknown;
+                    injected_l2_block_timestamp?: unknown;
+                  };
+                  if (typeof extra.injected_l2_block_num === 'number') {
+                    result.injectedL2BlockNum = extra.injected_l2_block_num;
+                  }
+                  if (typeof extra.injected_l2_block_timestamp === 'number') {
+                    result.injectedL2BlockTimestamp = extra.injected_l2_block_timestamp;
+                  }
+                }
+              }
+            }
+            if (result.injectedLeafAt !== null && result.claimProofAt === null) {
+              result.polls += 1;
+              const probe = await sourceClient.getClaimProof({
+                networkId: sourceNetwork,
+                leafIndex: result.injectedLeafIndex as number,
+                depositCount
+              });
+              if (probe.ready) result.claimProofAt = this.clock.now();
+            }
+          } catch {
+            // A transient poll failure (HTTP/transport) never ends the probe —
+            // the next round retries; the request itself is already recorded
+            // (status/transport failure) by the timing fetch wrapper.
+          }
+          params.onProgress?.({ ...result });
+          if (result.claimProofAt !== null) break;
+          await abortableSleep(intervalMs, signal);
+        }
+        params.onProgress?.({ ...result });
+        return result;
+      }
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -758,6 +1028,16 @@ export class HeadlessUser implements UserDriver {
   // -------------------------------------------------------------------------
   // Internals
   // -------------------------------------------------------------------------
+
+  private isClaimedOnDestination(row: ObservedRow): Promise<boolean> {
+    const toChain = [...this.chainsByKey.values()].find(
+      (chain) => chain.networkId === row.destinationNetwork
+    );
+    if (toChain === undefined) return Promise.resolve(false);
+    return this.native
+      .bridge(toChain.bridgeAddress as Address, toChain.chainId)
+      .isClaimed({ leafIndex: row.depositCount, sourceBridgeNetwork: row.sourceNetwork });
+  }
 
   private chainByKey(key: string): LoadtestChain {
     const chain = this.chainsByKey.get(key);
@@ -844,6 +1124,36 @@ export class HeadlessUser implements UserDriver {
    * precedent and the same real-user framing: one wallet does not have
    * several bridges in flight against one chain at once.
    */
+  /**
+   * Claim gas limit = SDK `gas` (or one eth_estimateGas if the params carry
+   * none) + `claimGasOffset`. A first-mint claim deploys the wrapped token, and
+   * concurrent claims change that state between estimate and execution
+   * (zero-state mint ~228k vs ~177-194k nonzero), so the bare estimate can run
+   * out of gas. Returns undefined (viem's own estimate) when the offset is 0 or
+   * no estimate is obtainable.
+   */
+  private async claimGasLimit(
+    chainKey: string,
+    txParams: TransactionParams
+  ): Promise<bigint | undefined> {
+    if (this.claimGasOffset <= 0) return undefined;
+    let base: bigint | undefined = txParams.gas !== undefined ? BigInt(txParams.gas) : undefined;
+    if (base === undefined) {
+      try {
+        const mapped = mapTransactionRequest(txParams);
+        base = await this.chainRuntime(chainKey).public.estimateGas({
+          account: this.address,
+          to: mapped.to,
+          data: mapped.data,
+          value: mapped.value
+        });
+      } catch {
+        return undefined;
+      }
+    }
+    return base + BigInt(this.claimGasOffset);
+  }
+
   private async sendAndWait(
     chainKey: string,
     txParams: TransactionParams,
@@ -889,6 +1199,7 @@ export class HeadlessUser implements UserDriver {
           hash: txHash,
           ...(this.receiptTimeoutMs !== undefined ? { timeout: this.receiptTimeoutMs } : {})
         });
+        const gas = extractReceiptGas(receipt as never);
         return {
           step: {
             txHash,
@@ -898,7 +1209,8 @@ export class HeadlessUser implements UserDriver {
               timing: {
                 startedAt: receiptStartedAt,
                 durationMs: this.clock.now() - receiptStartedAt
-              }
+              },
+              ...(gas !== undefined ? { gas } : {})
             }
           },
           rawReceipt: receipt

@@ -9,11 +9,14 @@ import type { ObservedRow } from '../../core/types';
 import {
   anyRowNonTerminal,
   BADGE_INTERVAL_MS,
+  buildChainKeyResolver,
   classifyEndpoint,
+  confirmClaimedRows,
   effectivePollIntervalMs,
   initialActivityCadenceState,
   installTimingFetch,
   isActivityFetchDue,
+  isTokenLikeSegment,
   isZeroAddress,
   KeyedSerialQueue,
   mapActivityResponseText,
@@ -214,6 +217,21 @@ describe('mapActivityResponseText (DESIGN §9.2)', () => {
     expect(rows[0].rowKey).not.toBe(rows[1].rowKey);
   });
 
+  it('derives CLAIMED from the api_revision 5 shape (claim_status:"claimed", no `claimed`), rowKey/globalIndex unchanged', () => {
+    // Minimal row cut from a live capture (public addresses/hashes only).
+    const text = `{"from_address":"0x6e7b53e2f0e4dcbad1efa35d0d159b7fe399e054","bridges":[{"bridge":{"block_num":11822419,"block_pos":209,"from_address":"0x6e7B53e2f0E4DCbAd1Efa35D0D159b7FE399e054","tx_hash":"0xb993ed2cf57503088fba005edf2467da31a0954aae9df76a44b3f3d4dccbd0db","global_index":18446744073710705908,"block_timestamp":1790864928,"leaf_type":0,"origin_network":0,"origin_address":"0x0000000000000000000000000000000000000000","destination_network":82,"destination_address":"0x6e7B53e2f0E4DCbAd1Efa35D0D159b7FE399e054","amount":"10000000000000","metadata":"0x","deposit_count":1154292,"bridge_hash":"0x341849d91d8e2c666db3caff4681ced250872d7f1b684d480a7396abd9da6077","txn_sender":"0x6e7B53e2f0E4DCbAd1Efa35D0D159b7FE399e054","to_address":"0x1348947e282138d8f377b467F7D9c2EB0F335d1f"},"bridge_network_id":0,"source":"bridge","claim_status":"claimed","claim_network_id":82,"claim":{"block_num":4497171,"block_timestamp":1790865303,"tx_hash":"0x86558cdbf8411be0615373b22cca84a7701b359080aa7e7a505e7ab3c16fb9ea","global_index":"18446744073710705908","destination_network":82,"amount":"10000000000000","is_message":false},"creation_timestamp":1790864928,"last_updated_timestamp":1790932946}]}`;
+    const { rows } = mapActivityResponseText(text);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].status).toBe('CLAIMED');
+    expect(rows[0].rowKey).toBe(
+      '0xb993ed2cf57503088fba005edf2467da31a0954aae9df76a44b3f3d4dccbd0db:1154292'
+    );
+    expect(rows[0].globalIndex).toBe('18446744073710705908');
+    expect(rows[0].claimTransactionHash).toBe(
+      '0x86558cdbf8411be0615373b22cca84a7701b359080aa7e7a505e7ab3c16fb9ea'
+    );
+  });
+
   it('surfaces a top-level warnings array untouched (finding C13)', () => {
     const raw = JSON.parse(rawActivityFixture()) as Record<string, unknown>;
     raw.warnings = [{ network_id: 2, message: 'dial tcp 34.147.196.6:5577: connect: timed out' }];
@@ -264,6 +282,116 @@ describe('classifyEndpoint', () => {
 
   it('falls back to the chain segment alone when the body is not JSON-RPC', () => {
     expect(classifyEndpoint('http://127.0.0.1:8555/l2rpc-001')).toBe('rpc/l2rpc-001');
+  });
+});
+
+// S53 / heavy-load design F1: RPC endpoint classes must never carry the URL's
+// path segment when that segment can be an API key. Every key below is fake.
+describe('classifyEndpoint — chain-key naming and token-shaped segments (F1)', () => {
+  const TOKEN = 'AbCdEf0123456789TokenXyz';
+  const body = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [] });
+  const chains = [
+    { key: 'SEPOLIA', rpcUrl: 'https://l1.example.invalid' },
+    { key: 'BALI_82', rpcUrl: `https://rpc.example.invalid/${TOKEN}` },
+    { key: 'BALI_85', rpcUrl: 'http://10.0.0.5:8545/' },
+    { key: 'DEVNET_A', rpcUrl: 'http://127.0.0.1:8555/l2rpc-001' }
+  ];
+  const resolve = buildChainKeyResolver(chains);
+
+  it('names RPC traffic by chain key when a resolver recognises the URL', () => {
+    expect(classifyEndpoint(`https://rpc.example.invalid/${TOKEN}`, body, resolve)).toBe(
+      'rpc/BALI_82/eth_call'
+    );
+    expect(classifyEndpoint('https://l1.example.invalid', body, resolve)).toBe(
+      'rpc/SEPOLIA/eth_call'
+    );
+    expect(classifyEndpoint('https://l1.example.invalid/', body, resolve)).toBe(
+      'rpc/SEPOLIA/eth_call'
+    );
+    expect(classifyEndpoint('http://10.0.0.5:8545', body, resolve)).toBe('rpc/BALI_85/eth_call');
+    expect(classifyEndpoint('http://127.0.0.1:8555/l2rpc-001', body, resolve)).toBe(
+      'rpc/DEVNET_A/eth_call'
+    );
+    expect(classifyEndpoint(`https://rpc.example.invalid/${TOKEN}`, undefined, resolve)).toBe(
+      'rpc/BALI_82'
+    );
+  });
+
+  it('never writes the keyed path segment, with or without a resolver', () => {
+    for (const resolver of [resolve, undefined]) {
+      const cls = classifyEndpoint(`https://rpc.example.invalid/${TOKEN}`, body, resolver);
+      expect(cls).not.toContain(TOKEN);
+    }
+    expect(classifyEndpoint(`https://rpc.example.invalid/${TOKEN}`, body)).toBe(
+      'rpc/redacted/eth_call'
+    );
+    expect(classifyEndpoint(`https://rpc.example.invalid/v3/${TOKEN}`, body)).toBe(
+      'rpc/redacted/eth_call'
+    );
+  });
+
+  it('keeps the legacy name for a short, non-token segment and for a bare host (no resolver)', () => {
+    expect(classifyEndpoint('http://127.0.0.1:8555/l1rpc', body)).toBe('rpc/l1rpc/eth_call');
+    expect(classifyEndpoint('https://l1.example.invalid', body)).toBe(
+      'rpc/l1.example.invalid/eth_call'
+    );
+    expect(classifyEndpoint('http://10.0.0.5:8545', body)).toBe('rpc/10.0.0.5/eth_call');
+  });
+
+  it('falls back to the legacy rule for a URL the resolver does not know, and ignores other origins or paths', () => {
+    expect(classifyEndpoint('http://127.0.0.1:8555/l1rpc', body, resolve)).toBe(
+      'rpc/l1rpc/eth_call'
+    );
+    expect(resolve('https://rpc.example.invalid/some-other-path')).toBeNull();
+    expect(resolve('https://other.example.invalid/' + TOKEN)).toBeNull();
+    expect(resolve('not a url')).toBeNull();
+  });
+
+  it('does not touch bridge/tracker classing', () => {
+    expect(
+      classifyEndpoint(
+        'http://proxy/aggkitapi/bridge/v1/claim-proof?network_id=1',
+        undefined,
+        resolve
+      )
+    ).toBe('bridge/claim-proof[1]');
+    expect(
+      classifyEndpoint('http://proxy/aggkitapi/tracker/v1/activity/from/0xabc', undefined, resolve)
+    ).toBe('tracker/activity');
+  });
+
+  it('isTokenLikeSegment: 16+ characters of [A-Za-z0-9_-], never a dotted host', () => {
+    expect(isTokenLikeSegment(TOKEN)).toBe(true);
+    expect(isTokenLikeSegment('a'.repeat(16))).toBe(true);
+    expect(isTokenLikeSegment('a'.repeat(15))).toBe(false);
+    expect(isTokenLikeSegment('l2rpc-001')).toBe(false);
+    expect(isTokenLikeSegment('rpc.example.invalid')).toBe(false);
+  });
+
+  it('installTimingFetch records the chain-key class (and never the key) for an RPC request', async () => {
+    const original = globalThis.fetch;
+    globalThis.fetch = (async () => new Response('{}', { status: 200 })) as typeof fetch;
+    const samples: { endpointClass: string }[] = [];
+    const handle = installTimingFetch(
+      {
+        recordHttpSample: (input: { endpointClass: string }) => samples.push(input),
+        recordUncontextedRequest: () => {}
+      } as unknown as Parameters<typeof installTimingFetch>[0],
+      undefined,
+      { resolveChainKey: resolve }
+    );
+    try {
+      await runWithFetchContext({ userId: 'u0', mode: 'headless' }, async () => {
+        await globalThis.fetch(`https://rpc.example.invalid/${TOKEN}`, {
+          method: 'POST',
+          body
+        });
+      });
+    } finally {
+      handle.uninstall();
+      globalThis.fetch = original;
+    }
+    expect(samples.map((s) => s.endpointClass)).toEqual(['rpc/BALI_82/eth_call']);
   });
 });
 
@@ -835,5 +963,25 @@ describe('installTimingFetch — R11/R14 (loadtest/REVIEW.md)', () => {
     expect(globalThis.fetch).not.toBe(original);
     handle.uninstall();
     expect(globalThis.fetch).toBe(original);
+  });
+});
+
+describe('confirmClaimedRows (issue #53)', () => {
+  it('leaves non-CLAIMED rows and claim-object rows untouched without any on-chain read', async () => {
+    const withClaim: ObservedRow = { ...makeRow('CLAIMED'), claimTransactionHash: '0xc1a1' };
+    const rows = [makeRow('PENDING'), makeRow('READY_TO_CLAIM'), makeRow('ERROR'), withClaim];
+    const check = async () => {
+      throw new Error('must not be called');
+    };
+    expect(await confirmClaimedRows(rows, check)).toEqual(rows);
+  });
+
+  it('demotes an unproven CLAIMED row to PENDING unless the chain confirms it', async () => {
+    const [no, yes] = await Promise.all([
+      confirmClaimedRows([makeRow('CLAIMED')], async () => false),
+      confirmClaimedRows([makeRow('CLAIMED')], async () => true)
+    ]);
+    expect(no[0]?.status).toBe('PENDING');
+    expect(yes[0]?.status).toBe('CLAIMED');
   });
 });

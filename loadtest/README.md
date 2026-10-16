@@ -14,6 +14,9 @@ Two worker kinds run in the same tool and the same report:
   replaying the exact call set the UI makes (`app/services/activity.ts` and friends),
   including its polling cadences.
 
+Every run also writes **`out/report.html`**, a single self-contained page that is the
+human entrypoint to the results (see [HTML report](#html-report-outreporthtml)).
+
 Design background, the full UI-call-set parity audit, and the two validation runs
 that shaped the current defaults live in:
 
@@ -100,7 +103,7 @@ is a validated, worked example (Sepolia <-> Bokuto):
   ],
   "ring": ["SEPOLIA", "BOKUTO", "SEPOLIA"], // closed, >= 2 hops; ring[0] must be the asset's origin chain
   "autoclaim": {
-    "SEPOLIA->BOKUTO": { "expected": true, "waitMs": 120000 },
+    "SEPOLIA->BOKUTO": { "expected": false }, // manual claim (default; see "Autoclaim semantics")
     "BOKUTO->SEPOLIA": { "expected": false } // manual claim
   },
   "assets": [{ "kind": "eth", "amount": "0.00001", "decimals": 18 }],
@@ -118,10 +121,12 @@ is a validated, worked example (Sepolia <-> Bokuto):
   "load": { "bridgesPerMinutePerUser": 1, "durationMinutes": 5, "rampUpSeconds": 30 },
   "browser": { "contextsPerBrowser": 1, "headless": true, "trace": true },
   "timeouts": { "txReceiptMs": 120000, "readyToClaimMs": 1800000, "claimedMs": 1800000, "hopMs": 2400000, "lapMs": 5400000 },
-  "gas": { "bridgeGasOffset": 300000 },
+  "gas": { "bridgeGasOffset": 300000, "claimGasOffset": 60000 },
   "output": { "dir": "loadtest-results/testnet-smoke", "activityLog": true }
 }
 ```
+
+`gas.claimGasOffset` (default `60000`, headless only) is an additive gas-limit margin on claim sends: the SDK claim `gas` (or one `eth_estimateGas`) plus the offset. It is an intentional deviation from the real UI, which has no margin: concurrent first-mint claims change state between estimate and execution (~228k zero-state mint vs ~177-194k) and can run out of gas at the bare estimate. Unused gas is refunded. Set `0` to send with viem's own estimate like the UI.
 
 To adapt this for a real run:
 
@@ -157,6 +162,10 @@ devnet example with provenance, §2.4 this testnet example with provenance).
   latency, see [Capacity guidance](#capacity-guidance-measured)), so a wallet never
   gets its ERC20 back before the next scheduled bridge — a flat `amount x 4` default
   silently ran out mid-run in validation run #1.
+- **`run --fund` funds before it runs `preflight`** (`runner.ts:654-682`), so preflight
+  refusals that depend on discovery (`BROWSER_GAS_TOKEN_UNSUPPORTED`, `RING_ETH_START_*`)
+  fire only after money has been sent to the user wallets. Run `preflight` first and do not
+  use `run --fund` for gas-token (outpost) rings; fund with the separate `fund` command.
 - **`--i-know-this-is-mainnet`** must be passed to `fund`/`run` before either will
   spend real funder money on a config whose `env` is `mainnet` — a deliberate,
   unmissable flag rather than an env-based gate. `run` refuses **unconditionally**
@@ -186,8 +195,10 @@ devnet example with provenance, §2.4 this testnet example with provenance).
 | `preflight [<path>]` | Assert per-user gas on every ring chain, asset budget on the ring's origin chain, allowance state, both-sides `sync-status`, tracker health | `--users N` |
 | `build-ui [<path>]` | Build a standalone E2E-enabled static export (`out/`) without touching the repo's committed `config.json` | — |
 | `serve-ui [<path>]` | Serve a `build-ui` export on the config's `uiBaseUrl` until interrupted | `--out <dir>` |
-| `run` | Full pipeline: load+validate config -> preflight -> (fund if `--fund`) -> serve UI if needed -> drive workers -> write report | `--config <path>`, `--users N`, `--browser N`, `--rate Y`, `--minutes Z`, `--assets eth,erc20`, `--fund`, `--i-know-this-is-mainnet`, `--out <dir>` |
-| `report` | Re-render `summary.md` from an existing run directory's `results.json` (byte-identical to the original) | `--dir <dir>` (required) |
+| `run` | Full pipeline: load+validate config -> preflight -> (fund if `--fund`) -> serve UI if needed -> drive workers -> write report | `--config <path>`, `--users N`, `--browser N`, `--rate Y`, `--minutes Z`, `--assets eth,erc20`, `--fund` (see the warning in Funding & safety), `--i-know-this-is-mainnet`, `--out <dir>` |
+| `report` | Re-render `summary.md` (byte-identical to the original) **and** `report.html` from an existing run directory's `results.json` + `activity.ndjson` | `--dir <dir>` (required), `--html` (write only the HTML, leave `summary.md` alone), `--html-out <file>` (default `<dir>/report.html`), `--max-bytes N` (size cap, default 4194304) |
+| `campaign-report` | Render one roll-up page comparing several runs (e.g. a ramp's stages, or pump-off vs pump-on) | `--out <file.html>` (required), `--run <label>=<dir>[,<dir>]` (repeatable; several dirs under one label are pooled, e.g. the I and J rings of one stage) |
+| `check-stop` | Read-only evaluation of stop criteria SC1-SC13 over a live or finished run. Sends no signal, always exits 0 | `--dir <out dir>` (required, repeatable), `--config <path>`, `--json` |
 
 `--users N`, where accepted, also clamps `users.browser` down to `N` if the config's
 own value would exceed it, so `USERS_BROWSER_EXCEEDS_TOTAL` can never fire as a side
@@ -211,21 +222,54 @@ usage should still prefer polling for the report files (`results.json`,
 
 ## Report anatomy
 
-Each run writes `loadtest-results/<timestamp>/`:
+Each run writes `loadtest-results/<timestamp>/`. **Read `report.html` first.** It is the
+human entrypoint (see [HTML report](#html-report-outreporthtml)); `results.json`,
+`activity.ndjson` and `summary.md` below are the machine-readable and debugging artifacts it
+is built from.
 
+- **`report.html`** — the single-file human report, written at the end of every run
+  (including aborted and failed ones). Regenerate it with `pnpm loadtest report --dir <dir>
+  --html`.
 - **`results.json`** — the full machine-readable snapshot: requested vs. achieved
   throughput, hop outcomes by route, phase/endpoint latency histograms, gate stalls,
   autoclaim policy counters, errors by class, resource samples, environment. Secrets
-  in the embedded `config` are re-shaped as `{ref: "env:NAME"}` — never resolved.
+  in the embedded `config` are re-shaped as `{ref: "env:NAME"}` — never resolved, and
+  RPC URLs that carry a key are masked (see [Redaction](#redaction-guarantees)).
 - **`activity.ndjson`** — the raw event stream (`hopState`, `txSent`, `txReceipt`,
   `activityRow`, `claimAttempt`, `error`, `hopEnd`, `lapEnd`, `resourceSample`, ...)
   that `results.json` is aggregated from — use it when a summary number needs
-  attributing to specific users/hops.
+  attributing to specific users/hops. The heavy-load kinds (`pump_*`, `wallet_balance`,
+  `l1_info_leaf`, `http_window`, `tx_sent`, `tx_receipt`) are listed in
+  [Heavy-load measurement](#heavy-load-measurement-pump-samplers-stop-criteria).
 - **`summary.md`** — the human-readable report, in this section order:
   Configuration, Throughput, Hop outcomes, Phase latencies, Endpoint latencies, Gate
-  stalls, Autoclaim policy, Errors, Resources, Environment. Its first line is always
+  stalls, Autoclaim policy, Errors, Resources, Environment, then Claim gas and stage
+  latency (see "Measurement" below). Its first line is always
   the pass/abort headline (see below). `pnpm loadtest report --dir <dir>` re-renders
   it from `results.json` alone, byte-identical.
+- **Error classes.** The Errors section lists errors by class and a top-10. The
+  non-failing class `activity_warning` (the tracker answered 200 but flagged a network
+  as "not fully synchronized, some bridges may still be missing") appears in those
+  tables, not under "Suppressed", and never fails a hop: a run whose only errors are
+  `activity_warning` entries is still `PASS`.
+
+**Measurement (claim gas and stage latency).** Every hop writes one
+`hop_measurement` record to `activity.ndjson`, and `results.json` gets a `measurements`
+key (`probeIntervalMs`, `hops`, `claimGas`, `stageLatency`, `excludedHops`). Claim gas
+(`gasUsed`, `effectiveGasPrice`, the OP `l1Fee*` fields when the receipt carries them,
+and whether the claim deployed the wrapper token) is read from the receipt the headless
+driver already fetches: no extra RPC. The wrapper deploy is detected from the bridge's
+`NewWrappedToken(uint32,address,address,bytes)` log. The optional config block
+`measurement: { "stageProbeIntervalMs": 5000 }` (integer >= 1000, default off, headless
+users only) starts a harness-origin probe after each bridge receipt that polls
+`l1-info-tree-index`, `injected-l1-info-leaf` and `claim-proof` until the proof is
+available; probe requests land in the `harness` bucket of the endpoint tables, never the
+UI-parity numbers. The other `measurement` fields (`walletBalanceIntervalMs`, `l1InfoTree`,
+`httpWindowMs`, `claimPreState`) are documented in
+[Heavy-load measurement](#heavy-load-measurement-pump-samplers-stop-criteria).
+`summary.md`'s `## Claim gas and stage latency` section (always last,
+"No measurements recorded." for an older `results.json`) reports n / min / true median /
+max over completed hops only; failed hops are counted beside the tables.
 
 **The throughput identity.** `ticksOffered = lapStartsSubmitted + skippedBackpressure
 + ticksLostToRamp` — all four counted in the same unit (one per scheduler
@@ -250,18 +294,335 @@ include queueing delay, not just request/response time) — see [Capacity
 guidance](#capacity-guidance-measured).
 
 **`aborted` means SIGINT/fatal only.** A run that served its full requested
-`--minutes` and then drained in-flight laps normally reads as `PASS`, e.g. `PASS
-(drained 12 in-flight laps)` — it is not marked `aborted` just because laps were
-still in flight at the moment draining began. `aborted: true` (headline `ABORTED
+`--minutes` and then drained in-flight laps normally is not marked `aborted` just
+because laps were still in flight at the moment draining began; when every finished
+lap is `LAP_DONE` it reads as `PASS`, e.g. `PASS (drained 12 in-flight laps)`. `aborted: true` (headline `ABORTED
 (sigint)` or `ABORTED (fatal)`) is reserved for abnormal termination.
+
+**`PASS` requires every finished lap to be `LAP_DONE`.** Headline precedence is
+`ABORTED (...)` > `NO LAPS STARTED` > `FAIL (n of m lap(s) failed: <top failing hop
+outcomes>)` (any `LAP_FAILED`) > `INCOMPLETE (n of m lap(s) aborted: <top hop
+outcomes>)` (any `LAP_ABORTED`, e.g. `aborted_drain` at the drain deadline) > `PASS`.
+A process exit code of 0 does not imply `PASS`; read the first line of `summary.md`.
+
+**`NO LAPS STARTED` is not a pass.** A run that was not aborted but in which
+`achieved.lapStartsSubmitted` is `0` is headlined `NO LAPS STARTED (0 lap starts —
+nothing was exercised)` instead of `PASS`. This is what `--rate 1 --minutes 1`
+produces (see [One lap per user](#one-lap-per-user-coverage-runs-not-load)). Treat
+it as "the run proved nothing", not as a tool failure.
+
+**`gasTokenChains` (optional).** When preflight discovered one or more
+[gas-token chains](#gas-token-chains-eth-held-as-weth), `results.json` carries a
+top-level `gasTokenChains` object keyed by chain key, each value
+`{ gasTokenAddress, gasTokenNetwork, wethToken }`. It is omitted entirely when every
+ring chain uses ETH as gas, so reports for ETH-only configs are unchanged.
+
+## Heavy-load measurement: pump, samplers, stop criteria
+
+These features exist for the heavy Bali campaign (many wallets, several hours). Every one of
+them is **off by default**: a config without the `pump` and `measurement` blocks produces the
+same `results.json` and `activity.ndjson` it always did (asserted by a flag-off golden test).
+
+### The `pump` block (L1 deposit pump)
+
+An optional, harness-side loop that sends one `bridgeAsset(destination, self, amount, 0x0,
+forceUpdateGlobalExitRoot = true, 0x)` on the L1 every `intervalSeconds`, from a **dedicated
+wallet**, so the L1 info tree keeps gaining leaves while the users bridge. It exists to test
+whether more frequent L1 info-tree updates shorten the 85-origin `ready_to_claim` wait.
+
+```jsonc
+"pump": {
+  "enabled": true,
+  "chainKey": "SEPOLIA",          // must be the chain with networkId 0 (the L1)
+  "destinationNetworkId": 82,     // a configured non-L1 network
+  "walletIndex": 99,              // derived from users.wallets.mnemonicRef; outside the user range
+  "amount": "0",                  // ETH, decimal string; default "0" (the bridge accepts 0, no dust)
+  "intervalSeconds": 600,         // floor 60
+  "maxTotalSpend": "0.07",        // ETH, hard cap for the whole run (gas + amount)
+  "maxGasPriceGwei": 5            // pause while L1 gas is above this; also the maxFeePerGas of every pump tx
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `enabled` | `false` behaves exactly like an absent block, so a template can carry it switched off |
+| `chainKey` | L1 chain key; else `PUMP_CHAIN_NOT_L1` |
+| `destinationNetworkId` | must be a configured non-L1 network; else `PUMP_DESTINATION_UNKNOWN` |
+| `walletIndex` | mnemonic index of the pump wallet. Must not fall in `[startIndex, startIndex + users.total)` (`PUMP_WALLET_OVERLAPS_USERS`, re-checked after `--users`), and needs `mnemonicRef` wallets (`PUMP_WALLET_REQUIRES_MNEMONIC`) |
+| `amount` | ETH per deposit, default `"0"` |
+| `intervalSeconds` | below 60 is `PUMP_INTERVAL_TOO_SHORT` |
+| `maxTotalSpend` | `preflight` fails `PUMP_UNDERFUNDED` unless the pump wallet already holds at least this much on the L1. `fund` never funds the pump wallet; send it ETH yourself |
+| `maxGasPriceGwei` | gas-price guard and `maxFeePerGas` of every pump tx |
+
+Behaviour: the first deposit fires at run start, then one per interval until the run ends
+(after the drain). One deposit is in flight at a time (`previous_pending` skips the tick). The
+spend cap counts a pending deposit at its worst case (`gasLimit x maxFeePerGas + amount`) and
+the pump stops for good when the next deposit could exceed it (`cap_reached`); a tick while
+the gas price is above `maxGasPriceGwei` is skipped (`gas_price`) and the pump resumes later.
+**Pump traffic is not user traffic**: it never counts in hops, laps, ticks or the verdict, and
+its RPC requests are recorded in the `harness` origin bucket.
+
+What it writes:
+
+- `activity.ndjson`: `pump_state` (`started` / `stopped`), `pump_deposit` (tx hash, gas used,
+  price, cost, cumulative spend) and `pump_skipped` (`gas_price`, `cap_reached`,
+  `previous_pending`, `send_error`).
+- `results.json` `pump` block (present only when the pump ran): `sender`,
+  `destinationNetworkId`, `amountWei`, `intervalSeconds`, `maxTotalSpendWei`, `maxGasPriceWei`,
+  `deposits[]`, `skipped{}`, `totalSpendWei`, `pendingAtStop`.
+- `report.html`: the "Pump activity" section (spend versus cap, deposits, skips). The 5 s
+  status line shows `pump=on(<settled>/<planned>,<spend>ETH)`.
+
+**Measurement caveat: a pump-off baseline means no tool deposits, not no new leaves.** Under
+load the PP network (82) settles certificates often, and every settlement that changes 82's
+exit root adds an L1 info-tree leaf, which already unblocks 85-origin hops. So the pump may
+show little effect, and that is a valid result. To make the comparison readable, enable
+`measurement.l1InfoTree` in **both** runs (pump on and pump off): the leaf count in the run
+window, split into leaves from the pump and leaves from other sources, is what tells a reader
+why the 85 wait moved. Compare `hops.byRoute["BALI_85->BALI_82"].phases.ready_to_claim`
+(p50/p90/max) and the `l1-info-tree-index` stage latency between the two runs.
+
+If the ring's wallets run in several processes, put the pump in at most one config (a second
+pump would double the deposits).
+
+### New `measurement` fields
+
+`measurement` is an optional block; every field is optional, but `measurement: {}` is still
+rejected (`MEASUREMENT_EMPTY`). A field that is absent means that measurement is not taken
+and nothing it would write appears in the outputs.
+
+```jsonc
+"measurement": {
+  "stageProbeIntervalMs": 5000,       // existing: harness-origin stage probe (>= 1000)
+  "walletBalanceIntervalMs": 300000,  // new: sample wallet balances every 5 min (>= 60000)
+  "l1InfoTree": {                     // new: count L1 info-tree leaves during the run
+    "pollIntervalMs": 60000,          //      >= 15000
+    "gerManagerAddress": "0x2968D6d736178f8FE7393CC33C87f29D9C287e78"  // optional; default: discovered through the L1 bridge
+  },
+  "httpWindowMs": 60000,              // new: rolling HTTP stats per endpoint class (>= 10000)
+  "claimPreState": true               // new: read wrapped-token state just before a claim
+}
+```
+
+| Field | Outputs |
+|---|---|
+| `walletBalanceIntervalMs` | `wallet_balance` ndjson line per chain per sample (`n`, `minWei`, `medianWei`, `maxWei`, and the `lowest` wallets), and `results.json` `walletBalances[]`. Feeds SC9. The user wallets of every non-L1 ring chain are read with `eth_getBalance` |
+| `l1InfoTree` | `l1_info_leaf` ndjson lines (block, leaf count, tx hash, `fromPump`), `l1_info_poll_error` on a failed poll, and `results.json` `l1InfoTree` (`gerManagerAddress`, `baselineLeafCount`, `leaves[]`, `pollErrors`). The baseline is read before the pump starts |
+| `httpWindowMs` | one `http_window` ndjson line per window with per-class status counts and latency. ndjson only; it is what lets SC4 see proxy errors while the run is still going |
+| `claimPreState` | `results.json` `measurements.hops[].claim.preState = { wrappedSupplyBefore, recipientBalanceBefore }`, read just before a wrapped-token claim (headless users only; absent when the read failed). It explains claim-gas differences: a claim that finds the wrapper supply and recipient balance already non-zero writes to non-zero storage slots and uses about 50k less gas than the first claim of that token |
+| any field (block present) | `tx_sent` / `tx_receipt` ndjson lines for approve, bridge and claim txs (the SC5 denominator), and `approve` gas on each `hop_measurement` record |
+
+Example with only the samplers and no stage probe:
+
+```json
+"measurement": { "walletBalanceIntervalMs": 300000, "l1InfoTree": { "pollIntervalMs": 60000 } }
+```
+
+### The `tracker_not_ready` error class
+
+When the tracker answers `GET /tracker/v1/activity/from/{addr}` with **503** and a body
+containing "not ready yet" ("activity for this address is not ready yet, retry after
+<interval>", seen the first time an address is polled), the sample is classified
+`tracker_not_ready`. It is **not** `proxy_5xx`: it never fails a hop, it is excluded from SC4,
+and the headless worker does not retry it after 300 ms but backs off to the UI's own 5 s
+cadence. It appears as its own row in the Errors table. A differently worded 503 still lands
+in `proxy_5xx`, so a real outage is never hidden.
+
+### Chain-key endpoint names
+
+RPC endpoint classes in `results.json` `http`, `summary.md` and the HTML report are named by
+chain key, `rpc/<CHAIN_KEY>/<method>` (for example `rpc/BALI_82/eth_getTransactionReceipt`),
+instead of the provider host or URL path, so a keyed RPC URL never leaks through an endpoint
+name. Runs recorded before this change are repaired at render time (the segment becomes
+`rpc/<CHAIN_KEY>`, or `rpc/redacted` when no chain matches). Browser-mode samples fall back to
+`rpc/redacted/...`.
+
+### Failure rates and the strict verdict
+
+The verdict is unchanged and strict: **FAIL on any single failed lap**. At several hundred
+laps a few failures can happen without anything being wrong, so campaign go/no-go uses the stop
+criteria below, not the verdict. The lap failure rate and the hard-hop failure rate are
+computed by the exported `failureRates(results)` (`metrics/report.ts`) and shown next to the
+verdict in the HTML report.
+
+### Stop criteria SC1-SC13 and `check-stop`
+
+The stop criteria are the campaign's go/no-go rules. They are **evaluated, never enforced**:
+nothing in the tool stops a run by itself. The operator runs `check-stop` (every 10 minutes
+during a campaign) and decides.
+
+|  ID  | Criterion | Threshold | Action |
+|---|---|---|---|
+| SC1 | Hard hop failures | at least 5 hard failures (`revert_*`, `tx_revert`, `lbt_underflow`, `bridge_event_missing`, `activity_status_error`, `rpc_error`, `proxy_4xx`, `proxy_5xx`, `internal`), or at least 2% of ended hops once 50 have ended and at least 2 of them failed (judged over the whole run so far: one early failure that the run recovers from is not a rate) | drain |
+| SC2 | 82-origin stall | no successful 82>85 hop for 30 min while one is in flight (the window starts at the later of the last success and the moment the route went from idle to in flight) | drain |
+| SC3 | 85-origin stall | no successful 85>82 hop for 120 min while one is in flight (same window rule as SC2) | drain |
+| SC4 | Proxy errors | at least 30 `proxy_5xx`/`proxy_4xx` errors in any 10 min window (`tracker_not_ready`, `not_ready`, `activity_warning` excluded) | drain |
+| SC5 | Nonce conflicts | at least 20 `nonce_conflict` errors in the run | drain, lower `maxInflightLapsPerUser` |
+| SC6 | Tool memory | `toolRssMb` above 4096 for 3 consecutive samples | drain |
+| SC7 | Event-loop lag | `eventLoopDelayP99Ms` above 500 for 12 consecutive samples; latencies are invalid from then on | drain |
+| SC8 | Tool CPU | `toolCpuPct` above 90 for 60 consecutive samples | drain |
+| SC9 | Wallet balance floor | any wallet below 20% of `gasPerChain` (needs `walletBalanceIntervalMs`) | drain |
+| SC10 | Funding floor | checked before the start: `fund` cap refusal, `PUMP_UNDERFUNDED`, funder balance; shown as `OUTSIDE` | do not start |
+| SC11 | Pump spend | cumulative pump spend reaches `maxTotalSpend` (the pump stops before exceeding it, so this fires on a `cap_reached` skip or spend at or above the cap) | pump stops, run continues |
+| SC12 | Shared Bali health | Grafana alerts, certificates in error, proxy restarts: **outside the tool**, shown as `OUTSIDE` | abort, tell the user |
+| SC13 | Backpressure (gate) | `tick_skipped` is at least 25% of ticks | do not advance to the next stage |
+
+`check-stop` reads `activity.ndjson` (and `results.json` when it exists) of the run directory:
+
+```bash
+# one run (the out/ folder of a run), human-readable table
+pnpm loadtest check-stop --dir logs/loadtest/ring-I-20261014T170000Z/out
+
+# two rings of one stage, JSON for scripting
+pnpm loadtest check-stop --dir logs/loadtest/ring-I-20261014T170000Z/out \
+                         --dir logs/loadtest/ring-J-20261014T170500Z/out --json
+
+# explicit config when the run has no results.json yet (a run in progress)
+pnpm loadtest check-stop --dir <run>/out --config <run>/config.json
+```
+
+Each criterion prints `FIRED`, `ok`, `N/A` (no data) or `OUTSIDE` (SC10 and SC12), with the
+observed value. The command exits 0 even when a criterion fired. To act on SC1-SC9, drain
+gracefully with one SIGINT (`loadtest.sh stop <ring> --drain` in the workspace runner); a
+second SIGINT aborts without waiting for in-flight hops.
+
+**Ctrl-C inside the tmux pane is not a drain.** It reaches the whole process group at once:
+`pnpm` exits, `tee` dies, and the tsx parent relays the signal to the runner after only 30 ms,
+killing it with no report if the event loop is busy (the runner is single-threaded and
+`SC7` is 500 ms). Always use `loadtest.sh stop <ring> --drain` (it signals the one runner
+process and records that it did, so a repeat is refused), `loadtest.sh stop` with no ring
+drains every running ring (all signalled first, then it waits), and `loadtest.sh stop <ring>
+--abort` is the deliberate second SIGINT of a drain in progress. A SIGINT that arrives during
+preflight or start-up is held and the run drains as soon as it starts; one that arrives while
+the report is being written is ignored.
+
+### Ramp stages (explicit flags)
+
+There is no preset engine in the tool: a stage is a set of explicit flags on `run`
+(`--users`, `--rate`, `--minutes`). The campaign ramp used for Bali:
+
+| Stage | Wallets (ring I + ring J) | `--users` I / J | `--rate` I / J | `--minutes` |
+|---|---|---|---|---|
+| 1 | 5 | 3 / 2 | 0.2 / 0.1 | 90 |
+| 2 | 20 | 12 / 8 | 0.2 / 0.1 | 120 |
+| 3a (pump off) | 50 | 30 / 20 | 0.2 / 0.1 | 120 |
+| 3b (pump on) | 50 | 30 / 20 | 0.2 / 0.1 | 120 |
+
+```bash
+pnpm loadtest run --config ring-I.json --users 12 --browser 0 --rate 0.2 --minutes 120
+```
+
+Two rings run as two processes with disjoint wallet ranges. A stage advances only when none
+of SC1-SC9 fired and SC13 stayed below 25%.
+
+## HTML report (`out/report.html`)
+
+`report.html` is **the human entrypoint** to a run. `results.json`, `activity.ndjson` and
+`summary.md` exist for debugging and scripting; open the HTML first. It is written to
+`<out>/report.html` at the end of every run (in a `finally`, so aborted and failed runs get one
+too; a failure to render only logs a warning and never changes the run's result), and the
+runner prints its path.
+
+Sections, in page order:
+
+1. **Verdict** banner (PASS / FAIL / INCOMPLETE / ABORTED / NO LAPS STARTED) with run identity
+   and the reminder that go/no-go uses the stop criteria
+2. **Key figures** (KPI cards)
+3. **Throughput** (requested vs achieved, the throughput identity)
+4. **Hop outcomes** by route and by mode
+5. **Latency distributions per route** (min / median / p90 / max, per-stage breakdown)
+6. **Lap and hop timeline**
+7. **Claim gas**
+8. **Gate stalls**
+9. **Errors by class** (`tracker_not_ready` and `activity_warning` on their own rows)
+10. **Proxy and endpoint health**
+11. **Tool resources over time** (RSS, CPU, event loop, with the SC6-SC8 thresholds)
+12. **Pump activity** (a one-line "pump off" note when the pump did not run)
+13. **Stop criteria (post-hoc)**: SC1-SC13 plus the stage gate, evaluated read-only
+14. **Wallet balances**
+15. **Configuration (redacted)**
+16. **Environment and report notes**
+
+Guarantees:
+
+- **Single self-contained file**: inline CSS, inline SVG charts, one inline script, no charting
+  library. It makes **no network request** and works offline; the page ships a
+  `Content-Security-Policy` of `default-src 'none'` (inline style, the one hashed script and
+  `data:` images only), and it reads without scripts. It adapts to phone width and dark mode
+  and has a print stylesheet.
+- **Size cap**: 4 MiB by default (`--max-bytes N`). A larger run is downsampled in tiers
+  (fewer timeline rows and per-hop points); the verdict banner and the Environment section say
+  when that happened, so a thinned chart is never presented as complete.
+- **Every dynamic value is HTML-escaped**, and the embedded data is escaped for a `<script>`.
+
+### Redaction guarantees
+
+- **Allowlisted config view.** The Configuration section is built from an allowlist of config
+  keys, never by copying the config. RPC, proxy and UI addresses appear as host only
+  (`https://host (path/query redacted)`), secret references as their name (`env:NAME`,
+  `file:<basename>`), the output directory as its last path segment. A unit test walks the zod
+  schema and fails when a new config field has no policy, so a new field cannot reach a report
+  by accident.
+- **Endpoint names by chain key** (above) and abbreviated transaction hashes.
+- **Write-time scan.** Before the file is written the generator refuses (`ReportSecretError`,
+  naming the field or kind, never the value) when the HTML contains a path segment, userinfo or
+  query value taken from the unredacted config URLs, any 64-hex-character string (private-key
+  shape), or a mnemonic-shaped string in the data. Nothing is written in that case.
+- **`results.json` `config`.** The writer masks every chain `rpcUrl` that has a path, query or
+  userinfo to `scheme://host/<redacted>`; a bare origin such as `http://203.0.113.10:8545` is
+  kept. Other URL fields are masked only when they look secret-shaped, and secret references
+  are `{ref: "env:NAME"}`. Run directories written before this change are **not rewritten**:
+  they may still hold the original URL in `config`, but their reports and `summary.md` are
+  redacted at render time, so regenerate and share the HTML, never an old `results.json`.
+
+### Regenerating reports
+
+```bash
+# one run: HTML only, default path <dir>/report.html (dir is the run's out/ folder)
+pnpm loadtest report --dir logs/loadtest/ring-G-20261013T145201Z/out --html
+
+# write it somewhere else, with a smaller size cap
+pnpm loadtest report --dir <run>/out --html --html-out reports/ring-G.html --max-bytes 2000000
+
+# both summary.md (byte-identical re-render) and report.html
+pnpm loadtest report --dir <run>/out
+
+# roll-up of a campaign: label=dir[,dir]; the two rings of one stage share a label
+pnpm loadtest campaign-report --out campaign.html \
+  --run stage2=<I-run>/out,<J-run>/out \
+  --run stage3a=<I-run3a>/out,<J-run3a>/out
+```
+
+`report --dir` reads `results.json` and `activity.ndjson` from `--dir`, and a `meta.txt` one
+level up when the workspace runner wrote one (ring, users, minutes, rate). The roll-up
+(`campaign-report`) puts the runs in one offline page (verdicts, failure rates, achieved rate,
+pump state, stop criteria fired, ready-wait per route, L1 leaves per hour, comparison charts)
+and links each row to that run's `report.html` by relative path.
 
 ## Autoclaim semantics
 
-Each ring hop (`"L1->L2A"`, etc.) has a configured autoclaim expectation:
-`{"expected": true, "waitMs": 120000}` or `{"expected": false}` (manual-claim-only,
-e.g. L2->L1 on this devnet).
+**Manual claim is the default.** Every route in the shipped examples and in the generated devnet config is
+`{"expected": false}`: the tool claims each hop itself, with the user's own wallet, as soon as the hop is
+`READY_TO_CLAIM` (outcome `hop_completed_manual`). The `autoclaim` map is still required by the schema (exactly
+one entry per ring hop), but autoclaim itself is **optional** per hop: `{"expected": true, "waitMs": 120000}`
+remains valid and makes the tool wait up to `waitMs` for a service-side claim before escalating to a manual one.
+Use it only against an environment that actually runs an autoclaimer.
 
-- **`autoclaim_overdue`** (an expected autoclaim didn't happen inside `waitMs`) and
+- **Devnet.** The vendored devnet runs aggkit `v0.11.0-rc17`, which removed the built-in autoclaim component
+  ([agglayer/aggkit#1901](https://github.com/agglayer/aggkit/pull/1901)); `config/config.ci.devnet.json` sets
+  `expectedAutoclaim: false` on every route. `autoclaimOverdue`, `unexpectedAutoclaim`, `hop_completed_auto` and
+  `hop_completed_escalated` are all expected to be `0` (`tests/loadtest-e2e/run.spec.ts` asserts this).
+- **Bali / testnet.** Default to `expected: false` too. Evidence from the Bali ring A run of 2026-10-06
+  (0.00001 ETH): with autoclaim expected, hop 0 (Sepolia -> BALI_82) bridged at 12:04:24Z and was claimed after
+  an `AWAITING_AUTOCLAIM` wait that ended 12:23:22Z (~16 min); hop 1 (82 -> 85, bridged 12:23:24Z) was claimed
+  ~45 min later (~13:08Z). Waiting on a service-side claim is slow and unpredictable, so the tool claims manually.
+- **`.claude/bin/loadtest.sh`.** Its `render()` forces `expected: false` and drops `waitMs` on every route
+  (aggkit rc17 has no autoclaimer), whatever the template says.
+
+Each ring hop (`"L1->L2A"`, etc.) has a configured autoclaim expectation:
+`{"expected": false}` (manual claim, the default) or, optionally, `{"expected": true, "waitMs": 120000}`.
+
+- **`autoclaim_overdue`** (only possible on a hop configured `expected: true`: the autoclaim didn't happen inside `waitMs`) and
   **`unexpected_autoclaim`** (a hop configured `expected: false` got auto-claimed
   anyway) are **counters, and neither one fails a hop.**
 - An overdue autoclaim **escalates to a manual claim** and, if that succeeds, the
@@ -273,6 +634,145 @@ e.g. L2->L1 on this devnet).
 - The full outcome set: `hop_completed_auto`, `hop_completed_manual`,
   `hop_completed_escalated`, `hop_completed_raced` — all four are successes; only
   `timeout_*`/`internal`/etc. outcomes are failures.
+
+**What `unexpectedAutoclaim = 0` does and does not prove for an `expected: false`
+(manual-claim) hop.** The tool claims such a hop itself, with the user's own wallet
+(paid from that user's `gasPerChain` on the destination chain). A `0` therefore
+means only that *autoclaim was not shown to act on the hop*; it does not prove autoclaim
+did not claim it. The tool claims as soon as it first sees the hop `READY` (`core/ring.ts:751-759`),
+and `unexpectedAutoclaim` is counted only when the row is already `CLAIMED` the first time
+the tool sees it as ready (`core/ring.ts:699-705`, `applyAwaitingReady`: `!expected &&
+!claimSubmitted`). An autoclaim that loses the race to the tool's own claim is invisible
+(its transaction reverts `AlreadyClaimed` on the service's side), and a late autoclaim is not
+detected; a service claim that lands after the tool has observed `READY` shows up at best as
+`hop_completed_raced` / `claimRaceLost`. If such a hop ends `timeout_ready_to_claim` or
+`aborted_drain` it was **not reached**, which is not a pass.
+
+**A tracker `claimed` is verified before a hop completes (issue #53).** A tracker row that
+reads `claimed` / `claim_status: claimed` is trusted only if it carries a claim object (claim
+tx hash) or the destination bridge's `isClaimed` returns true (`confirmClaimedRows` in
+`workers/headless/uiCallset.ts`, applied to every activity read in both modes). Otherwise the row
+is treated as `PENDING` and the hop keeps waiting, ending with the usual timeout outcome instead
+of a false `hop_completed_auto`. A failing `isClaimed` read counts as not claimed. Rows with a
+claim object cost no extra RPC call.
+
+**A `PASS` headline is not an autoclaim pass.** The headline only says the run was
+not aborted and started at least one lap. Read `policy.autoclaimOverdue` and
+`policy.unexpectedAutoclaim` as well.
+
+## Gas-token chains (ETH held as WETH)
+
+Some Agglayer chains (e.g. outposts such as Bali 63, whose native currency is Base
+Sepolia ETH registered in the bridge as a token with origin `(63, sentinel)`) do not
+use ETH as their gas token. There, bridged L1 ETH arrives as the bridge's own
+`WETHToken()` ERC20, not as native currency, and bridging it back out is a privileged
+**burn** of that WETH. The `eth` asset keeps its identity (leaf origin
+`(networkId 0, 0x0)`) on every chain; only the form it is held in changes. This is the
+same model the dev-ui app uses with `currency.wethToken` (`config/configSchema.mjs`,
+`app/hooks/useBridgeExecution.ts`).
+
+**There is no config field for this.** `preflight` discovers it live
+(`wallets/preflight.ts`, `checkGasToken`), for every **ring** chain:
+
+| `gasTokenAddress()` on the chain's `bridgeAddress` | Result |
+|---|---|
+| zero | ETH-gas chain — unchanged behaviour (`GAS_TOKEN` column `pass`) |
+| non-zero, and `gasTokenNetwork()` + `WETHToken()` resolve (WETH non-zero) | **gas-token chain**: `pass`; identity recorded |
+| non-zero but `WETHToken()` is zero / `gasTokenNetwork()` has no data, or the call fails / returns no data | `GAS_TOKEN_NOT_ETHER` (the only remaining way to get this code) |
+
+When a gas-token chain is found, `preflight` (and the preflight step inside `run`) prints
+one extra line below the table, and `results.json` records the same under
+`gasTokenChains`:
+
+```
+gas-token chain "BALI_63": gasToken=0x0000003f0000003f0000003f0000003f0000003f originNetwork=63 weth=0x77290275947f166793b8d10428670e1fca26960a (eth held as WETH)
+```
+
+(`weth=` is the chain's own `WETHToken()`, lower-cased; the values shown are what Bali 63 returned on 2026-10-01.) The tool
+asserts nothing about the discovered values; read the line and confirm it is the chain you
+meant. Non-ring chains (e.g. the L1 in a ring that does not include it) are not probed.
+
+What changes per hop, for the `eth` asset (`runner.ts` `buildHopSpecs`,
+`workers/headless/headlessUser.ts` `bridge`):
+
+| Hop leaves | Bridge call | Arrives on the destination as |
+|---|---|---|
+| an ETH-gas chain | `bridgeAsset(token = 0x0, msg.value = amount)` (unchanged) | native ETH on an ETH-gas chain; **WETH minted** on a gas-token chain |
+| a gas-token chain | `bridgeAsset(token = WETHToken)`, `msg.value` 0, **no approval** | native ETH on an ETH-gas chain; WETH on another gas-token chain |
+
+**Leaf identity check.** For every hop that touches a gas-token chain, the `BridgeEvent`
+decoded from the bridge receipt must carry origin `(0, 0x0)` for the `eth` asset. Otherwise
+the hop fails with an error whose message starts with `ASSET_IDENTITY_MISMATCH:` (it is
+not a dedicated error class; expect it under `errors.byClass.internal`). This is the check
+that would catch the tool silently bridging the chain's gas token instead of ETH. There is
+no arrival-balance assertion: a hop still succeeds on tracker status plus `isClaimed`.
+
+**Rules and refusals**
+
+- `RING_ETH_START_ON_GAS_TOKEN_CHAIN` (`preflight`): an `eth` asset whose `ring[0]` is a
+  gas-token chain is refused. Users would have to hold WETH before the first hop and the
+  funder cannot supply it. Start the ring on an ETH-gas chain.
+- `BROWSER_GAS_TOKEN_UNSUPPORTED` (`run`, after preflight passes): `users.browser > 0`
+  together with a gas-token ring chain is refused. The browser build has no WETH currency
+  entry for such a chain, so those users would bridge the native token. Use
+  `--browser 0` (headless only). `fund` and `preflight` do not raise this code.
+- A plain ETH-gas config (no gas-token chain among the ring chains) behaves and validates
+  exactly as before; `validate` never talks to a chain, so a config containing a
+  gas-token chain passes `validate` and only meets the rules above at `preflight`/`run`.
+- Per-chain `bridgeAddress` was already supported; a gas-token chain commonly has a
+  different bridge address from the L1 (Bali 63 does). Preflight's bytecode and gas-token
+  reads use each chain's own `bridgeAddress`.
+
+**Funding.** `users.funder.gasPerChain[<key>]` / `maxTotalSpend[<key>]` always mean that
+chain's **native** currency, so for a gas-token chain they are denominated in the gas
+token (Bali 63: Base Sepolia ETH). The funder must hold that currency on that chain.
+WETH on a gas-token chain is never pre-funded: it arrives on the inbound hop.
+
+**`LocalBalanceTreeUnderflow` (LBT).** Burning WETH out of a gas-token chain decrements
+that chain's `localBalanceTree[(0, 0x0)]`, which inbound hops credit first, so a ring that
+enters the gas-token chain before leaving it is safe. The `validate` check
+`RING_MUST_START_AT_ASSET_ORIGIN` covers `erc20` assets only; for an `eth` asset a ring that
+**starts on an L2** is not checked. Its first hop bridges that L2's own native ETH, so that
+bridge's `localBalanceTree(keccak256(abi.encodePacked(uint32(0), address(0))))` (key
+`0x827b659bbda2a0bdecce2c91b8b68462545758f3eba2dbefef18e0daf84f5ccd`) must already be at
+least the bridge amount; check it with an `eth_call` before such a run. A revert that
+comes back as raw selector data (`0x14603c01`, `LocalBalanceTreeUnderflow(uint32,address,
+uint256,uint256)`) is classified `lbt_underflow` just like the decoded name.
+
+(`DESIGN.md` §10 still describes the old behaviour — "refused at `validate`". The refusal
+was never at `validate`, and it is now replaced by the discovery above.)
+
+## One lap per user: coverage runs, not load
+
+For route coverage (every route exercised once, not throughput) you want exactly one lap
+per user. The scheduler's first tick for a user fires one full period after that user is
+admitted (its token bucket starts empty), and nothing is issued at or after the offer
+window's end (`core/scheduler.ts`; the pump runs every second in `runner.ts`). So:
+
+| `--rate` | `--minutes` | `rampUpSeconds` | Laps per user |
+|---|---|---|---|
+| 1 | 1 | any | **0** — first tick lands exactly at the end; headline is `NO LAPS STARTED` |
+| 1 | 2 | 0 (any `< 60`) | **exactly 1**, for any `--users`, independent of lap latency |
+| 1 | 3 | 30 | 1 here only because of `maxInflightLapsPerUser: 1` back-pressure (2nd tick dropped as `skipped_backpressure`) |
+
+The recommended coverage profile is `load: { bridgesPerMinutePerUser: 1, durationMinutes:
+2, rampUpSeconds: 0, maxInflightLapsPerUser: 1 }` run as `--users 1 --browser 0 --rate 1
+--minutes 2`. The report will show `ticksExpected = 2 x users` against `ticksOffered =
+users`; that gap is cosmetic. Note that `--rate`/`--minutes` are applied after the schema
+parse, so `RAMP_UP_EXCEEDS_DURATION` does not guard them.
+
+**Wall clock is the drain, not `--minutes`.** After the offer window the run drains
+in-flight laps. The drain deadline is the earlier of `drainStart + hopMs` and the latest
+`hopStart + hopMs` over in-flight hops (`core/scheduler.ts`, `computeDrainDeadline`), and
+when it passes, the current hop **and every later hop of that lap** end `aborted_drain`
+(`core/ring.ts`, T29). In practice the whole lap must finish within about `hopMs` of its
+current hop's start. On testnets with slow L2 -> L1 settlement, size `hopMs` (and `lapMs`,
+which should be at least as large) to the expected lap time, or the negative-case last hop
+is the one that gets cut. `Ctrl-C` depends on the phase (`runner.ts:1088-1097,1129-1141`,
+`core/scheduler.ts:274-282`): during the offer window (`--minutes`) the first `Ctrl-C` starts a
+normal drain and a second skips the grace period and writes the report; **after the offer
+window has ended a single `Ctrl-C` aborts the run immediately** (the drain is already running, so
+`beginDrain` just sets the deadline to now). Either way the headline is `ABORTED (sigint)`.
 
 ## Capacity guidance (measured)
 
@@ -347,7 +847,9 @@ tool bug.
    That L2's LocalBalanceTree must already hold the token — the ring's first hop
    (L1 -> that L2) is what provides this. Surfaces at `eth_estimateGas`. If you
    see this, check the ring order: it must start at the asset's origin chain
-   (enforced by `validate`'s `RING_MUST_START_AT_ASSET_ORIGIN`).
+   (enforced by `validate`'s `RING_MUST_START_AT_ASSET_ORIGIN` for `erc20` assets
+   only — for `eth`, a ring starting on an L2 is not checked; see
+   [Gas-token chains](#gas-token-chains-eth-held-as-weth)).
 5. **`getByTestId` can silently match nothing in a hand-rolled Playwright page.**
    `testIdAttribute: 'data-test-id'` (this repo's convention) only applies to the
    Playwright `test`-fixture's page object. A page opened via a bare
@@ -366,12 +868,29 @@ tool bug.
    configured asset correctly** — size `--rate`/`--minutes` so every
    requested asset actually gets a turn (or check `activity.ndjson` to see
    which assets were exercised).
+   The same arithmetic means `--rate 1 --minutes 1` starts **zero** laps and
+   reads `NO LAPS STARTED` (see [One lap per user](#one-lap-per-user-coverage-runs-not-load)).
 7. **aggkit's own `/metrics` is not exposed by this compose devnet** (`404` on
    both aggkit containers' metrics ports). Only **agglayer's** `:9092` is
    reachable — use it for the certificate-health check in item 2.
 8. **`run` used to hang past `run: complete` without releasing its browser
    pool — fixed in S21 (R1)**, see the CLI reference note above. Still prefer
    waiting for the report files over the `run` PID as good practice.
+9. **Gas-token chain codes.** `GAS_TOKEN_NOT_ETHER` now means only "this ring
+   chain's `gasTokenAddress()` is non-zero but its WETH could not be resolved"
+   (a non-zero gas token alone is accepted); `RING_ETH_START_ON_GAS_TOKEN_CHAIN`
+   (`preflight`) and `BROWSER_GAS_TOKEN_UNSUPPORTED` (`run`, after preflight) are
+   refusals; `ASSET_IDENTITY_MISMATCH:` is a hop error message prefix. All four are
+   explained in [Gas-token chains](#gas-token-chains-eth-held-as-weth).
+10. **`PREFLIGHT_SYNC_STATUS` never passes against a live testnet proxy.** The
+    proxy's L1 bridge syncer trails the L1 head by its finality window (~12
+    blocks), so with continuous deposits `is_synced` is never `true`. Opt in to a
+    tolerance in blocks: `LOADTEST_PREFLIGHT_SYNC_LAG_BLOCKS=24 pnpm loadtest preflight ...`.
+    A side (`l1_info`/`l2_info`) then also passes when `is_active` is `true` and
+    `network_block - last_processed_block` is between 0 and N (missing block fields
+    or a larger lag still fail); each tolerated side prints a `sync tolerance: ...`
+    line. Unset (default `0`) keeps the strict check. A non-integer or negative
+    value fails with `PREFLIGHT_SYNC_LAG_INVALID`. Not a secret; no credentials involved.
 
 ## Two dev-ui changes this branch makes
 

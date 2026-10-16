@@ -11,21 +11,30 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { formatEther, formatGwei } from 'viem';
+
 import type { LoadtestAsset, LoadtestChain, LoadtestConfig } from '../config/schema';
 import type { Outcome } from '../core/types';
 import type { DriverMode } from '../core/userDriver';
+import type { GasTokenIdentity } from '../wallets/preflight';
 import type {
   CollectorSnapshot,
   ErrorTopEntry,
   GateStats,
   HttpModeSplit,
   HttpStats,
+  L1InfoTreeSnapshot,
   LapOutcome,
   ModeSplitStats,
-  Stats
+  PumpSnapshot,
+  Stats,
+  WalletBalanceSample
 } from './collector';
+import type { MeasurementsBlock } from './measurement';
 
 import { isSuccessOutcome } from '../core/types';
+import { buildMeasurements, renderMeasurementsSection } from './measurement';
+import { maskRpcUrl, redactEndpointClass, redactUrlForDisplay } from './redactReport';
 
 export const RESULTS_SCHEMA_VERSION = 1;
 
@@ -90,6 +99,12 @@ export interface ResultsJson {
     host: { cores: number; totalMemMb: number; platform: string } | null;
   };
   config: unknown;
+  // Design B: auto-discovered gas-token identities (preflight). Omitted
+  // entirely when no ring chain is a gas-token chain.
+  gasTokenChains?: Record<
+    string,
+    { gasTokenAddress: string; gasTokenNetwork: number; wethToken: string }
+  >;
   requested: RequestedLoad;
   achieved: AchievedLoad;
   hops: {
@@ -156,6 +171,15 @@ export interface ResultsJson {
   };
   policy: { autoclaimOverdue: number; unexpectedAutoclaim: number; claimRaceLost: number };
   resources: CollectorSnapshot['resources'];
+  // S45 C3/C4: present iff at least one hop was measured. Absent in a
+  // `results.json` from before this field existed (rendered as "no measurements").
+  measurements?: MeasurementsBlock;
+  // S53 (heavy-load design §1.3/§1.4): present only when the producer ran / was
+  // configured. A run without a `pump` block or the matching `measurement`
+  // fields produces none of these keys, so `results.json` is unchanged.
+  pump?: PumpSnapshot;
+  walletBalances?: { intervalMs: number; samples: WalletBalanceSample[] };
+  l1InfoTree?: L1InfoTreeSnapshot;
 }
 
 // ---------------------------------------------------------------------------
@@ -176,6 +200,17 @@ const isSecretRefShape = (value: unknown): value is { env: string } | { file: st
   );
 };
 
+// S54: URL-valued config fields. `rpcUrl` (a provider key lives in its path or
+// query) is masked to the host by `maskRpcUrl`; the other URLs only when they
+// carry userinfo, a query or a token-shaped segment (`redactUrlForDisplay`), so
+// a keyless config is stored exactly as before.
+const URL_FIELD_MASK: Readonly<Record<string, (url: string) => string>> = {
+  rpcUrl: maskRpcUrl,
+  explorerUrl: redactUrlForDisplay,
+  aggkitProxyUrl: redactUrlForDisplay,
+  uiBaseUrl: redactUrlForDisplay
+};
+
 export const redactConfigForReport = (value: unknown): unknown => {
   if (isSecretRefShape(value)) {
     const ref = 'env' in value ? `env:${value.env}` : `file:${value.file}`;
@@ -186,7 +221,9 @@ export const redactConfigForReport = (value: unknown): unknown => {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>).map(([k, v]) => [
         k,
-        redactConfigForReport(v)
+        typeof v === 'string' && URL_FIELD_MASK[k] !== undefined && v !== ''
+          ? URL_FIELD_MASK[k](v)
+          : redactConfigForReport(v)
       ])
     );
   }
@@ -347,8 +384,9 @@ export const hopReliabilityByRouteMode = (
 export const buildResultsJson = (params: {
   snapshot: CollectorSnapshot;
   config: LoadtestConfig;
+  gasTokenChains?: Record<string, GasTokenIdentity>;
 }): ResultsJson => {
-  const { snapshot, config } = params;
+  const { snapshot, config, gasTokenChains } = params;
   return {
     schemaVersion: RESULTS_SCHEMA_VERSION,
     run: {
@@ -363,6 +401,20 @@ export const buildResultsJson = (params: {
       host: snapshot.run.host
     },
     config: redactConfigForReport(config),
+    ...(gasTokenChains !== undefined && Object.keys(gasTokenChains).length > 0
+      ? {
+          gasTokenChains: Object.fromEntries(
+            Object.entries(gasTokenChains).map(([key, identity]) => [
+              key,
+              {
+                gasTokenAddress: identity.gasTokenAddress,
+                gasTokenNetwork: identity.gasTokenNetwork,
+                wethToken: identity.wethToken
+              }
+            ])
+          )
+        }
+      : {}),
     requested: requestedFromConfig(config),
     achieved: achievedFromSnapshot(snapshot, config),
     hops: {
@@ -381,7 +433,34 @@ export const buildResultsJson = (params: {
     gates: snapshot.gates,
     errors: snapshot.errors,
     policy: snapshot.policy,
-    resources: snapshot.resources
+    resources: snapshot.resources,
+    ...(snapshot.hopMeasurements !== undefined && snapshot.hopMeasurements.length > 0
+      ? {
+          measurements: buildMeasurements(
+            snapshot.hopMeasurements,
+            config.measurement?.stageProbeIntervalMs ?? null
+          )
+        }
+      : {}),
+    ...(snapshot.pump !== undefined ? { pump: snapshot.pump } : {}),
+    ...(config.measurement?.walletBalanceIntervalMs !== undefined
+      ? {
+          walletBalances: {
+            intervalMs: config.measurement.walletBalanceIntervalMs,
+            samples: snapshot.walletBalances ?? []
+          }
+        }
+      : {}),
+    ...(config.measurement?.l1InfoTree !== undefined
+      ? {
+          l1InfoTree: snapshot.l1InfoTree ?? {
+            gerManagerAddress: null,
+            baselineLeafCount: null,
+            leaves: [],
+            pollErrors: 0
+          }
+        }
+      : {})
   };
 };
 
@@ -422,7 +501,8 @@ const renderConfiguration = (config: LoadtestConfig): string => {
 
   return [
     `- env: ${config.env}`,
-    `- aggkitProxyUrl: ${config.aggkitProxyUrl}`,
+    // S53: a proxy URL carrying userinfo, a query or a token-shaped path is never printed in full.
+    `- aggkitProxyUrl: ${redactUrlForDisplay(config.aggkitProxyUrl)}`,
     `- ring: ${ringLine}`,
     '',
     '**Assets**',
@@ -713,13 +793,14 @@ const renderTrackerActivityHeadline = (results: ResultsJson): string => {
   ].join('\n');
 };
 
-const renderEndpointLatencies = (results: ResultsJson): string => {
+const renderEndpointLatencies = (results: ResultsJson, config: LoadtestConfig): string => {
   const classes = Object.keys(results.http).sort();
   if (classes.length === 0) return 'No HTTP samples recorded.';
   const rows = classes.map((endpointClass) => {
     const entry = results.http[endpointClass];
     return [
-      endpointClass,
+      // S53 F1: an `rpc/<segment>` class recorded by an older tool can hold a provider key.
+      redactEndpointClass(endpointClass, config),
       describeHttpStats(entry.browser.ui),
       describeHttpStats(entry.browser.harness),
       describeHttpStats(entry.headless.ui),
@@ -788,7 +869,7 @@ const renderAutoclaimPolicy = (results: ResultsJson): string =>
     ]
   );
 
-const renderErrors = (results: ResultsJson): string => {
+const renderErrors = (results: ResultsJson, config: LoadtestConfig): string => {
   const { notReady, benignExternalAsset } = results.errors.suppressed;
   const suppressedTotal = notReady + benignExternalAsset;
 
@@ -820,7 +901,7 @@ const renderErrors = (results: ResultsJson): string => {
             String(e.count),
             e.firstSeen,
             e.lastSeen,
-            e.endpointClass ?? '-',
+            e.endpointClass === undefined ? '-' : redactEndpointClass(e.endpointClass, config),
             e.sample
           ])
         );
@@ -908,6 +989,90 @@ const renderResources = (results: ResultsJson): string => {
   ].join('\n');
 };
 
+// S53: appended only when the run had a pump (`results.pump` exists), after the
+// existing sections, so a run without one renders exactly as before.
+const renderPump = (pump: PumpSnapshot): string => {
+  const settled = pump.deposits.length;
+  const reverted = pump.deposits.filter((d) => d.status === 'reverted').length;
+  const skipped = (Object.entries(pump.skipped) as [string, number][])
+    .map(([reason, count]) => `${reason} x${count}`)
+    .join(', ');
+  const summary = mdTable(
+    ['field', 'value'],
+    [
+      ['sender', pump.sender],
+      ['destinationNetworkId', String(pump.destinationNetworkId)],
+      ['amount (wei)', pump.amountWei],
+      ['interval (s)', String(pump.intervalSeconds)],
+      ['max gas price (gwei)', formatGwei(BigInt(pump.maxGasPriceWei))],
+      ['spend cap (ETH)', formatEther(BigInt(pump.maxTotalSpendWei))],
+      [
+        'total spend (ETH)',
+        `${formatEther(BigInt(pump.totalSpendWei))}${pump.pendingAtStop ? ' (a deposit was still pending at stop and is counted at its worst case)' : ''}`
+      ],
+      ['deposits settled', `${settled} (${reverted} reverted)`],
+      ['skipped', skipped],
+      ['pending at stop', pump.pendingAtStop ? 'yes' : 'no']
+    ]
+  );
+  const deposits =
+    pump.deposits.length === 0
+      ? 'No pump deposit settled.'
+      : mdTable(
+          [
+            'txHash',
+            'block',
+            'depositCount',
+            'status',
+            'gasUsed',
+            'effectiveGasPrice (wei)',
+            'cost (wei)'
+          ],
+          pump.deposits.map((d) => [
+            d.txHash,
+            d.blockNumber,
+            d.depositCount === null ? 'n/a' : String(d.depositCount),
+            d.status,
+            d.gasUsed,
+            d.effectiveGasPrice,
+            d.costWei
+          ])
+        );
+  return [
+    'The L1 deposit pump was ON for this run. Its deposits are harness traffic: they are not hops, laps or load, and are not part of any rate or verdict above.',
+    '',
+    summary,
+    '',
+    deposits
+  ].join('\n');
+};
+
+const renderL1InfoTree = (tree: L1InfoTreeSnapshot, durationMs: number | null): string => {
+  const fromPump = tree.leaves.filter((leaf) => leaf.fromPump).length;
+  const perHour =
+    durationMs !== null && durationMs > 0
+      ? (tree.leaves.length / (durationMs / 3_600_000)).toFixed(2)
+      : 'n/a';
+  return [
+    mdTable(
+      ['field', 'value'],
+      [
+        ['GER manager', tree.gerManagerAddress ?? 'not discovered'],
+        [
+          'leaf count at run start',
+          tree.baselineLeafCount === null ? 'unknown' : String(tree.baselineLeafCount)
+        ],
+        ['leaves added during the run', String(tree.leaves.length)],
+        ['from the pump / from other deposits', `${fromPump} / ${tree.leaves.length - fromPump}`],
+        ['leaves per hour', perHour],
+        ['poll errors', String(tree.pollErrors)]
+      ]
+    ),
+    '',
+    'Each leaf is one `UpdateL1InfoTreeV2` event on the L1 GER manager. A leaf is a new L1 info tree root that L2 bridge syncers can inject, so this is the cadence the L1->L2 and L2->L2 hops wait on.'
+  ].join('\n');
+};
+
 const renderEnvironment = (results: ResultsJson): string =>
   mdTable(
     ['field', 'value'],
@@ -920,16 +1085,108 @@ const renderEnvironment = (results: ResultsJson): string =>
     ]
   );
 
-export const renderSummaryMd = (results: ResultsJson, config: LoadtestConfig): string => {
-  // S11 retry defect (2): `aborted` now means ABNORMAL termination only
-  // (SIGINT / fatal) — a run that served its full `--minutes` and drained
-  // normally reads as `PASS`, optionally noting how many laps were still
-  // in flight at the moment drain began.
-  const statusLine = results.run.aborted
+// Top non-success hop outcomes as `outcome xN` (count desc, then name),
+// capped at 3 — the "why" half of a FAIL / INCOMPLETE headline.
+const topFailingHopOutcomes = (byOutcome: ResultsJson['hops']['byOutcome']): string => {
+  const failing = (Object.entries(byOutcome) as [Outcome, number | undefined][])
+    .filter(([outcome, count]) => !isSuccessOutcome(outcome) && (count ?? 0) > 0)
+    .sort(([a, an], [b, bn]) => (bn ?? 0) - (an ?? 0) || a.localeCompare(b))
+    .slice(0, 3)
+    .map(([outcome, count]) => `${outcome} x${count}`);
+  return failing.join(', ');
+};
+
+/**
+ * The strict verdict text of the `summary.md` headline (`PASS`, `FAIL (...)`,
+ * `INCOMPLETE (...)`, `ABORTED (...)`, `NO LAPS STARTED (...)`). Exported so the
+ * HTML report (S54) prints the same words instead of re-implementing them.
+ *
+ * S11 retry defect (2): `aborted` now means ABNORMAL termination only
+ * (SIGINT / fatal) — a run that served its full `--minutes` and drained
+ * normally is not ABORTED, optionally noting how many laps were still
+ * in flight at the moment drain began.
+ * A run in which no lap ever started proves nothing (e.g. `--rate 1
+ * --minutes 1`: the first tick falls at `stopAt`), so it must not read PASS.
+ * PASS additionally requires that no finished lap FAILED or was ABORTED
+ * (e.g. by the drain deadline): LAP_FAILED => FAIL, else LAP_ABORTED =>
+ * INCOMPLETE (FAIL wins when both are present).
+ */
+export const computeVerdict = (results: ResultsJson): string => {
+  const lapsFailed = results.laps.byOutcome.LAP_FAILED ?? 0;
+  const lapsAborted = results.laps.byOutcome.LAP_ABORTED ?? 0;
+  const lapsFinished = (results.laps.byOutcome.LAP_DONE ?? 0) + lapsFailed + lapsAborted;
+  const lapDetail = (n: number, verb: string): string => {
+    const why = topFailingHopOutcomes(results.hops.byOutcome);
+    return `${n} of ${lapsFinished} lap(s) ${verb}${why === '' ? '' : `: ${why}`}`;
+  };
+  return results.run.aborted
     ? `ABORTED (${results.run.abortCause ?? 'unknown cause'})`
-    : results.run.lapsInFlightAtStop > 0
-      ? `PASS (drained ${results.run.lapsInFlightAtStop} in-flight lap${results.run.lapsInFlightAtStop === 1 ? '' : 's'})`
-      : 'PASS';
+    : results.achieved.lapStartsSubmitted === 0
+      ? 'NO LAPS STARTED (0 lap starts — nothing was exercised)'
+      : lapsFailed > 0
+        ? `FAIL (${lapDetail(lapsFailed, 'failed')})`
+        : lapsAborted > 0
+          ? `INCOMPLETE (${lapDetail(lapsAborted, 'aborted')})`
+          : results.run.lapsInFlightAtStop > 0
+            ? `PASS (drained ${results.run.lapsInFlightAtStop} in-flight lap${results.run.lapsInFlightAtStop === 1 ? '' : 's'})`
+            : 'PASS';
+};
+
+/**
+ * Hop outcomes that count as a HARD failure of the system under test for stop
+ * criterion SC1 (`tmp/loadtest-heavy/campaign.md` §6): a revert, a bridge that
+ * emitted no event, a bad activity status, an RPC or proxy error, or an
+ * unclassified failure. Timeouts and aborted-by-drain hops are deliberately not
+ * in the set — SC2/SC3 watch stalls separately.
+ */
+export const HARD_HOP_FAILURE_OUTCOMES: readonly Outcome[] = [
+  'revert_approve',
+  'revert_bridge',
+  'revert_claim',
+  'tx_revert',
+  'lbt_underflow',
+  'bridge_event_missing',
+  'activity_status_error',
+  'rpc_error',
+  'proxy_4xx',
+  'proxy_5xx',
+  'internal'
+];
+
+export interface FailureRates {
+  lapsFinished: number;
+  lapsFailed: number;
+  /** `LAP_FAILED / (LAP_DONE + LAP_FAILED + LAP_ABORTED)`; `null` when no lap finished. */
+  lapFailureRate: number | null;
+  hopsEnded: number;
+  hardHopFailures: number;
+  /** Hard failures (`HARD_HOP_FAILURE_OUTCOMES`) over every hop that reached an outcome; `null` when none did. */
+  hardHopFailureRate: number | null;
+}
+
+export const failureRates = (results: ResultsJson): FailureRates => {
+  const lapsFailed = results.laps.byOutcome.LAP_FAILED ?? 0;
+  const lapsFinished =
+    (results.laps.byOutcome.LAP_DONE ?? 0) + lapsFailed + (results.laps.byOutcome.LAP_ABORTED ?? 0);
+  const outcomes = Object.entries(results.hops.byOutcome) as [Outcome, number | undefined][];
+  const hopsEnded = outcomes.reduce((sum, [, count]) => sum + (count ?? 0), 0);
+  const hardHopFailures = outcomes.reduce(
+    (sum, [outcome, count]) =>
+      sum + (HARD_HOP_FAILURE_OUTCOMES.includes(outcome) ? (count ?? 0) : 0),
+    0
+  );
+  return {
+    lapsFinished,
+    lapsFailed,
+    lapFailureRate: lapsFinished > 0 ? lapsFailed / lapsFinished : null,
+    hopsEnded,
+    hardHopFailures,
+    hardHopFailureRate: hopsEnded > 0 ? hardHopFailures / hopsEnded : null
+  };
+};
+
+export const renderSummaryMd = (results: ResultsJson, config: LoadtestConfig): string => {
+  const statusLine = computeVerdict(results);
   // DESIGN §6.3 item 1: "one line stating pass/abort, users, rate,
   // duration" — the heading line ITSELF, not a separate line below it, so
   // §5.5 invariant 4 ("summary.md's first line") is literally satisfied.
@@ -944,12 +1201,25 @@ export const renderSummaryMd = (results: ResultsJson, config: LoadtestConfig): s
       [renderHopOutcomes(results), '', renderHopReliabilityByRouteMode(results)].join('\n')
     ].join('\n\n'),
     ['## Phase latencies', renderPhaseLatencies(results)].join('\n\n'),
-    ['## Endpoint latencies', renderEndpointLatencies(results)].join('\n\n'),
+    ['## Endpoint latencies', renderEndpointLatencies(results, config)].join('\n\n'),
     ['## Gate stalls', renderGateStalls(results)].join('\n\n'),
     ['## Autoclaim policy', renderAutoclaimPolicy(results)].join('\n\n'),
-    ['## Errors', renderErrors(results)].join('\n\n'),
+    ['## Errors', renderErrors(results, config)].join('\n\n'),
     ['## Resources', renderResources(results)].join('\n\n'),
-    ['## Environment', renderEnvironment(results)].join('\n\n')
+    ['## Environment', renderEnvironment(results)].join('\n\n'),
+    // S45 C4: appended AFTER `## Environment` so the existing section order is unchanged.
+    ['## Claim gas and stage latency', renderMeasurementsSection(results.measurements)].join(
+      '\n\n'
+    ),
+    // S53: only when present, so every pre-S53 config renders exactly as before.
+    ...(results.pump !== undefined ? [['## Pump', renderPump(results.pump)].join('\n\n')] : []),
+    ...(results.l1InfoTree !== undefined
+      ? [
+          ['## L1 info tree', renderL1InfoTree(results.l1InfoTree, results.run.durationMs)].join(
+            '\n\n'
+          )
+        ]
+      : [])
   ];
 
   return `${sections.join('\n\n')}\n`;
@@ -964,8 +1234,13 @@ export const writeReportFiles = (params: {
   dir: string;
   snapshot: CollectorSnapshot;
   config: LoadtestConfig;
+  gasTokenChains?: Record<string, GasTokenIdentity>;
 }): { resultsPath: string; summaryPath: string; results: ResultsJson; summaryMd: string } => {
-  const results = buildResultsJson({ snapshot: params.snapshot, config: params.config });
+  const results = buildResultsJson({
+    snapshot: params.snapshot,
+    config: params.config,
+    gasTokenChains: params.gasTokenChains
+  });
   const summaryMd = renderSummaryMd(results, params.config);
 
   fs.mkdirSync(params.dir, { recursive: true });

@@ -334,6 +334,77 @@ describe('ring — full ETH lap, auto / auto / manual (T2,T7,T9,T12,T13,T17,T14,
   });
 });
 
+describe('ring — manual claim on every hop (expected:false everywhere, S39: Bali rings / aggkit rc17)', () => {
+  it('completes a 3-hop lap via T14 with zero autoclaim_overdue / unexpected_autoclaim / escalations', () => {
+    const MANUAL_RING: HopSpec[] = RING.map((spec) => ({
+      ...spec,
+      autoclaim: { expected: false }
+    }));
+    const { clock, engine } = setup();
+    let lap = engine.startLap({ userId: 'u0', lapIndex: 0, assetIndex: 0, hopSpecs: MANUAL_RING });
+    const seen: TransitionId[] = [];
+    const all: { type: string }[] = [];
+    const record = (step: { lap: Lap; emissions: readonly { type: string }[] }): Lap => {
+      seen.push(...transitions(step.emissions));
+      all.push(...step.emissions);
+      return step.lap;
+    };
+    const txs = [
+      TX_A,
+      TX_B,
+      '0xdddd000000000000000000000000000000000000000000000000000000000004' as Hex
+    ];
+
+    txs.forEach((tx, i) => {
+      const count = 5 + i;
+      lap = bridgeOk(lap, engine, clock, tx, count, seen);
+      clock.advance(4_000);
+      lap = record(engine.apply(lap, { kind: 'activity', rows: [makeRow(tx, count, 'PENDING')] }));
+      expect(currentHop(lap).state).toBe('AWAITING_READY');
+      // A long proof wait (longer than the old 1_800_000 ms autoclaim grace) must
+      // not produce any autoclaim bookkeeping: no AWAITING_AUTOCLAIM exists here.
+      clock.advance(500_000);
+      lap = record(
+        engine.apply(lap, { kind: 'activity', rows: [makeRow(tx, count, 'READY_TO_CLAIM')] })
+      );
+      // READY_TO_CLAIM is reachable and goes straight to CLAIM_BUILD (T14).
+      expect(currentHop(lap).state).toBe('CLAIM_BUILD');
+      expect(nextAction(currentHop(lap))).toEqual({ kind: 'claim' });
+      clock.advance(300);
+      lap = record(engine.apply(lap, { kind: 'is_claimed', claimed: false }));
+      lap = record(engine.apply(lap, { kind: 'claim_inputs', claimable: true }));
+      lap = record(engine.apply(lap, { kind: 'claim_sent', txHash: CLAIM_TX }));
+      clock.advance(3_000);
+      lap = record(
+        engine.apply(lap, { kind: 'claim_receipt', status: 'success', isClaimedRecheck: null })
+      );
+      expect(currentHop(lap).state).toBe('AWAITING_CLAIMED');
+      clock.advance(6_000);
+      lap = record(
+        engine.apply(lap, {
+          kind: 'activity',
+          rows: [makeRow(tx, count, 'CLAIMED', { claimTransactionHash: CLAIM_TX })]
+        })
+      );
+    });
+
+    expect(lap.state).toBe('LAP_DONE');
+    expect(lap.hops.map((hop) => hop.outcome)).toEqual([
+      'hop_completed_manual',
+      'hop_completed_manual',
+      'hop_completed_manual'
+    ]);
+    expect(seen).not.toContain('T13');
+    expect(seen).not.toContain('T18');
+    expect(seen.filter((t) => t === 'T14')).toHaveLength(3);
+    expect(outcomes(all)).not.toContain('hop_completed_escalated');
+    expect(outcomes(all)).not.toContain('hop_completed_auto');
+    expect(lap.hops.map((hop) => hop.counters.autoclaim_overdue)).toEqual([0, 0, 0]);
+    expect(lap.hops.map((hop) => hop.counters.unexpected_autoclaim)).toEqual([0, 0, 0]);
+    expect(lap.hops.every((hop) => hop.escalated !== true)).toBe(true);
+  });
+});
+
 describe('ring — autoclaim escalation (T18) is a COUNTER, not a failure', () => {
   it('escalates to a manual claim and still completes as hop_completed_escalated (T26)', () => {
     const { clock, engine } = setup();

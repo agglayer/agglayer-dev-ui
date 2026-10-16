@@ -12,15 +12,15 @@ browser → reverse proxy (TLS, single origin)
                                   └── TRACKER component → agglayer gRPC + L1/L2 RPCs
 ```
 
-Versions this guide is validated against: aggkit `v0.11.0-rc8` (image `ghcr.io/agglayer/aggkit:0.11.0-rc8` — the version the vendored e2e devnet bundle runs, see [`tests/devnet/README.md`](../tests/devnet/README.md)), dev-ui `feat/aggkit-backend`, sdk `1.0.0-snapshot-ca6df75e` (published npm snapshot; see `package.json`).
+Versions this guide is validated against: aggkit `v0.11.0-rc17` (image `ghcr.io/agglayer/aggkit:0.11.0-rc17` — the version the vendored e2e devnet bundle runs, see [`tests/devnet/README.md`](../tests/devnet/README.md)), dev-ui `feat/aggkit-backend`, sdk `1.0.0-snapshot-ca6df75e` (published npm snapshot; see `package.json`).
 
-> Earlier revisions of this guide were validated against `v0.11.0-rc5`. Nothing in the configuration below changed between rc5 and rc8 — the bump was needed for `/tracker/v1/activity/from/{address}`, which 404s before rc8 (first tag carrying [agglayer/aggkit#1815](https://github.com/agglayer/aggkit/pull/1815)) and which the Transactions view now hard-depends on.
+> Earlier revisions of this guide were validated against `v0.11.0-rc5`. Nothing in the configuration below changed between rc5 and rc8 (and the e2e devnet has since moved on to rc17) — the bump was needed for `/tracker/v1/activity/from/{address}`, which 404s before rc8 (first tag carrying [agglayer/aggkit#1815](https://github.com/agglayer/aggkit/pull/1815)) and which the Transactions view now hard-depends on.
 
 ---
 
 ## 1. Prerequisites
 
-- Running aggkit stack (one aggkit node with `BRIDGE` component per L2, agglayer with gRPC exposed). Start here if you don't have one: [aggkit getting started](https://github.com/agglayer/aggkit/blob/v0.11.0-rc8/docs/getting_started.md), [bridge service component](https://github.com/agglayer/aggkit/blob/v0.11.0-rc8/docs/bridge_service.md).
+- Running aggkit stack (one aggkit node with `BRIDGE` component per L2, agglayer with gRPC exposed). Start here if you don't have one: [aggkit getting started](https://github.com/agglayer/aggkit/blob/v0.11.0-rc17/docs/getting_started.md), [bridge service component](https://github.com/agglayer/aggkit/blob/v0.11.0-rc17/docs/bridge_service.md).
 - L1 + L2 RPC endpoints, the agglayer gRPC URL, and the **L1 GlobalExitRoot contract address** for your deployment (see the gotcha in step 2 below).
 - Node 24 + pnpm for building the UI.
 
@@ -34,14 +34,14 @@ aggkit-proxy run --cfg=/etc/aggkit-proxy/config.toml --components=proxy,tracker
 
 Configuration — do not write it from scratch; adapt one of these:
 
-- Concepts + full `[Tracker]` key reference: [bridgetracker/API.md](https://github.com/agglayer/aggkit/blob/v0.11.0-rc8/docs/bridgetracker/API.md) and [common REST config](https://github.com/agglayer/aggkit/blob/v0.11.0-rc8/docs/common_config.md). (`docs/bridgetracker.md` does not exist in aggkit — `docs/bridgetracker/API.md` is the only tracker doc.)
-- aggkit's own reference recipe (env-var driven): [`proxy/scripts/configuration_based_on_kurtosis.sh`](https://github.com/agglayer/aggkit/blob/v0.11.0-rc8/proxy/scripts/configuration_based_on_kurtosis.sh).
+- Concepts + full `[Tracker]` key reference: [bridgetracker/API.md](https://github.com/agglayer/aggkit/blob/v0.11.0-rc17/docs/bridgetracker/API.md) and [common REST config](https://github.com/agglayer/aggkit/blob/v0.11.0-rc17/docs/common_config.md). (`docs/bridgetracker.md` does not exist in aggkit — `docs/bridgetracker/API.md` is the only tracker doc.)
+- aggkit's own reference recipe (env-var driven): [`proxy/scripts/configuration_based_on_kurtosis.sh`](https://github.com/agglayer/aggkit/blob/v0.11.0-rc17/proxy/scripts/configuration_based_on_kurtosis.sh).
 - A known-good, deployed template with comments explaining every choice: [kurtosis-cdk `aggkit-proxy/config.toml`](https://github.com/0xPolygon/kurtosis-cdk/blob/feat/aggkit-bridge-ui-backend/static_files/additional_services/aggkit-proxy/config.toml) (rendered by [`aggkit_proxy.star`](https://github.com/0xPolygon/kurtosis-cdk/blob/feat/aggkit-bridge-ui-backend/src/additional_services/aggkit_proxy.star)).
 
 **Gotchas:**
 
-1. `[Tracker].L1GlobalExitRootAddress` is **required; aggkit fails fast at startup if unset** — a zero/unset address hard-errors at boot instead of silently stalling every L1→L2 bridge's tracking at its first step. Details: [agglayer/aggkit#1782](https://github.com/agglayer/aggkit/issues/1782) (CLOSED, fixed in rc5; still the behaviour in rc8).
-2. `[REST].MaxRequestsPerIPAndSecond` is **unenforced by design, default 0 (unlimited)** — re-confirmed against rc8's [`common_config.md`](https://github.com/agglayer/aggkit/blob/v0.11.0-rc8/docs/common_config.md#restconfig), which documents the field as "Unused; kept for config compatibility" (note `[RPC]` is a *different* config whose limit **is** enforced, and where `0` means one request per IP ever) — don't size infra around it, and don't rely on it for protection; rate-limit at your reverse proxy instead. Details: [agglayer/aggkit#1783](https://github.com/agglayer/aggkit/issues/1783).
+1. `[Tracker].L1GlobalExitRootAddress` is **required; aggkit fails fast at startup if unset** — a zero/unset address hard-errors at boot instead of silently stalling every L1→L2 bridge's tracking at its first step. Details: [agglayer/aggkit#1782](https://github.com/agglayer/aggkit/issues/1782) (CLOSED, fixed in rc5; still the behaviour in rc17).
+2. `[REST].MaxRequestsPerIPAndSecond` is **unenforced by design, default 0 (unlimited)** — re-confirmed against rc17's [`common_config.md`](https://github.com/agglayer/aggkit/blob/v0.11.0-rc17/docs/common_config.md#restconfig), which documents the field as "Unused; kept for config compatibility" (note `[RPC]` is a *different* config whose limit **is** enforced, and where `0` means one request per IP ever) — don't size infra around it, and don't rely on it for protection; rate-limit at your reverse proxy instead. Details: [agglayer/aggkit#1783](https://github.com/agglayer/aggkit/issues/1783).
 
 Retention note: the tracker forgets terminal bridges after `RetentionPeriod` (default 10m) and re-registers them from scratch if queried again; raise it (the linked kurtosis template uses 30m) if humans will inspect finished bridges.
 
@@ -102,9 +102,9 @@ curl -s "https://<origin>/aggkitapi/bridge/v1/sync-status?network_id=1"
 curl -s https://<origin>/aggkitapi/tracker/v1/network/<id>/tx/<hash>
 ```
 
-Expected response shapes: [bridgetracker API.md](https://github.com/agglayer/aggkit/blob/v0.11.0-rc8/docs/bridgetracker/API.md) — API.md was corrected in rc5 ([agglayer/aggkit#1781](https://github.com/agglayer/aggkit/issues/1781)); sdk [`src/aggkit/types.ts`](https://github.com/agglayer/sdk/blob/ca6df75edaad28dc91037334075a9a4fcb452f88/src/aggkit/types.ts) (the commit behind the pinned `1.0.0-snapshot-ca6df75e` release) matches the wire format it documents.
+Expected response shapes: [bridgetracker API.md](https://github.com/agglayer/aggkit/blob/v0.11.0-rc17/docs/bridgetracker/API.md) — API.md was corrected in rc5 ([agglayer/aggkit#1781](https://github.com/agglayer/aggkit/issues/1781)); sdk [`src/aggkit/types.ts`](https://github.com/agglayer/sdk/blob/ca6df75edaad28dc91037334075a9a4fcb452f88/src/aggkit/types.ts) (the commit behind the pinned `1.0.0-snapshot-ca6df75e` release) matches the wire format it documents.
 
-Functional check: send one bridge per direction you support and watch the row's progress bar complete (L1→L2 and L2→L2 autoclaim; L2→L1 parks at "Ready to claim" until claimed — note upstream [agglayer/aggkit#1786](https://github.com/agglayer/aggkit/issues/1786) (OPEN): the tracker's `WaitingClaim` step routinely precedes actual claimability by seconds to tens of seconds, so the UI intentionally gates the Claim button on its own `READY_TO_CLAIM` status rather than on the tracker step).
+Functional check: send one bridge per direction you support and watch the row's progress bar complete (on a real environment L1→L2 and L2→L2 are autoclaimed by the environment's autoclaimer and L2→L1 parks at "Ready to claim" until claimed; on the e2e devnet, which runs rc17 without an autoclaimer, every direction parks at "Ready to claim" until claimed — note upstream [agglayer/aggkit#1786](https://github.com/agglayer/aggkit/issues/1786) (OPEN): the tracker's `WaitingClaim` step routinely precedes actual claimability by seconds to tens of seconds, so the UI intentionally gates the Claim button on its own `READY_TO_CLAIM` status rather than on the tracker step).
 
 Beyond a one-off functional check, [`loadtest/README.md`](../loadtest/README.md) drives
 this same proxy with many simulated concurrent users to validate it under sustained
@@ -112,7 +112,7 @@ load.
 
 ## 6. Reference deployment (end-to-end, reproducible)
 
-The kurtosis-cdk 2-L2 devnet deploys this whole stack (aggkit rc8, proxy+tracker, haproxy, UI wiring) from one command and is the fastest way to see a working configuration to diff yours against: [aggkit 2-L2 with bridge UI guide](https://github.com/0xPolygon/kurtosis-cdk/blob/feat/aggkit-bridge-ui-backend/docs/docs/advanced/aggkit-2l2-with-bridge-ui.md). That guide's Troubleshooting section also covers enclave reset/wallet-nonce recovery and tracker failure-mode diagnosis (including #1786 above).
+The kurtosis-cdk 2-L2 devnet deploys this whole stack (aggkit rc17, proxy+tracker, haproxy, UI wiring) from one command and is the fastest way to see a working configuration to diff yours against: [aggkit 2-L2 with bridge UI guide](https://github.com/0xPolygon/kurtosis-cdk/blob/feat/aggkit-bridge-ui-backend/docs/docs/advanced/aggkit-2l2-with-bridge-ui.md). That guide's Troubleshooting section also covers enclave reset/wallet-nonce recovery and tracker failure-mode diagnosis (including #1786 above).
 
 ## 7. Rollback
 
@@ -131,4 +131,4 @@ Nothing here has a one-command in-place downgrade; each layer rolls back indepen
 
 ---
 
-*Branch links (`feat/aggkit-bridge-ui-backend`, `feat/aggkit-backend`) are pre-merge; swap to `main` once the phase PRs land. aggkit links are pinned to tag `v0.11.0-rc8`; the sdk link is pinned to the commit behind the published `1.0.0-snapshot-ca6df75e` snapshot.*
+*Branch links (`feat/aggkit-bridge-ui-backend`, `feat/aggkit-backend`) are pre-merge; swap to `main` once the phase PRs land. aggkit links are pinned to tag `v0.11.0-rc17`; the sdk link is pinned to the commit behind the published `1.0.0-snapshot-ca6df75e` snapshot.*

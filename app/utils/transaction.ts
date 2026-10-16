@@ -49,6 +49,17 @@ export const isNativeToken = (address: string) => {
 // (`BigInt(...)` rather than a `300_000n` literal: tsconfig targets < ES2020.)
 export const BRIDGE_GAS_BUFFER = BigInt(300_000);
 
+// Claims race too, not through the global exit root but through the wrapped
+// token's mint state: a first mint of a wrapped token costs about 228k gas
+// against about 194k for a repeat, and concurrent claims change that state
+// between estimate and execution. In a Bali load test (30 + 20 wallets), 4 of
+// 64 85>82 wrapped-token claims reverted out of gas with a limit of 202,542
+// (gas used 199,823 at the point of failure), and up to 245,542 gas was needed
+// by claims that succeeded. 202,542 + 60,000 clears that worst case with ~17k
+// to spare, and 0 of 1,779 claims reverted once the headless worker applied
+// the same +60,000 (`gas.claimGasOffset`). Same refund argument as above.
+export const CLAIM_GAS_BUFFER = BigInt(60_000);
+
 // `options.gasBuffer` is added to the SDK's `gas` when (and only when) the SDK
 // supplied one. If it ever stops supplying `gas`, no `gas` key is emitted at
 // all and viem re-estimates at send time — bufferless, so the C5 revert above
@@ -85,10 +96,11 @@ export const mapTransactionRequest = (
     // Finding C5 (forwarding a bufferless estimate does not stop a
     // forceUpdateGlobalExitRoot bridge running OutOfGas) is closed by
     // `options.gasBuffer` — see BRIDGE_GAS_BUFFER above. It is opt-in per call
-    // site, not applied here unconditionally: only the bridge send races the
-    // global exit root. Approve is a plain ERC20 approve and claims do not
-    // force-update the GER; neither showed a single out-of-gas revert in the
-    // measurement above, so their estimates are left exactly as they were.
+    // site, not applied here unconditionally: the bridge send races the global
+    // exit root (BRIDGE_GAS_BUFFER) and the claim send races the wrapped
+    // token's mint state (CLAIM_GAS_BUFFER). Approve is a plain ERC20 approve
+    // and showed no out-of-gas revert in either measurement, so its estimate
+    // is left exactly as it was.
     ...(params.gas ? { gas: BigInt(params.gas) + (options?.gasBuffer ?? BigInt(0)) } : {})
   };
 };

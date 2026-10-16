@@ -22,7 +22,7 @@
   ],
   "ring": ["SEPOLIA", "BOKUTO", "SEPOLIA"],
   "autoclaim": {
-    "SEPOLIA->BOKUTO": { "expected": true, "waitMs": 120000 },
+    "SEPOLIA->BOKUTO": { "expected": false },
     "BOKUTO->SEPOLIA": { "expected": false }
   },
   "assets": [{ "kind": "eth", "amount": "0.00001", "decimals": 18 }],

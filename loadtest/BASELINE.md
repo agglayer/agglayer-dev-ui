@@ -1,5 +1,12 @@
 # Bridge Load Test Baseline — Devnet Snapshot
 
+> **Historical (aggkit `0.11.0-rc8`).** Everything below was measured on the earlier rc8 devnet bundle,
+> whose aggkit ran the built-in autoclaim component. The vendored devnet now runs aggkit `0.11.0-rc17`,
+> which removed autoclaim ([agglayer/aggkit#1901](https://github.com/agglayer/aggkit/pull/1901)); every
+> flow claims manually and the spec `claim-autoclaim.spec.ts` was renamed `claim-l1-to-l2.spec.ts`. The
+> autoclaim-latency numbers and image digests/tags in this file are **not comparable** to the current
+> manual-claim devnet (see `tests/devnet/README.md` for the current bundle).
+
 ## Devnet Topology
 
 This baseline captures the E2E test performance against the vendored devnet snapshot bundle (`tests/devnet/`) as the reference for load-test development.
@@ -65,21 +72,21 @@ The devnet is immutable, all images are pinned by `@sha256:<digest>` (not mutabl
 
 ### Test Results
 
-| Spec | Result | Details |
-|------|--------|---------|
-| **tests/e2e/preflight.spec.ts** | ✓ PASS | 4 tests: funded wallet balance (L1), aggkit sync-status (networks 0, 1, 2) |
-| **tests/bridge/smoke.spec.ts** | ✓ PASS | 2 tests: load homepage, connect wallet |
-| **tests/bridge/claim-autoclaim.spec.ts** | ✓ PASS | 1 test: L1→L2 deposit via aggkit autoclaim |
+|                                  Spec                                   |  Result  |                                  Details                                   |
+| :---------------------------------------------------------------------: | :------: | :------------------------------------------------------------------------: |
+|                     **tests/e2e/preflight.spec.ts**                     |  ✓ PASS  | 4 tests: funded wallet balance (L1), aggkit sync-status (networks 0, 1, 2) |
+|                     **tests/bridge/smoke.spec.ts**                      |  ✓ PASS  |                   2 tests: load homepage, connect wallet                   |
+| **tests/bridge/claim-autoclaim.spec.ts** (now `claim-l1-to-l2.spec.ts`) |  ✓ PASS  |        1 test: L1→L2 deposit via aggkit autoclaim (rc8, historical)        |
 
 **Total Tests:** 7 passed in **28.9 seconds**
 
 ### Observed Latencies
 
-| Metric | Value | Notes |
-|--------|-------|-------|
-| **L1→L2 Autoclaim Latency** | <30s | Inclusive of homepage load, wallet connection, deposit initiation, and autoclaim completion |
-| **Devnet Ready (devnetReady.mjs)** | ~2min 30s | 9 checks: 3 chains (chainId verify), 3 chains (bridge bytecode), 3 networks (sync-status active) |
-| **Test Suite Startup** | ~1s | Playwright launch + browser setup |
+|                    Metric                     |   Value   |                                              Notes                                               |
+| :-------------------------------------------: | :-------: | :----------------------------------------------------------------------------------------------: |
+| **L1→L2 Autoclaim Latency** (rc8, historical) |   <30s    |   Inclusive of homepage load, wallet connection, deposit initiation, and autoclaim completion    |
+|      **Devnet Ready (devnetReady.mjs)**       | ~2min 30s | 9 checks: 3 chains (chainId verify), 3 chains (bridge bytecode), 3 networks (sync-status active) |
+|            **Test Suite Startup**             |    ~1s    |                                Playwright launch + browser setup                                 |
 
 ## Environment Hazards
 

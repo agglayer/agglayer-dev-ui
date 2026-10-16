@@ -20,6 +20,8 @@
 // `ring.ts` only ever *consumes* an already-classified `DriverError`
 // (`core/ring.ts` note N7), it never imports this module.
 
+import { toFunctionSelector } from 'viem';
+
 import type { ErrorClass } from '../core/types';
 
 import { redactError, redactSecrets } from '../wallets/redact';
@@ -61,11 +63,35 @@ const matchesNotReady = (endpointOrUrl: string, text: string): boolean =>
 // S5submit; `app/hooks/useClaimExecution.ts:228-229`).
 const ALREADY_CLAIMED_SELECTOR = '0x646cf558';
 
+// `LocalBalanceTreeUnderflow(uint32,address,uint256,uint256)` — a revert that
+// surfaces as raw selector data (no decoded name) must still classify as
+// `lbt_underflow`. Unlike `AlreadyClaimed()` it carries arguments, so it is
+// matched as a substring of the message, not as a bare 4-byte token.
+const LBT_UNDERFLOW_SELECTOR = toFunctionSelector(
+  'LocalBalanceTreeUnderflow(uint32,address,uint256,uint256)'
+).toLowerCase();
+
+const isLbtUnderflow = (message: string): boolean =>
+  message.includes('LocalBalanceTreeUnderflow') ||
+  message.toLowerCase().includes(LBT_UNDERFLOW_SELECTOR);
+
 // ---------------------------------------------------------------------------
 // Per-evidence-kind classifiers. Each is independently callable by whichever
 // driver (S08 headless / S10 browser) already knows what kind of evidence it
 // has — the dispatcher below is a convenience, not the only entry point.
 // ---------------------------------------------------------------------------
+
+// S53 (heavy-load design F3/F4): the aggkit tracker answers `activity/from/{addr}`
+// with 503 "activity for this address is not ready yet, retry after <interval>"
+// for an address it has not registered yet. Keyed on the body text (like the
+// `not_ready` rule above), so a differently worded deployment fails safe into
+// `proxy_5xx` instead of being hidden.
+const TRACKER_NOT_READY_BODY_NEEDLE = 'not ready yet';
+
+const isTrackerNotReady = (endpointClass: string, status: number, bodyText: string): boolean =>
+  endpointClass === 'tracker/activity' &&
+  status === 503 &&
+  bodyText.includes(TRACKER_NOT_READY_BODY_NEEDLE);
 
 /** A non-2xx response from `{proxy}/bridge/v1/*` or `{proxy}/tracker/v1/*`. */
 export const classifyHttpError = (input: {
@@ -77,6 +103,9 @@ export const classifyHttpError = (input: {
   const message = redactSecrets(bodyText.length > 0 ? bodyText : `HTTP ${input.status}`);
   if (matchesNotReady(input.endpointClass, bodyText)) {
     return { errorClass: 'not_ready', message };
+  }
+  if (isTrackerNotReady(input.endpointClass, input.status, bodyText)) {
+    return { errorClass: 'tracker_not_ready', message };
   }
   if (input.status >= 500) return { errorClass: 'proxy_5xx', message };
   if (input.status >= 400) return { errorClass: 'proxy_4xx', message };
@@ -113,6 +142,24 @@ export const classifyRpcError = (input: { message: string; code?: number }): Cla
   return { errorClass: 'rpc_error', message };
 };
 
+/**
+ * S53 (design F3): a classified failure of one fetch that keeps its class when
+ * it crosses an `await` boundary. `performActivityFetch` used to throw a plain
+ * `Error(message)`, so the runner re-classified it as `internal` and a tracker
+ * 5xx was invisible to the proxy-error stop criterion.
+ */
+export class ClassifiedFetchError extends Error {
+  readonly errorClass: ErrorClass;
+  readonly status: number;
+
+  constructor(classified: ClassifiedError, status: number) {
+    super(classified.message);
+    this.name = 'ClassifiedFetchError';
+    this.errorClass = classified.errorClass;
+    this.status = status;
+  }
+}
+
 /** A mined transaction whose receipt `status === 'reverted'` (T6/T10/T25). */
 export const classifyRevertError = (input: {
   message: string;
@@ -122,7 +169,7 @@ export const classifyRevertError = (input: {
   if (input.selector?.toLowerCase() === ALREADY_CLAIMED_SELECTOR) {
     return { errorClass: 'already_claimed', message };
   }
-  if (input.message.includes('LocalBalanceTreeUnderflow')) {
+  if (isLbtUnderflow(input.message)) {
     return { errorClass: 'lbt_underflow', message };
   }
   return { errorClass: 'tx_revert', message };
@@ -163,7 +210,7 @@ const VIEM_RPC_ERROR_NEEDLES: readonly string[] = [
  */
 export const classifySubmitError = (input: { message: string }): ClassifiedError => {
   const message = redactSecrets(input.message);
-  if (input.message.includes('LocalBalanceTreeUnderflow')) {
+  if (isLbtUnderflow(input.message)) {
     return { errorClass: 'lbt_underflow', message };
   }
   if (/BrowserPool: slot \d+ has no live browser/i.test(input.message)) {
@@ -267,6 +314,22 @@ export const classifyFundingError = (input: { message: string }): ClassifiedErro
   message: redactSecrets(input.message)
 });
 
+/**
+ * Finding C13 (S40): one entry of the optional per-network `warnings` array
+ * on a SUCCESSFUL `tracker/activity` response (e.g. "bridge service for
+ * network N is not fully synchronized, some bridges may still be missing").
+ * The request was a 200, so this is NOT `proxy_5xx`; it is its own
+ * non-failing class so a partial fan-out stays visible without inflating
+ * the 5xx count.
+ */
+export const classifyActivityWarning = (input: {
+  networkId: number | string;
+  message: string;
+}): ClassifiedError => ({
+  errorClass: 'activity_warning',
+  message: redactSecrets(`activity_warning[network_id=${input.networkId}]: ${input.message}`)
+});
+
 /** A schema/validate failure — the run never starts. */
 export const classifyConfigError = (input: { message: string }): ClassifiedError => ({
   errorClass: 'config',
@@ -298,6 +361,7 @@ export type ClassifyInput =
   | ({ source: 'ui_assertion' } & { message: string; testId?: string })
   | ({ source: 'browser_crash' } & { message?: string })
   | ({ source: 'console' } & { message: string; url?: string })
+  | ({ source: 'activity_warning' } & { networkId: number | string; message: string })
   | ({ source: 'funding' } & { message: string })
   | ({ source: 'config' } & { message: string })
   | { source: 'unknown'; error: unknown };
@@ -318,6 +382,8 @@ export const classifyError = (input: ClassifyInput): ClassifiedError => {
       return classifyBrowserCrash(input);
     case 'console':
       return classifyConsoleError(input);
+    case 'activity_warning':
+      return classifyActivityWarning(input);
     case 'funding':
       return classifyFundingError(input);
     case 'config':

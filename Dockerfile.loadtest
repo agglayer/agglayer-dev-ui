@@ -1,0 +1,49 @@
+# syntax=docker/dockerfile:1
+#
+# Runnable image for loadtest/ (the bridge load-testing CLI from PR #41),
+# headless workers only -- no Chromium/Playwright browser binary. Separate
+# from the root Dockerfile (which builds the static-export UI onto nginx and
+# never ships Node/pnpm/source) because this image needs the opposite: the
+# full repo source plus Node/pnpm so `pnpm loadtest <command>` (== `tsx
+# loadtest/cli.ts <command>`) can run directly.
+#
+# Build from the repo root:
+#   docker build -f Dockerfile.loadtest -t agglayer-dev-ui-loadtest .
+#
+# Run (mount a config, e.g. against a real testnet aggkit-proxy):
+#   docker run --rm -v "$(pwd)/my.loadtest.json:/app/my.loadtest.json" \
+#     agglayer-dev-ui-loadtest pnpm loadtest validate my.loadtest.json
+
+FROM node:24-slim
+
+# Pin to pnpm 10.30.3 per package.json's packageManager field, on Node 24
+# per .nvmrc / package.json engines.node -- same pin the root Dockerfile
+# uses, do not mirror whatever Node version happens to run the local shell.
+RUN corepack enable && corepack prepare pnpm@10.30.3 --activate
+
+WORKDIR /app
+
+# Copy only the manifests needed to resolve the dependency graph first, so
+# this (expensive) layer is cached across source-only changes.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+
+# Same rationale as the root Dockerfile: there is no .git directory in this
+# build context, so husky's `prepare` script would otherwise fail with
+# ".git can't be found" noise.
+ENV HUSKY=0
+# Belt-and-suspenders: pnpm-workspace.yaml carries no `onlyBuiltDependencies`
+# entry for @playwright/test, so pnpm already skips its postinstall (no
+# Chromium download) by default -- this env var makes that explicit and
+# keeps it true even if that allowlist ever changes.
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+RUN pnpm install --frozen-lockfile
+
+# Full repo source: loadtest/cli.ts runs straight off TypeScript via `tsx`
+# (a devDependency), so devDependencies stay installed and the source tree
+# is not pruned down the way the root Dockerfile's static export is.
+COPY . .
+
+# No fixed ENTRYPOINT: `docker run <image> pnpm loadtest <command> ...`
+# passes the full command explicitly. This default CMD only prints the
+# CLI's own usage text when the image is run with no arguments.
+CMD ["pnpm", "loadtest"]

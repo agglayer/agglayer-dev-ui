@@ -8,8 +8,8 @@ import type { LoadtestConfig } from '../../loadtest/config/schema';
 // top-of-file doc comment:
 //
 // Shortens the ring from the full L1 -> L2A -> L2B -> L1 (3 hops) to
-// L1 -> L2A -> L1 (2 hops). This keeps one autoclaim hop (L1->L2A) and one
-// manual-claim hop (L2A->L1) -- everything the plan's assertions need --
+// L1 -> L2A -> L1 (2 hops). This keeps one l1_to_l2 hop (L1->L2A) and one
+// l2_to_l1 hop (L2A->L1), both manual-claim on the autoclaimer-less devnet -- everything the plan's assertions need --
 // while dropping the L2A->L2B hop, which this session measured to exceed
 // the devnet's 900s readyToClaimMs budget under concurrent load (12/12
 // timeouts in a 6-user run). A 4-user, 2-hop run stays within a
@@ -75,9 +75,10 @@ export const buildE2eConfig = (repoRoot: string): BuildE2eConfigResult => {
       'L1->L2A': base.autoclaim['L1->L2A'],
       // L2A->L1 is a fresh hop key that deriveDevnetConfig's 3-hop ring
       // never produces; a source-network-1 -> destination-network-0 hop is
-      // `getRouteType`'s `l2_to_l1`, which is never autoclaimed on this
-      // devnet (see config/config.ci.devnet.json / app/utils/autoclaim.ts)
-      // -- the same shape as the original ring's L2B->L1 entry.
+      // `getRouteType`'s `l2_to_l1`, which is never autoclaimed (see
+      // app/utils/autoclaim.ts) -- the same shape as the original ring's
+      // L2B->L1 entry. L1->L2A above passes through base.autoclaim
+      // unchanged, i.e. `{ expected: false }` per config.ci.devnet.json.
       'L2A->L1': { expected: false }
     },
     users: {

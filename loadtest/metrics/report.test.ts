@@ -17,9 +17,13 @@ import type { LoadtestConfig } from '../config/schema';
 import { deriveDevnetConfig } from '../config/deriveDevnet';
 import { parseLoadtestConfig } from '../config/schema';
 import { createCollector } from './collector';
+import { classifyActivityWarning } from './errors';
 import {
   buildResultsJson,
   checkThroughputIdentity,
+  computeVerdict,
+  failureRates,
+  HARD_HOP_FAILURE_OUTCOMES,
   redactConfigForReport,
   renderSummaryMd,
   requestedFromConfig,
@@ -51,7 +55,8 @@ const SUMMARY_HEADINGS = [
   '## Autoclaim policy',
   '## Errors',
   '## Resources',
-  '## Environment'
+  '## Environment',
+  '## Claim gas and stage latency'
 ];
 
 describe('redactConfigForReport — DESIGN §6.1 "every secretRef replaced by {ref: ...}"', () => {
@@ -76,6 +81,80 @@ describe('redactConfigForReport — DESIGN §6.1 "every secretRef replaced by {r
 
   it('does not mistake an ordinary two-key object for a secretRef', () => {
     expect(redactConfigForReport({ env: 'X', extra: 1 })).toStrictEqual({ env: 'X', extra: 1 });
+  });
+});
+
+describe('redactConfigForReport — RPC URLs are masked to the host (S54)', () => {
+  // Obviously fake: the host is a reserved .invalid name and the "key" spells out its purpose.
+  const FAKE_KEY = 'FAKEKEYFAKEKEYFAKEKEY0123456789';
+
+  it('keeps only scheme and host for a URL carrying a path token, a query or userinfo', () => {
+    const input = {
+      chains: [
+        { key: 'A', rpcUrl: `https://rpc.example.invalid/${FAKE_KEY}` },
+        { key: 'B', rpcUrl: `https://rpc.example.invalid/v3/${FAKE_KEY}` },
+        { key: 'C', rpcUrl: `https://rpc.example.invalid:8443/?apikey=${FAKE_KEY}` },
+        { key: 'D', rpcUrl: `https://user:${FAKE_KEY}@rpc.example.invalid` }
+      ]
+    };
+    const out = JSON.stringify(redactConfigForReport(input));
+    expect(out).not.toContain(FAKE_KEY);
+    expect(redactConfigForReport(input)).toStrictEqual({
+      chains: [
+        { key: 'A', rpcUrl: 'https://rpc.example.invalid/<redacted>' },
+        { key: 'B', rpcUrl: 'https://rpc.example.invalid/<redacted>' },
+        { key: 'C', rpcUrl: 'https://rpc.example.invalid:8443/<redacted>' },
+        { key: 'D', rpcUrl: 'https://rpc.example.invalid/<redacted>' }
+      ]
+    });
+  });
+
+  it('leaves a bare-origin RPC URL (a public node, no token) and an unset URL untouched', () => {
+    const input = {
+      chains: [
+        { key: 'A', rpcUrl: 'http://127.0.0.1:8545' },
+        { key: 'B', rpcUrl: 'https://rpc.example.invalid/' },
+        { key: 'C', rpcUrl: '' }
+      ]
+    };
+    expect(redactConfigForReport(input)).toStrictEqual(input);
+  });
+
+  it('masks an unparseable RPC URL instead of storing it', () => {
+    expect(redactConfigForReport({ rpcUrl: `not a url ${FAKE_KEY}` })).toStrictEqual({
+      rpcUrl: '<redacted url>'
+    });
+  });
+
+  it('applies the display redaction to the other URL fields only when they hold a secret shape', () => {
+    const out = redactConfigForReport({
+      aggkitProxyUrl: 'http://proxy.example.invalid/aggkitapi',
+      explorerUrl: `https://explorer.example.invalid/?apikey=${FAKE_KEY}`
+    }) as Record<string, string>;
+    expect(out.aggkitProxyUrl).toBe('http://proxy.example.invalid/aggkitapi');
+    expect(out.explorerUrl).toBe('https://explorer.example.invalid/<redacted>');
+  });
+
+  it('never stores the key in the results.json a run writes', () => {
+    const base = buildDevnetConfig();
+    const keyed: LoadtestConfig = {
+      ...base,
+      chains: base.chains.map((chain, index) =>
+        index === 0 ? { ...chain, rpcUrl: `https://rpc.example.invalid/${FAKE_KEY}` } : chain
+      )
+    };
+    const collector = createCollector({ clock: { now: () => 1_000 } });
+    collector.runStart({
+      toolVersion: 't',
+      sdkVersion: 's',
+      host: { cores: 1, totalMemMb: 1, platform: 'linux' },
+      rampUpSeconds: 0
+    });
+    const results = buildResultsJson({ snapshot: collector.snapshot(), config: keyed });
+    expect(JSON.stringify(results)).not.toContain(FAKE_KEY);
+    expect(renderSummaryMd(results, keyed)).not.toContain(FAKE_KEY);
+    const chains = (results.config as { chains: { rpcUrl: string }[] }).chains;
+    expect(chains[0].rpcUrl).toBe('https://rpc.example.invalid/<redacted>');
   });
 });
 
@@ -215,6 +294,8 @@ describe('renderSummaryMd — every DESIGN §6.3 section is present', () => {
       sdkVersion: 'sdk1',
       host: { cores: 4, totalMemMb: 8192, platform: 'linux' }
     });
+    // A lap start must exist, else the headline is NO LAPS STARTED, not PASS.
+    collector.tick('u1', 'headless');
     collector.recordPhase({
       phase: 'bridge_submit',
       mode: 'headless',
@@ -256,6 +337,51 @@ describe('renderSummaryMd — every DESIGN §6.3 section is present', () => {
       expect(index, `out of order: ${heading}`).toBeGreaterThan(lastIndex);
       lastIndex = index;
     }
+  });
+
+  // S40 (finding C13): tracker sync warnings are their own non-failing class,
+  // visible in summary.md, and never counted as proxy_5xx.
+  it('renders activity_warning as its own error class, separate from proxy_5xx, without failing the run', () => {
+    const config = buildDevnetConfig();
+    const collector = createCollector();
+    collector.runStart({
+      toolVersion: 'v1',
+      sdkVersion: 'sdk1',
+      host: { cores: 4, totalMemMb: 8192, platform: 'linux' }
+    });
+    collector.tick('u1', 'headless');
+    const classified = classifyActivityWarning({
+      networkId: 0,
+      message:
+        'bridge service for network 0 is not fully synchronized, some bridges may still be missing'
+    });
+    collector.error({
+      userId: 'u1',
+      mode: 'headless',
+      errorClass: classified.errorClass,
+      message: classified.message,
+      endpointClass: 'tracker/activity'
+    });
+    collector.hopEnd({
+      userId: 'u1',
+      mode: 'headless',
+      hopId: 'h1',
+      lapId: 'l1',
+      hopRoute: 'L1->L2A',
+      outcome: 'hop_completed_auto'
+    });
+    collector.runEnd({ aborted: false, abortCause: null });
+
+    const snapshot = collector.snapshot();
+    expect(snapshot.errors.byClass.activity_warning).toBe(1);
+    expect(snapshot.errors.byClass.proxy_5xx).toBeUndefined();
+    const results = buildResultsJson({ snapshot, config });
+    expect(results.hops.byOutcome.hop_completed_auto).toBe(1);
+
+    const summaryMd = renderSummaryMd(results, config);
+    expect(summaryMd).toContain('activity_warning');
+    expect(summaryMd).toContain('activity_warning[network_id=0]: bridge service for network 0');
+    expect(summaryMd).not.toContain('proxy_5xx');
   });
 
   // S16/A5 (VALIDATION-1.md): a report that can invalidate its own numbers
@@ -399,6 +525,7 @@ describe('renderSummaryMd — every DESIGN §6.3 section is present', () => {
     // `duration_elapsed` is the runner's NORMAL end-of-run drain cause — a
     // run that served its full requested `--minutes` must read as PASS,
     // never ABORTED, regardless of what drained.
+    collector.tick('u1', 'headless');
     collector.runEnd({ aborted: false, abortCause: null, lapsInFlightAtStop: 4 });
     const results = buildResultsJson({ snapshot: collector.snapshot(), config });
     expect(results.run.aborted).toBe(false);
@@ -412,6 +539,7 @@ describe('renderSummaryMd — every DESIGN §6.3 section is present', () => {
   it('a normal run with nothing in flight at stop reads as a plain PASS', () => {
     const config = buildDevnetConfig();
     const collector = createCollector();
+    collector.tick('u1', 'headless');
     collector.runEnd({ aborted: false, abortCause: null, lapsInFlightAtStop: 0 });
     const results = buildResultsJson({ snapshot: collector.snapshot(), config });
     const summaryMd = renderSummaryMd(results, config);
@@ -786,5 +914,416 @@ describe('writeReportFiles — disk I/O wrapper', () => {
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('measurements — results.json `measurements` key and the summary section (S45 C3/C4)', () => {
+  const measured = (config: LoadtestConfig) => {
+    const collector = createCollector();
+    collector.runStart({
+      toolVersion: 'v1',
+      sdkVersion: 'sdk1',
+      host: { cores: 1, totalMemMb: 1, platform: 'linux' }
+    });
+    collector.hopMeasurement({
+      hopId: 'h1',
+      lapId: 'l1',
+      userId: 'u1',
+      mode: 'headless',
+      hopRoute: 'BALI_82->BALI_85',
+      fromNetworkId: 82,
+      toNetworkId: 85,
+      assetKind: 'eth',
+      assetIndex: 0,
+      outcome: 'hop_completed_manual',
+      depositCount: 1,
+      bridge: { txHash: '0xb', blockNumber: '1', minedObservedAt: 1000, gas: null },
+      stages: {
+        l1InfoTreeIndexAt: 2000,
+        l1InfoTreeIndex: 1,
+        injectedLeafAt: 3000,
+        injectedLeafIndex: 2,
+        claimProofAt: 3000,
+        polls: 4
+      },
+      readyObservedAt: 4000,
+      claim: {
+        txHash: '0xc',
+        blockNumber: '2',
+        sentAt: 5000,
+        minedObservedAt: 6000,
+        gas: { blockNumber: '2', gasUsed: '90000', effectiveGasPrice: '1000', l1Fee: '120' },
+        claimKind: 'eth'
+      }
+    });
+    collector.runEnd({ aborted: false, abortCause: null });
+    return buildResultsJson({ snapshot: collector.snapshot(), config });
+  };
+
+  it('adds a `measurements` block with the per-hop records, gas rows and stage rows', () => {
+    const config = parseLoadtestConfig({
+      ...JSON.parse(JSON.stringify(buildDevnetConfig())),
+      measurement: { stageProbeIntervalMs: 5000 }
+    });
+    const results = measured(config);
+
+    expect(results.measurements?.probeIntervalMs).toBe(5000);
+    expect(results.measurements?.hops).toHaveLength(1);
+    expect(results.measurements?.claimGas[0]).toMatchObject({ toNetworkId: 85, claimKind: 'eth', n: 1 });
+    expect(results.measurements?.stageLatency[0].deltas.claimProof).toStrictEqual({
+      n: 1,
+      min: 2000,
+      median: 2000,
+      max: 2000
+    });
+  });
+
+  it('renders the new section LAST, after ## Environment, leaving the existing order unchanged', () => {
+    const config = buildDevnetConfig();
+    const summary = renderSummaryMd(measured(config), config);
+
+    expect(summary.indexOf('## Claim gas and stage latency')).toBeGreaterThan(
+      summary.indexOf('## Environment')
+    );
+    expect(summary).toContain('| 85 | eth | 1 |');
+    expect(summary).toContain('T3b-T3 tracker READY lag after claim-proof | 1 / 1000 / 1000 / 1000');
+  });
+
+  it('regenerates byte-identically from results.json (the `report --dir` path)', () => {
+    const config = buildDevnetConfig();
+    const results = measured(config);
+    const original = renderSummaryMd(results, config);
+    const reloaded = JSON.parse(JSON.stringify(results)) as typeof results;
+    expect(renderSummaryMd(reloaded, reloaded.config as LoadtestConfig)).toBe(original);
+  });
+
+  it('renders "No measurements recorded." and omits the key for a run/results with no hop measurements', () => {
+    const config = buildDevnetConfig();
+    const results = buildResultsJson({ snapshot: createCollector().snapshot(), config });
+    expect('measurements' in results).toBe(false);
+    expect(renderSummaryMd(results, config)).toMatch(
+      /## Claim gas and stage latency\n\nNo measurements recorded\.\n$/
+    );
+  });
+});
+
+// S53 / heavy-load design F1 and §5: `summary.md` must not echo a provider key
+// through the proxy URL line or through an `rpc/<segment>` endpoint class, and a
+// keyless run must still render exactly as before. Every key below is fake.
+describe('renderSummaryMd — redaction of URLs and endpoint classes (S53)', () => {
+  const TOKEN = 'AbCdEf0123456789TokenXyz';
+
+  const keyedRun = () => {
+    const base = buildDevnetConfig();
+    const config: LoadtestConfig = {
+      ...base,
+      aggkitProxyUrl: 'https://proxy.example.invalid/gw?apikey=SECRETQ',
+      chains: base.chains.map((chain, index) =>
+        index === 0 ? { ...chain, rpcUrl: `https://rpc.example.invalid/${TOKEN}` } : chain
+      )
+    };
+    const collector = createCollector();
+    for (const endpointClass of [`rpc/${TOKEN}/eth_call`, 'rpc/l2rpc-001/eth_getBalance']) {
+      collector.recordHttpSample({
+        userId: 'u0',
+        mode: 'headless',
+        endpointClass,
+        method: 'POST',
+        status: 200,
+        durationMs: 5,
+        attempt: 0
+      });
+    }
+    collector.error({
+      userId: 'u0',
+      mode: 'headless',
+      errorClass: 'rpc_error',
+      message: 'RPC error: boom',
+      endpointClass: `rpc/${TOKEN}/eth_call`
+    });
+    return { config, results: buildResultsJson({ snapshot: collector.snapshot(), config }) };
+  };
+
+  it('prints neither the proxy URL query nor the keyed endpoint segment', () => {
+    const { config, results } = keyedRun();
+    const summary = renderSummaryMd(results, config);
+    expect(summary).not.toContain(TOKEN);
+    expect(summary).not.toContain('SECRETQ');
+    expect(summary).toContain('- aggkitProxyUrl: https://proxy.example.invalid/<redacted>');
+    expect(summary).toContain('rpc/L1/eth_call');
+  });
+
+  it('leaves a short path name (`l2rpc-001`) and a secret-free proxy URL exactly as before', () => {
+    const { config, results } = keyedRun();
+    const summary = renderSummaryMd(results, {
+      ...config,
+      aggkitProxyUrl: 'http://127.0.0.1:8555/aggkitapi'
+    });
+    expect(summary).toContain('- aggkitProxyUrl: http://127.0.0.1:8555/aggkitapi\n');
+    expect(summary).toContain('| rpc/l2rpc-001/eth_getBalance |');
+  });
+
+  it('regenerating from a keyed results.json (the `report --dir` path) also drops the key', () => {
+    const { config, results } = keyedRun();
+    const reloaded = JSON.parse(JSON.stringify(results)) as typeof results;
+    const summary = renderSummaryMd(reloaded, reloaded.config as LoadtestConfig);
+    expect(summary).not.toContain(TOKEN);
+    expect(summary).not.toContain('SECRETQ');
+    expect(config.chains[0].rpcUrl).toContain(TOKEN);
+  });
+});
+
+// S53 (heavy-load design §1.3/§1.4): optional results.json keys and summary
+// sections. Each exists only when its producer ran / was configured.
+describe('buildResultsJson / renderSummaryMd — pump, wallet balances and L1 info tree (S53)', () => {
+  const pumpStarted = {
+    kind: 'state' as const,
+    state: 'started' as const,
+    sender: '0x00000000000000000000000000000000000000b1',
+    intervalSeconds: 600,
+    maxTotalSpendWei: '70000000000000000',
+    maxGasPriceWei: '5000000000',
+    destinationNetworkId: 1,
+    amountWei: '0'
+  };
+
+  const configWith = (measurement: LoadtestConfig['measurement']): LoadtestConfig => ({
+    ...buildDevnetConfig(),
+    measurement
+  });
+
+  const heavyCollector = () => {
+    const collector = createCollector();
+    collector.pumpEvent(pumpStarted);
+    collector.pumpEvent({
+      kind: 'deposit',
+      txHash: `0x${'ab'.repeat(32)}`,
+      blockNumber: '123',
+      depositCount: 7,
+      status: 'success',
+      gasUsed: '437125',
+      effectiveGasPrice: '1000000',
+      costWei: '437125000000',
+      cumulativeSpendWei: '437125000000',
+      sentAt: 1,
+      minedObservedAt: 2
+    });
+    collector.pumpEvent({ kind: 'skipped', reason: 'gas_price', gasPriceWei: '6000000000', cumulativeSpendWei: '437125000000' });
+    collector.pumpEvent({ ...pumpStarted, state: 'stopped', pendingAtStop: false, totalSpendWei: '437125000000' });
+    collector.walletBalance({ chainKey: 'L2A', n: 2, minWei: '5', medianWei: '6', maxWei: '7', lowest: [{ userId: 'u0', wei: '5' }] });
+    collector.l1InfoTreeStart({ gerManagerAddress: '0x00000000000000000000000000000000000000a1', baselineLeafCount: 500 });
+    collector.l1InfoLeaf({ blockNumber: '124', leafCount: 501, txHash: `0x${'ab'.repeat(32)}`, minTimestamp: 9, fromPump: true });
+    collector.l1InfoLeaf({ blockNumber: '130', leafCount: 502, txHash: `0x${'cd'.repeat(32)}`, minTimestamp: 10, fromPump: false });
+    collector.runStart({ toolVersion: 't', sdkVersion: 's', host: { cores: 1, totalMemMb: 1, platform: 'linux' } });
+    collector.runEnd({ aborted: false, abortCause: null });
+    return collector;
+  };
+
+  it('adds pump, walletBalances and l1InfoTree to results.json when the run produced / configured them', () => {
+    const config = configWith({
+      walletBalanceIntervalMs: 300_000,
+      l1InfoTree: { pollIntervalMs: 60_000 }
+    });
+    const results = buildResultsJson({ snapshot: heavyCollector().snapshot(), config });
+
+    expect(results.pump).toMatchObject({
+      enabled: true,
+      sender: pumpStarted.sender,
+      deposits: [{ depositCount: 7, status: 'success', blockNumber: '123' }],
+      skipped: { gas_price: 1 },
+      totalSpendWei: '437125000000',
+      pendingAtStop: false
+    });
+    expect(results.walletBalances).toMatchObject({
+      intervalMs: 300_000,
+      samples: [{ chainKey: 'L2A', n: 2 }]
+    });
+    expect(results.l1InfoTree).toMatchObject({
+      gerManagerAddress: '0x00000000000000000000000000000000000000a1',
+      baselineLeafCount: 500,
+      pollErrors: 0
+    });
+    expect(results.l1InfoTree?.leaves).toHaveLength(2);
+  });
+
+  it('a configured sampler that took no sample still yields an empty block, so "not sampled" is distinguishable from "not configured"', () => {
+    const config = configWith({ walletBalanceIntervalMs: 300_000, l1InfoTree: { pollIntervalMs: 60_000 } });
+    const results = buildResultsJson({ snapshot: createCollector().snapshot(), config });
+    expect(results.walletBalances).toStrictEqual({ intervalMs: 300_000, samples: [] });
+    expect(results.l1InfoTree).toStrictEqual({
+      gerManagerAddress: null,
+      baselineLeafCount: null,
+      leaves: [],
+      pollErrors: 0
+    });
+    expect('pump' in results).toBe(false);
+  });
+
+  it('adds none of the keys for a run without them (a measurement block with only the stage probe included)', () => {
+    for (const config of [buildDevnetConfig(), configWith({ stageProbeIntervalMs: 5000 })]) {
+      const results = buildResultsJson({ snapshot: createCollector().snapshot(), config });
+      for (const key of ['pump', 'walletBalances', 'l1InfoTree']) {
+        expect(key in results).toBe(false);
+      }
+    }
+  });
+
+  it('appends ## Pump and ## L1 info tree after the existing sections, only when present', () => {
+    const config = configWith({ walletBalanceIntervalMs: 300_000, l1InfoTree: { pollIntervalMs: 60_000 } });
+    const results = buildResultsJson({ snapshot: heavyCollector().snapshot(), config });
+    const summary = renderSummaryMd(results, config);
+
+    expect(summary.indexOf('## Pump')).toBeGreaterThan(summary.indexOf('## Claim gas and stage latency'));
+    expect(summary.indexOf('## L1 info tree')).toBeGreaterThan(summary.indexOf('## Pump'));
+    expect(summary).toContain('The L1 deposit pump was ON for this run');
+    expect(summary).toContain(`| sender | ${pumpStarted.sender} |`);
+    expect(summary).toContain('| total spend (ETH) | 0.000000437125 |');
+    expect(summary).toContain('| spend cap (ETH) | 0.07 |');
+    expect(summary).toContain('| max gas price (gwei) | 5 |');
+    expect(summary).toContain('| deposits settled | 1 (0 reverted) |');
+    expect(summary).toContain('| 7 | success | 437125 |');
+    expect(summary).toContain('| leaves added during the run | 2 |');
+    expect(summary).toContain('| from the pump / from other deposits | 1 / 1 |');
+
+    const plain = renderSummaryMd(
+      buildResultsJson({ snapshot: createCollector().snapshot(), config: buildDevnetConfig() }),
+      buildDevnetConfig()
+    );
+    expect(plain).not.toContain('## Pump');
+    expect(plain).not.toContain('## L1 info tree');
+  });
+
+  it('flags a deposit still pending at stop in the summary', () => {
+    const collector = createCollector();
+    collector.pumpEvent(pumpStarted);
+    collector.pumpEvent({ ...pumpStarted, state: 'stopped', pendingAtStop: true, totalSpendWei: '2640000000000000' });
+    const config = buildDevnetConfig();
+    const summary = renderSummaryMd(buildResultsJson({ snapshot: collector.snapshot(), config }), config);
+    expect(summary).toContain('a deposit was still pending at stop and is counted at its worst case');
+    expect(summary).toContain('| pending at stop | yes |');
+    expect(summary).toContain('No pump deposit settled.');
+  });
+
+  it('regenerates byte-identically from results.json (the `report --dir` path) with the new sections', () => {
+    const config = configWith({ walletBalanceIntervalMs: 300_000, l1InfoTree: { pollIntervalMs: 60_000 } });
+    const results = buildResultsJson({ snapshot: heavyCollector().snapshot(), config });
+    const original = renderSummaryMd(results, config);
+    const reloaded = JSON.parse(JSON.stringify(results)) as typeof results;
+    expect(renderSummaryMd(reloaded, reloaded.config as LoadtestConfig)).toBe(original);
+  });
+});
+
+// S53: the verdict helpers `report.ts` now exports for the HTML report (S54).
+describe('computeVerdict / failureRates (S53)', () => {
+  const resultsFor = (opts: {
+    laps?: Partial<Record<'LAP_DONE' | 'LAP_FAILED' | 'LAP_ABORTED', number>>;
+    hops?: Record<string, number>;
+    aborted?: boolean;
+    abortCause?: string | null;
+    lapStarts?: number;
+    inFlightAtStop?: number;
+  }) => {
+    const config = buildDevnetConfig();
+    const results = buildResultsJson({ snapshot: createCollector().snapshot(), config });
+    results.laps.byOutcome = { LAP_DONE: 0, LAP_FAILED: 0, LAP_ABORTED: 0, ...opts.laps };
+    results.hops.byOutcome = opts.hops ?? {};
+    results.run.aborted = opts.aborted ?? false;
+    results.run.abortCause = opts.abortCause ?? null;
+    results.achieved.lapStartsSubmitted = opts.lapStarts ?? 1;
+    results.run.lapsInFlightAtStop = opts.inFlightAtStop ?? 0;
+    return results;
+  };
+
+  it('keeps the exact verdict wording of the summary headline for every branch', () => {
+    expect(computeVerdict(resultsFor({ laps: { LAP_DONE: 3 } }))).toBe('PASS');
+    expect(computeVerdict(resultsFor({ laps: { LAP_DONE: 3 }, inFlightAtStop: 1 }))).toBe(
+      'PASS (drained 1 in-flight lap)'
+    );
+    expect(computeVerdict(resultsFor({ laps: { LAP_DONE: 3 }, inFlightAtStop: 4 }))).toBe(
+      'PASS (drained 4 in-flight laps)'
+    );
+    expect(computeVerdict(resultsFor({ lapStarts: 0 }))).toBe(
+      'NO LAPS STARTED (0 lap starts — nothing was exercised)'
+    );
+    expect(computeVerdict(resultsFor({ aborted: true, abortCause: 'sigint' }))).toBe(
+      'ABORTED (sigint)'
+    );
+    expect(computeVerdict(resultsFor({ aborted: true }))).toBe('ABORTED (unknown cause)');
+    expect(
+      computeVerdict(
+        resultsFor({
+          laps: { LAP_DONE: 2, LAP_FAILED: 1 },
+          hops: { timeout_ready_to_claim: 1, hop_completed_manual: 2 }
+        })
+      )
+    ).toBe('FAIL (1 of 3 lap(s) failed: timeout_ready_to_claim x1)');
+    expect(
+      computeVerdict(resultsFor({ laps: { LAP_DONE: 2, LAP_ABORTED: 2 }, hops: { aborted_drain: 2 } }))
+    ).toBe('INCOMPLETE (2 of 4 lap(s) aborted: aborted_drain x2)');
+    // FAIL wins when both are present.
+    expect(computeVerdict(resultsFor({ laps: { LAP_FAILED: 1, LAP_ABORTED: 1 } }))).toMatch(/^FAIL /);
+  });
+
+  it('the summary headline is exactly computeVerdict', () => {
+    const config = buildDevnetConfig();
+    const results = resultsFor({ laps: { LAP_DONE: 2, LAP_FAILED: 1 }, hops: { proxy_5xx: 1 } });
+    expect(renderSummaryMd(results, config).split('\n')[0]).toContain(
+      ` — ${computeVerdict(results)} — users=`
+    );
+  });
+
+  it('failureRates: lap failure rate and the hard hop-failure rate over the SC1 outcome set', () => {
+    const rates = failureRates(
+      resultsFor({
+        laps: { LAP_DONE: 6, LAP_FAILED: 3, LAP_ABORTED: 1 },
+        hops: {
+          hop_completed_manual: 70,
+          proxy_5xx: 4,
+          rpc_error: 3,
+          revert_claim: 2,
+          internal: 1,
+          // Not hard failures: stalls and drain aborts are watched by other criteria.
+          timeout_ready_to_claim: 15,
+          aborted_drain: 5
+        }
+      })
+    );
+    expect(rates).toStrictEqual({
+      lapsFinished: 10,
+      lapsFailed: 3,
+      lapFailureRate: 0.3,
+      hopsEnded: 100,
+      hardHopFailures: 10,
+      hardHopFailureRate: 0.1
+    });
+  });
+
+  it('failureRates: null, never a false 0, when nothing finished', () => {
+    expect(failureRates(resultsFor({}))).toStrictEqual({
+      lapsFinished: 0,
+      lapsFailed: 0,
+      lapFailureRate: null,
+      hopsEnded: 0,
+      hardHopFailures: 0,
+      hardHopFailureRate: null
+    });
+  });
+
+  it('the hard-failure set is exactly the SC1 list: reverts, bridge_event_missing, activity_status_error, rpc and proxy errors, internal', () => {
+    expect([...HARD_HOP_FAILURE_OUTCOMES].sort()).toStrictEqual(
+      [
+        'activity_status_error',
+        'bridge_event_missing',
+        'internal',
+        'lbt_underflow',
+        'proxy_4xx',
+        'proxy_5xx',
+        'revert_approve',
+        'revert_bridge',
+        'revert_claim',
+        'rpc_error',
+        'tx_revert'
+      ].sort()
+    );
   });
 });

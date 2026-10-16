@@ -32,6 +32,14 @@ describe('deriveStatus', () => {
     expect(deriveStatus({ claimed: 'true' })).toEqual({ status: 'CLAIMED' });
   });
 
+  it('maps claim_status "claimed" (tracker api_revision 5, no `claimed` field) to CLAIMED', () => {
+    expect(deriveStatus({ claim_status: 'claimed' })).toEqual({ status: 'CLAIMED' });
+  });
+
+  it('keeps an unrecognised claim_status on the unclaimed derivation', () => {
+    expect(deriveStatus({ claim_status: 'unclaimed' })).toEqual({ status: 'PENDING' });
+  });
+
   it('maps claimed "error" to ERROR, surfacing errors.claim', () => {
     expect(
       deriveStatus({ claimed: 'error', errors: { claim: 'no bridge contract configured' } })
@@ -104,6 +112,26 @@ describe('deriveStatus', () => {
 });
 
 describe('toTransaction', () => {
+  it('maps a claim_status "claimed" row (no `claimed` field) to CLAIMED with the claim tx hash', () => {
+    const tx = toTransaction({
+      bridge: baseBridge,
+      bridge_network_id: 0,
+      claim_status: 'claimed',
+      claim_network_id: 1,
+      claim: {
+        tx_hash: '0xclaimtx',
+        block_num: 77,
+        block_timestamp: 555,
+        global_index: '5'
+      },
+      creation_timestamp: 1,
+      last_updated_timestamp: 2
+    } as unknown as Parameters<typeof toTransaction>[0]);
+    expect(tx.status).toBe('CLAIMED');
+    expect(tx.claimTransactionHash).toBe('0xclaimtx');
+    expect(tx.claimBlockNumber).toBe(77);
+  });
+
   it('maps a claimed bridge, preferring bridge.destination_network over the raw origin/destination pair', () => {
     const tx = toTransaction({
       bridge: baseBridge,

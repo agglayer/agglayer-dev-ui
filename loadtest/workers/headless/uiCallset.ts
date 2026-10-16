@@ -23,6 +23,7 @@ import type { Collector, HttpOrigin } from '../../metrics/collector';
 
 import { parseActivityResponse, toTransaction } from '../../../app/services/activity';
 import { toRowKey } from '../../core/types';
+import { isTokenLikeSegment } from '../../wallets/redact';
 
 // ---------------------------------------------------------------------------
 // Activity cadence scheduler — DESIGN §9.1 row P1, findings C1/C2.
@@ -313,7 +314,59 @@ export class TtlCache<T> {
 // REST traffic and RPC traffic route through.
 // ---------------------------------------------------------------------------
 
-export const classifyEndpoint = (urlStr: string, bodyText?: string): string => {
+/**
+ * S53 / heavy-load design F1: maps a request URL to the configured chain key
+ * whose `rpcUrl` it targets (origin plus path match), or `null`. Lets RPC
+ * traffic be named `rpc/<CHAIN_KEY>/<method>` instead of by the URL's last path
+ * segment — which, for a keyed provider URL (`https://host/<api-key>`), IS the
+ * secret.
+ */
+export { isTokenLikeSegment };
+
+export type ChainKeyResolver = (url: string) => string | null;
+
+const trimTrailingSlashes = (pathname: string): string => pathname.replace(/\/+$/, '');
+
+export const buildChainKeyResolver = (
+  chains: readonly { key: string; rpcUrl: string }[]
+): ChainKeyResolver => {
+  const entries: { key: string; origin: string; pathname: string }[] = [];
+  for (const chain of chains) {
+    try {
+      const parsed = new URL(chain.rpcUrl);
+      entries.push({
+        key: chain.key,
+        origin: parsed.origin,
+        pathname: trimTrailingSlashes(parsed.pathname)
+      });
+    } catch {
+      // An unparseable rpcUrl cannot be matched; the schema already rejects it.
+    }
+  }
+  return (urlStr) => {
+    let url: URL;
+    try {
+      url = new URL(urlStr);
+    } catch {
+      return null;
+    }
+    const pathname = trimTrailingSlashes(url.pathname);
+    // Longest path first, so `/rpc` cannot shadow `/rpc/l2`.
+    let best: { key: string; pathname: string } | null = null;
+    for (const entry of entries) {
+      if (entry.origin !== url.origin) continue;
+      if (pathname !== entry.pathname) continue;
+      if (best === null || entry.pathname.length > best.pathname.length) best = entry;
+    }
+    return best === null ? null : best.key;
+  };
+};
+
+export const classifyEndpoint = (
+  urlStr: string,
+  bodyText?: string,
+  resolveChainKey?: ChainKeyResolver
+): string => {
   let url: URL;
   try {
     url = new URL(urlStr);
@@ -333,10 +386,20 @@ export const classifyEndpoint = (urlStr: string, bodyText?: string): string => {
   if (path.endsWith('/tracker/v1/health')) return 'tracker/health';
 
   // Anything else hitting a bare RPC URL is assumed to be JSON-RPC — classed
-  // by method name from the request body, with the URL's last path segment
-  // as a cheap per-chain discriminator (loadtest.config.json's `rpcUrl`
-  // convention, e.g. ".../l1rpc", ".../l2rpc-001").
-  const chainSegment = path.split('/').filter(Boolean).pop() ?? url.hostname;
+  // by method name from the request body. The chain discriminator is the
+  // configured chain key when a resolver recognises the URL (S53 F1: new runs
+  // read `rpc/BALI_82/eth_call`); otherwise the URL's last path segment
+  // (loadtest.config.json's `rpcUrl` convention, e.g. ".../l1rpc",
+  // ".../l2rpc-001"), except that a token-shaped segment — which for a keyed
+  // provider URL is the API key itself — is never written out.
+  const lastSegment = path.split('/').filter(Boolean).pop();
+  const chainSegment =
+    resolveChainKey?.(urlStr) ??
+    (lastSegment === undefined
+      ? url.hostname
+      : isTokenLikeSegment(lastSegment)
+        ? 'redacted'
+        : lastSegment);
   if (bodyText !== undefined) {
     try {
       const parsed = JSON.parse(bodyText) as { method?: unknown };
@@ -403,10 +466,16 @@ export interface TimingFetchHandle {
   uninstall(): void;
 }
 
+export interface TimingFetchOptions {
+  /** S53 F1: names RPC traffic by chain key instead of by URL path segment. See `buildChainKeyResolver`. */
+  resolveChainKey?: ChainKeyResolver;
+}
+
 /** Installs a wrapped `globalThis.fetch`. Call once per process; returns a handle to restore the original. */
 export const installTimingFetch = (
   collector: Collector,
-  clock: { now(): number } = { now: () => Date.now() }
+  clock: { now(): number } = { now: () => Date.now() },
+  options: TimingFetchOptions = {}
 ): TimingFetchHandle => {
   const original = globalThis.fetch;
 
@@ -420,7 +489,7 @@ export const installTimingFetch = (
       'GET'
     ).toUpperCase();
     const bodyText = typeof init?.body === 'string' ? init.body : undefined;
-    const endpointClass = classifyEndpoint(url, bodyText);
+    const endpointClass = classifyEndpoint(url, bodyText, options.resolveChainKey);
     const ctx = fetchContextStorage.getStore();
     const attemptKey = `${ctx?.userId ?? '?'}:${method}:${endpointClass}`;
     // VALIDATION-1.md A7: the window-based heuristic below approximates the
@@ -519,6 +588,30 @@ export const mapActivityResponseText = (text: string): MappedActivity => {
   });
   return { rows, warnings: raw.warnings ?? [] };
 };
+
+/**
+ * Issue #53: a tracker row reading `claimed`/`claim_status: claimed` was taken
+ * at face value, so a tracker that said "claimed" for a deposit that was NOT
+ * claimed on the destination (ring K: deposits 1345 and 1986, `isClaimed`
+ * false, no claim object, `claim-proof` available) ended the hop as
+ * `hop_completed_auto` and stranded the funds. A CLAIMED row is now trusted
+ * only when it carries a claim object (`claimTransactionHash`) or the
+ * destination bridge's `isClaimed` confirms it; otherwise it is demoted to
+ * PENDING so the hop keeps waiting (and ends with the existing timeout class
+ * rather than a false success). A failing on-chain read counts as "not
+ * confirmed" - never as claimed. Rows with a claim object cost no RPC call.
+ */
+export const confirmClaimedRows = async (
+  rows: readonly ObservedRow[],
+  isClaimedOnChain: (row: ObservedRow) => Promise<boolean>
+): Promise<ObservedRow[]> =>
+  Promise.all(
+    rows.map(async (row): Promise<ObservedRow> => {
+      if (row.status !== 'CLAIMED' || row.claimTransactionHash !== undefined) return row;
+      const confirmed = await isClaimedOnChain(row).catch(() => false);
+      return confirmed ? row : { ...row, status: 'PENDING' };
+    })
+  );
 
 /**
  * True while any observed row still has work left (drives the

@@ -39,10 +39,11 @@
 // entirely and runs the ring L1 -> L2A -> L1 instead. This is not a lesser
 // test of the wrong thing: it still exercises exactly the two hop KINDS
 // the plan's assertions care about —
-//   - L1->L2A is `l1_to_l2`, autoclaim-expected (config.ci.devnet.json) —
-//     the "autoclaim route reaches CLAIMED without a manual claim" case.
-//   - L2A->L1 is `l2_to_l1`, never autoclaimed on this devnet — the
-//     "L2->L1 hop is claimed manually" case.
+//   - L1->L2A is `l1_to_l2`; the devnet (aggkit rc17) has no autoclaimer,
+//     so config.ci.devnet.json marks it `expectedAutoclaim: false` and it
+//     is claimed manually (`hop_completed_manual`).
+//   - L2A->L1 is `l2_to_l1`, also claimed manually. (Every devnet route is
+//     manual-claim; no hop is autoclaim-expected.)
 // What it does NOT exercise is an `l2_to_l2` hop (L2A<->L2B) at all — that
 // combination is covered by the tool's unit tests (core/ring.test.ts) and
 // by the ad hoc S10/S11/S24 validation runs recorded in the plan, not by
@@ -328,9 +329,19 @@ test.describe('loadtest tool E2E (compose devnet)', () => {
       })
     });
 
-    await test.step('L1->L2A (autoclaim) reached CLAIMED without a manual claim', () => {
+    await test.step('L1->L2A was claimed manually (devnet has no autoclaimer)', () => {
       const outcomes = results.hops.byRoute['L1->L2A']?.byOutcome ?? {};
-      expect(outcomes.hop_completed_auto ?? 0).toBeGreaterThanOrEqual(1);
+      expect(outcomes.hop_completed_manual ?? 0).toBeGreaterThanOrEqual(1);
+    });
+
+    await test.step('no autoclaim was expected, observed or escalated on the devnet', () => {
+      expect(results.policy.autoclaimOverdue).toBe(0);
+      expect(results.policy.unexpectedAutoclaim).toBe(0);
+      for (const [route, routeStats] of Object.entries(results.hops.byRoute)) {
+        const outcomes = routeStats?.byOutcome ?? {};
+        expect(outcomes.hop_completed_auto ?? 0, `${route} hop_completed_auto`).toBe(0);
+        expect(outcomes.hop_completed_escalated ?? 0, `${route} hop_completed_escalated`).toBe(0);
+      }
     });
 
     await test.step('L2A->L1 (the L2->L1 hop) was claimed manually', () => {

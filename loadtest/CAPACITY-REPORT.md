@@ -5,6 +5,13 @@
 · **SDK:** `@agglayer/sdk` `1.0.0-snapshot-ca6df75e`
 **Target:** the vendored compose devnet (`tests/devnet/docker-compose.yml`) — anvil ×3, agglayer, aggkit ×2,
 aggkit-proxy, haproxy. aggkit `v0.11.0-rc8`.
+
+> **Historical (aggkit rc8, built-in autoclaim).** All autoclaim coverage, served/offered-rate and
+> congestion-collapse numbers in this report were measured against an rc8 devnet whose aggkit ran the
+> built-in autoclaimer. The vendored devnet now runs aggkit `v0.11.0-rc17`, which removed autoclaim
+> ([agglayer/aggkit#1901](https://github.com/agglayer/aggkit/pull/1901)) and claims manually, so these
+> figures do not describe the current devnet and are not comparable to runs against it. They remain a
+> valid reference for real environments that have an autoclaimer.
 **Host:** 64 cores / 62 GiB / Linux 5.10.
 
 ---

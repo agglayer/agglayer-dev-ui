@@ -1,4 +1,4 @@
-import type { Address } from 'viem';
+import type { Address, Hex } from 'viem';
 
 // The `run` orchestrator — DESIGN's component map (§1) wired end to end:
 // load+validate → preflight → (fund) → serve UI → build the user set →
@@ -27,23 +27,45 @@ import os from 'node:os';
 import path from 'node:path';
 import { monitorEventLoopDelay } from 'node:perf_hooks';
 
-import type { LoadtestConfig } from './config/schema';
+import { formatEther } from 'viem';
+
+import type { LoadtestAsset, LoadtestConfig } from './config/schema';
 import type { Clock, RingEmission, RingEngine } from './core/ring';
 import type { AbortCause, InflightLookup, SchedulerDecision } from './core/scheduler';
-import type { AssetKind, Gate, Hop, HopSpec, Lap, ObservedRow } from './core/types';
-import type { DriverError, DriverMode, UserDriver } from './core/userDriver';
+import type { AssetKind, ErrorClass, Gate, Hop, HopSpec, Lap, ObservedRow } from './core/types';
+import type {
+  ClaimStageProbeResult,
+  ClaimSubmission,
+  DriverError,
+  DriverMode,
+  StageProbingDriver,
+  TxStepResult,
+  UserDriver
+} from './core/userDriver';
 import type { Collector, HostInfo, LapOutcome } from './metrics/collector';
 import type { ServeUiHandle } from './ui/serve';
+import type { ChainClientFactory } from './wallets/chainClients';
 import type { DerivedWallet } from './wallets/derive';
+import type { GasTokenIdentity } from './wallets/preflight';
+import type { L1Pump } from './workers/pump/l1Pump';
 
+import { pumpWalletOverlap } from './config/schema';
 import { createRingEngine, eventsFromBridge, eventsFromClaim, systemClock } from './core/ring';
 import { createScheduler } from './core/scheduler';
 import { createCollector, createFileActivitySink } from './metrics/collector';
-import { classifyError } from './metrics/errors';
+import { ClassifiedFetchError, classifyError } from './metrics/errors';
+import { deriveClaimKind } from './metrics/measurement';
 import { writeReportFiles } from './metrics/report';
+import {
+  createL1InfoTreePoller,
+  createPeriodicTask,
+  createWalletBalanceSampler,
+  l1InfoTreeClientFromViem
+} from './metrics/samplers';
 import { buildUi } from './ui/build';
 import { serveUi } from './ui/serve';
-import { deriveWallets } from './wallets/derive';
+import { defaultChainClientFactory } from './wallets/chainClients';
+import { derivePumpAccount, deriveWallets } from './wallets/derive';
 import { fundWallets } from './wallets/fund';
 import { PreflightError, runPreflight } from './wallets/preflight';
 import { redactError } from './wallets/redact';
@@ -54,7 +76,12 @@ import {
 } from './workers/browser/browserUser';
 import { BrowserPool } from './workers/browser/pool';
 import { HeadlessUser } from './workers/headless/headlessUser';
-import { installTimingFetch } from './workers/headless/uiCallset';
+import {
+  buildChainKeyResolver,
+  installTimingFetch,
+  NON_TERMINAL_INTERVAL_MS
+} from './workers/headless/uiCallset';
+import { createL1Pump, pumpClientsFromViem } from './workers/pump/l1Pump';
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -79,6 +106,12 @@ export interface RunLoadTestOptions {
   mainnetConfirmed: boolean;
   outDir: string;
   logger?: (line: string) => void;
+  /**
+   * S53: viem client factory for the harness-side pump and samplers (the L1
+   * deposit pump, wallet balances, L1 info tree). Defaults to the real one; a
+   * test injects fakes. Preflight and the users keep their own wiring.
+   */
+  chainClientFactory?: ChainClientFactory;
 }
 
 export interface RunLoadTestResult {
@@ -151,7 +184,13 @@ const readProcRssMb = (pid: number): number => {
   }
 };
 
-const buildHopSpecs = (config: LoadtestConfig, assetIndex: number): HopSpec[] => {
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+
+const buildHopSpecs = (
+  config: LoadtestConfig,
+  assetIndex: number,
+  gasTokenChains: Record<string, GasTokenIdentity> = {}
+): HopSpec[] => {
   const asset = config.assets[assetIndex];
   if (asset === undefined) throw new Error(`buildHopSpecs: no asset at index ${assetIndex}`);
   const chainByKey = new Map(config.chains.map((chain) => [chain.key, chain]));
@@ -171,6 +210,8 @@ const buildHopSpecs = (config: LoadtestConfig, assetIndex: number): HopSpec[] =>
     if (autoclaimEntry === undefined) {
       throw new Error(`buildHopSpecs: no autoclaim entry for hop "${hopRoute}"`);
     }
+    const fromGas = gasTokenChains[fromKey];
+    const toGas = gasTokenChains[toKey];
     hops.push({
       hopIndex: i,
       hopRoute,
@@ -181,6 +222,20 @@ const buildHopSpecs = (config: LoadtestConfig, assetIndex: number): HopSpec[] =>
       assetIndex,
       assetKind: asset.kind,
       assetAddress: asset.kind === 'erc20' ? (asset.address as Address) : undefined,
+      ...(asset.kind === 'eth' && fromGas !== undefined
+        ? { fromWethToken: fromGas.wethToken as Hex }
+        : {}),
+      ...(fromGas !== undefined || toGas !== undefined
+        ? {
+            expectedOrigin:
+              asset.kind === 'eth'
+                ? { networkId: 0, address: ZERO_ADDRESS as Hex }
+                : {
+                    networkId: asset.originNetworkId as number,
+                    address: asset.address as Hex
+                  }
+          }
+        : {}),
       amount: asset.amount,
       decimals: asset.decimals,
       autoclaim: autoclaimEntry.expected
@@ -195,7 +250,7 @@ const buildHopSpecs = (config: LoadtestConfig, assetIndex: number): HopSpec[] =>
 // Emission / hop-completion translation (core/ring.ts -> metrics/collector.ts)
 // ---------------------------------------------------------------------------
 
-interface LapRunCtx {
+export interface LapRunCtx {
   engine: RingEngine;
   driver: UserDriver;
   userId: string;
@@ -204,10 +259,120 @@ interface LapRunCtx {
   collector: Collector;
   getDrainDeadline: () => number | null;
   logger: (line: string) => void;
+  /** S45: `config.assets` (to resolve a hop's token origin network). */
+  assets: readonly LoadtestAsset[];
+  /** S45 C2: `measurement.stageProbeIntervalMs`, or null when the probe is off. */
+  stageProbeIntervalMs: number | null;
+  /**
+   * S53: true when `config.measurement` is present. Gates everything the heavy-load
+   * measurements add to a hop (`tx_sent`/`tx_receipt` lines, the approve gas record),
+   * so a config without it keeps byte-identical ndjson and `results.json`.
+   */
+  measurementEnabled?: boolean;
 }
 
+// ---------------------------------------------------------------------------
+// Measurement (S45 C2/C3) — per-hop stash the runner fills while driving a hop
+// and turns into one `hop_measurement` record at hop end. Observation only:
+// nothing here feeds back into `core/` state transitions.
+// ---------------------------------------------------------------------------
+
+export interface HopMeasureState {
+  /** S53 M8: the ERC-20 approve of this hop, when `driver.bridge` sent one. */
+  approve?: TxStepResult | null;
+  bridge: TxStepResult | null;
+  depositCount: number | null;
+  claim: ClaimSubmission | null;
+  stages: ClaimStageProbeResult | null;
+  probeAbort: AbortController | null;
+}
+
+const endTime = (step: TxStepResult | null | undefined): number | null =>
+  step?.receipt != null ? step.receipt.timing.startedAt + step.receipt.timing.durationMs : null;
+
+const sentTime = (step: TxStepResult | null | undefined): number | null =>
+  step != null && step.txHash !== null ? step.submit.startedAt + step.submit.durationMs : null;
+
+export const hopMeasurementRecord = (ctx: LapRunCtx, hop: Hop, lapId: string, st: HopMeasureState) => {
+  const spec = hop.spec;
+  const asset = ctx.assets[spec.assetIndex];
+  const tokenOriginNetworkId =
+    spec.assetKind === 'erc20' && asset?.kind === 'erc20' ? asset.originNetworkId : undefined;
+  const claimStep = st.claim?.claim ?? null;
+  const claimGas = claimStep?.receipt?.gas ?? null;
+  return {
+    hopId: hop.id,
+    lapId,
+    userId: ctx.userId,
+    mode: ctx.mode,
+    hopRoute: spec.hopRoute,
+    fromNetworkId: spec.fromNetworkId,
+    toNetworkId: spec.toNetworkId,
+    assetKind: spec.assetKind,
+    assetIndex: spec.assetIndex,
+    ...(tokenOriginNetworkId !== undefined ? { tokenOriginNetworkId } : {}),
+    outcome: hop.outcome as NonNullable<Hop['outcome']>,
+    depositCount: hop.depositCount ?? st.depositCount,
+    bridge: {
+      txHash: st.bridge?.txHash ?? hop.bridgeTxHash ?? null,
+      blockNumber: st.bridge?.receipt?.gas?.blockNumber ?? null,
+      minedObservedAt: endTime(st.bridge),
+      gas: st.bridge?.receipt?.gas ?? null
+    },
+    ...(ctx.measurementEnabled === true && st.approve != null
+      ? { approve: { txHash: st.approve.txHash, gas: st.approve.receipt?.gas ?? null } }
+      : {}),
+    stages: st.stages,
+    readyObservedAt: hop.readyAt,
+    claim: {
+      txHash: claimStep?.txHash ?? hop.claimTxHash ?? null,
+      blockNumber: claimGas?.blockNumber ?? null,
+      sentAt: sentTime(claimStep),
+      minedObservedAt: endTime(claimStep),
+      gas: claimGas,
+      claimKind: deriveClaimKind({
+        assetKind: spec.assetKind,
+        toNetworkId: spec.toNetworkId,
+        tokenOriginNetworkId,
+        claimStatus: claimStep?.receipt?.status ?? null,
+        wrapperDeployed: claimGas?.wrapperDeployed,
+        alreadyClaimed: st.claim?.isClaimedBefore === true || st.claim?.isClaimedRecheck === true
+      }),
+      ...(st.claim?.preState !== undefined ? { preState: st.claim.preState } : {})
+    }
+  };
+};
+
+/**
+ * What the runner does with a failed `observeActivity()` poll. A transient
+ * failure never fails the hop (the UI's own background poll would just retry
+ * on its next interval) — only the ring timeouts can end a hop stuck polling.
+ *
+ * S53 (design F3): a failure that kept its class (`ClassifiedFetchError` — a
+ * tracker non-2xx) is reported under THAT class, and the retry waits the UI's
+ * own non-terminal cadence (5 s) instead of 1 s: at 1 s (plus the poller's own
+ * 300 ms retries) a wallet whose poll is being refused polled several times
+ * faster than a real user, exactly when the tracker was struggling.
+ */
+export const OBSERVE_ACTIVITY_DEFAULT_RETRY_MS = 1000;
+
+export const classifyActivityPollError = (
+  error: unknown
+): { classified: { errorClass: ErrorClass; message: string }; retryAfterMs: number } => {
+  if (error instanceof ClassifiedFetchError) {
+    return {
+      classified: { errorClass: error.errorClass, message: error.message },
+      retryAfterMs: NON_TERMINAL_INTERVAL_MS
+    };
+  }
+  return {
+    classified: classifyError({ source: 'unknown', error }),
+    retryAfterMs: OBSERVE_ACTIVITY_DEFAULT_RETRY_MS
+  };
+};
+
 const reportDriverError = (
-  ctx: LapRunCtx,
+  ctx: Pick<LapRunCtx, 'collector' | 'userId' | 'mode'>,
   hopId: string,
   error: Pick<DriverError, 'message'> & Partial<Pick<DriverError, 'errorClass'>>
 ): void => {
@@ -221,6 +386,27 @@ const reportDriverError = (
   });
 };
 
+// S58a M2: `SingleFlightPoller` rejects EVERY joined caller with the same error object, so
+// one failed tracker fetch reached `reportDriverError` once per waiting hop of that wallet
+// (16 laps in flight -> 16 `proxy_5xx` records, SC4 inflated). Remember the error instances
+// already written; a joined hop still backs off, it just does not write the record again.
+const reportedPollFailures = new WeakSet<object>();
+
+/** Classifies a failed activity poll, writes ONE error record per failed fetch, returns the back-off. */
+export const reportActivityPollError = (
+  ctx: Pick<LapRunCtx, 'collector' | 'userId' | 'mode'>,
+  hopId: string,
+  error: unknown
+): number => {
+  const { classified, retryAfterMs } = classifyActivityPollError(error);
+  const isObject = typeof error === 'object' && error !== null;
+  if (!(isObject && reportedPollFailures.has(error))) {
+    if (isObject) reportedPollFailures.add(error);
+    reportDriverError(ctx, hopId, classified);
+  }
+  return retryAfterMs;
+};
+
 const reportEmbeddedErrors = (
   ctx: LapRunCtx,
   hopId: string,
@@ -228,6 +414,37 @@ const reportEmbeddedErrors = (
 ): void => {
   for (const error of errors) {
     if (error !== undefined) reportDriverError(ctx, hopId, error);
+  }
+};
+
+// S53 M7: `tx_sent` / `tx_receipt` ndjson lines from a driver result the runner
+// already holds. Only called when `config.measurement` is present, so the SC5
+// denominator (`count(tx_sent)`) exists for campaign runs and a config without a
+// measurement block keeps byte-identical ndjson.
+const emitTxEvents = (
+  ctx: LapRunCtx,
+  hopId: string,
+  steps: readonly (readonly ['approve' | 'bridge' | 'claim', TxStepResult | null | undefined])[]
+): void => {
+  if (ctx.measurementEnabled !== true) return;
+  for (const [step, result] of steps) {
+    if (result === null || result === undefined || result.txHash === null) continue;
+    ctx.collector.txSent({
+      userId: ctx.userId,
+      mode: ctx.mode,
+      hopId,
+      step,
+      txHash: result.txHash
+    });
+    if (result.receipt !== null) {
+      ctx.collector.txReceipt({
+        userId: ctx.userId,
+        mode: ctx.mode,
+        hopId,
+        step,
+        status: result.receipt.status
+      });
+    }
   }
 };
 
@@ -384,6 +601,42 @@ const runLapToCompletion = async (params: { ctx: LapRunCtx; cell: Cell }): Promi
 
   const lastRowByHopId = new Map<string, ObservedRow>();
   const reportedHopIds = new Set<string>();
+  const measureByHopId = new Map<string, HopMeasureState>();
+  const measureState = (hopId: string): HopMeasureState => {
+    let st = measureByHopId.get(hopId);
+    if (st === undefined) {
+      st = { bridge: null, depositCount: null, claim: null, stages: null, probeAbort: null };
+      measureByHopId.set(hopId, st);
+    }
+    return st;
+  };
+
+  // S45 C2: background stage probe, headless only, started right after a
+  // successful bridge receipt. Stops at claim-proof available, hop terminal,
+  // or the hop deadline.
+  const startStageProbe = (hop: Hop, depositCount: number): void => {
+    const intervalMs = ctx.stageProbeIntervalMs;
+    const probing = driver as Partial<StageProbingDriver>;
+    if (intervalMs === null || mode !== 'headless') return;
+    if (typeof probing.probeClaimStages !== 'function') return;
+    const st = measureState(hop.id);
+    if (st.probeAbort !== null) return;
+    const abort = new AbortController();
+    st.probeAbort = abort;
+    void probing
+      .probeClaimStages({
+        sourceNetwork: hop.spec.fromNetworkId,
+        destinationNetwork: hop.spec.toNetworkId,
+        depositCount,
+        intervalMs,
+        deadlineAt: hop.startedAt + engine.timeouts.hopMs,
+        signal: abort.signal,
+        onProgress: (partial) => {
+          st.stages = partial;
+        }
+      })
+      .catch(() => undefined);
+  };
 
   const applyStep = (step: { lap: Lap; emissions: RingEmission[] }, preHop: Hop): void => {
     lap = step.lap;
@@ -400,6 +653,9 @@ const runLapToCompletion = async (params: { ctx: LapRunCtx; cell: Cell }): Promi
           outcome: h.outcome
         });
         reportedHopIds.add(h.id);
+        const st = measureState(h.id);
+        st.probeAbort?.abort();
+        collector.hopMeasurement(hopMeasurementRecord(ctx, h, lap.id, st));
       }
     }
   };
@@ -436,6 +692,22 @@ const runLapToCompletion = async (params: { ctx: LapRunCtx; cell: Cell }): Promi
             raced.value.bridge?.error,
             raced.value.bridgeEventDecodeError
           ]);
+          {
+            const st = measureState(hop.id);
+            st.approve = raced.value.approve;
+            st.bridge = raced.value.bridge;
+            st.depositCount = raced.value.depositCount;
+            emitTxEvents(ctx, hop.id, [
+              ['approve', raced.value.approve],
+              ['bridge', raced.value.bridge]
+            ]);
+            if (
+              raced.value.bridge?.receipt?.status === 'success' &&
+              raced.value.depositCount !== null
+            ) {
+              startStageProbe(hop, raced.value.depositCount);
+            }
+          }
           applyStep(engine.applyAll(lap, eventsFromBridge(raced.value), drainArg), hop);
         } catch (error) {
           if (error instanceof BrowserCrashError) {
@@ -490,6 +762,11 @@ const runLapToCompletion = async (params: { ctx: LapRunCtx; cell: Cell }): Promi
           const raced = await raceOrTimeout(driver.claim(hop.spec, row), deadlineAt, clock);
           if (raced.timedOut) break;
           reportEmbeddedErrors(ctx, hop.id, [raced.value.claim?.error]);
+          {
+            const st = measureState(hop.id);
+            if (raced.value.claim !== null || st.claim === null) st.claim = raced.value;
+            emitTxEvents(ctx, hop.id, [['claim', raced.value.claim]]);
+          }
           applyStep(engine.applyAll(lap, eventsFromClaim(raced.value), drainArg), hop);
         } catch (error) {
           if (error instanceof BrowserCrashError) {
@@ -552,9 +829,7 @@ const runLapToCompletion = async (params: { ctx: LapRunCtx; cell: Cell }): Promi
             // background poll would just retry on its next interval too) —
             // only the existing ring timeouts (checked every loop iteration
             // above) can end a hop that is stuck polling.
-            const classified = classifyError({ source: 'unknown', error });
-            reportDriverError(ctx, hop.id, classified);
-            await sleep(1000);
+            await sleep(reportActivityPollError(ctx, hop.id, error));
           }
         }
         break;
@@ -567,7 +842,193 @@ const runLapToCompletion = async (params: { ctx: LapRunCtx; cell: Cell }): Promi
     }
   }
 
+  for (const st of measureByHopId.values()) st.probeAbort?.abort();
   return lap;
+};
+
+/**
+ * ` pump=on(<settled>/<planned>,<spend>ETH)` for the status line. The plan is the deposits the
+ * run duration allows; the pump keeps firing during the drain (S58a L9), so once more have settled
+ * than planned the plan follows the count instead of reading e.g. `20/13`.
+ */
+export const pumpStatusSuffix = (
+  settledDeposits: number,
+  committedWei: bigint,
+  durationMinutes: number,
+  intervalSeconds: number
+): string => {
+  const planned = Math.max(
+    Math.floor((durationMinutes * 60) / intervalSeconds) + 1,
+    settledDeposits
+  );
+  return ` pump=on(${settledDeposits}/${planned},${formatEther(committedWei)}ETH)`;
+};
+
+
+// ---------------------------------------------------------------------------
+// S53: harness-side workers (heavy-load design §1.3/§1.4) — the L1 deposit pump
+// and the periodic samplers. All optional: with no `pump` block and no matching
+// `measurement` field nothing is created, nothing is scheduled and the run is
+// exactly what it was before.
+// ---------------------------------------------------------------------------
+
+interface HarnessWorkers {
+  /** Starts the L1 poller (baseline first), then the pump, then the periodic samplers. */
+  start(): Promise<void>;
+  /** Normal end: stops the pump (bounded receipt wait) and the samplers, then takes a last L1 poll and HTTP window. */
+  stop(): Promise<void>;
+  /** Failure path: stops everything without waiting for a receipt or taking final samples. */
+  abort(): Promise<void>;
+  /** ` pump=on(<settled>/<planned>,<spend>ETH)` for the status line, or '' when there is no pump. */
+  statusSuffix(): string;
+}
+
+const createHarnessWorkers = (params: {
+  config: LoadtestConfig;
+  wallets: readonly DerivedWallet[];
+  collector: Collector;
+  clock: Clock;
+  logger: (line: string) => void;
+  chainClientFactory: ChainClientFactory;
+}): HarnessWorkers => {
+  const { config, wallets, collector, clock, logger, chainClientFactory } = params;
+  const measurement = config.measurement;
+  type RunChain = LoadtestConfig['chains'][number];
+  const chainByKey = new Map(config.chains.map((chain) => [chain.key, chain]));
+  const l1Chain = config.chains.find((chain) => chain.networkId === 0);
+  const clientSets = new Map<string, ReturnType<ChainClientFactory>>();
+  const setFor = (chain: RunChain) => {
+    let set = clientSets.get(chain.key);
+    if (set === undefined) {
+      set = chainClientFactory(chain);
+      clientSets.set(chain.key, set);
+    }
+    return set;
+  };
+
+  let pump: L1Pump | null = null;
+  if (config.pump?.enabled === true) {
+    const pumpConfig = config.pump;
+    const chain = chainByKey.get(pumpConfig.chainKey);
+    if (chain === undefined) {
+      throw new Error(`pump.chainKey "${pumpConfig.chainKey}" is not a chain`);
+    }
+    const account = derivePumpAccount(config);
+    pump = createL1Pump({
+      chain,
+      sender: account.address,
+      pump: pumpConfig,
+      clients: pumpClientsFromViem(setFor(chain), account),
+      collector,
+      clock,
+      receiptTimeoutMs: config.timeouts.txReceiptMs,
+      logger
+    });
+  }
+
+  const tasks: ReturnType<typeof createPeriodicTask>[] = [];
+  let l1Poller: ReturnType<typeof createL1InfoTreePoller> | null = null;
+  let lastWindowAt = clock.now();
+  let finished = false;
+
+  const flushWindow = (): void => {
+    const now = clock.now();
+    collector.flushHttpWindow(now - lastWindowAt);
+    lastWindowAt = now;
+  };
+
+  return {
+    async start() {
+      lastWindowAt = clock.now();
+      if (measurement?.l1InfoTree !== undefined && l1Chain !== undefined) {
+        const { pollIntervalMs, gerManagerAddress } = measurement.l1InfoTree;
+        const poller = createL1InfoTreePoller({
+          bridgeAddress: l1Chain.bridgeAddress as Address,
+          ...(gerManagerAddress !== undefined
+            ? { gerManagerAddress: gerManagerAddress as Address }
+            : {}),
+          client: l1InfoTreeClientFromViem(setFor(l1Chain).public),
+          collector,
+          isPumpTx: (txHash) => pump?.isPumpTx(txHash) ?? false,
+          logger
+        });
+        l1Poller = poller;
+        // The baseline (GER manager, leaf count, head) is taken BEFORE the pump's
+        // first deposit, so that deposit's leaf cannot fall before the cursor.
+        await poller.pollOnce();
+        tasks.push(
+          createPeriodicTask({
+            intervalMs: pollIntervalMs,
+            run: poller.pollOnce,
+            label: 'l1 info tree poller',
+            logger
+          })
+        );
+      }
+      pump?.start();
+      if (measurement?.walletBalanceIntervalMs !== undefined) {
+        const ringChainKeys = [...new Set(config.ring.slice(0, -1))];
+        const sampler = createWalletBalanceSampler({
+          chains: config.chains.filter(
+            (chain) => ringChainKeys.includes(chain.key) && chain.networkId !== 0
+          ),
+          wallets: wallets.map((wallet) => ({ userId: wallet.userId, address: wallet.address })),
+          readerFor: (chainKey) => setFor(chainByKey.get(chainKey) as RunChain).public,
+          collector,
+          logger
+        });
+        tasks.push(
+          createPeriodicTask({
+            intervalMs: measurement.walletBalanceIntervalMs,
+            run: sampler.sampleOnce,
+            immediate: true,
+            label: 'wallet balance sampler',
+            logger
+          })
+        );
+      }
+      if (measurement?.httpWindowMs !== undefined) {
+        tasks.push(
+          createPeriodicTask({
+            intervalMs: measurement.httpWindowMs,
+            run: async () => flushWindow(),
+            label: 'http window',
+            logger
+          })
+        );
+      }
+      tasks.forEach((task) => task.start());
+    },
+
+    async stop() {
+      if (finished) return;
+      finished = true;
+      await pump?.stop();
+      await Promise.all(tasks.map((task) => task.stop()));
+      // A last poll (no overlap now: the periodic one has stopped) picks up the
+      // leaf of the final deposit, and the last partial window is flushed.
+      await l1Poller?.pollOnce();
+      if (measurement?.httpWindowMs !== undefined) flushWindow();
+    },
+
+    async abort() {
+      if (finished) return;
+      finished = true;
+      await pump?.stop({ waitForReceipt: false });
+      await Promise.all(tasks.map((task) => task.stop()));
+    },
+
+    statusSuffix() {
+      if (pump === null || config.pump === undefined) return '';
+      const { settledDeposits, committedWei } = pump.progress();
+      return pumpStatusSuffix(
+        settledDeposits,
+        committedWei,
+        config.load.durationMinutes,
+        config.pump.intervalSeconds
+      );
+    }
+  };
 };
 
 // ---------------------------------------------------------------------------
@@ -591,7 +1052,65 @@ interface UserRuntime {
 // test can assert on the error type without string-matching the message.
 export class MainnetConfirmationRequiredError extends Error {}
 
+/**
+ * S58a M6: a SIGINT listener for the WHOLE run. tsx's child preflight exits the process
+ * (code 130) the moment no SIGINT listener exists, so a listener held only around the main loop
+ * meant that `stop --drain` during the 1-5 min of preflight / harness start-up, or while the
+ * report is written after the loop, killed the run with no `results.json` and no report.
+ *
+ * - before `attach`: SIGINTs are counted, and `attach` returns how many so the caller can
+ *   replay them as drain requests the moment the main loop exists ("stop before start");
+ * - between `attach` and `detach`: the main loop's own handler runs;
+ * - after `detach`: the run is already stopping, a SIGINT is only logged.
+ */
+const createSigintGuard = (logger: (line: string) => void) => {
+  let early = 0;
+  let handler: (() => void) | null = null;
+  let loopOver = false;
+  const onSignal = (): void => {
+    if (handler !== null) {
+      handler();
+    } else if (loopOver) {
+      logger('SIGINT received while the run is already stopping (writing the report); ignored');
+    } else {
+      early += 1;
+      logger(
+        `SIGINT received before the main loop started (${early}); the run drains as soon as it starts`
+      );
+    }
+  };
+  process.on('SIGINT', onSignal);
+  return {
+    attach(loopHandler: () => void): number {
+      handler = loopHandler;
+      return early;
+    },
+    detach(): void {
+      handler = null;
+      loopOver = true;
+    },
+    dispose(): void {
+      process.off('SIGINT', onSignal);
+    }
+  };
+};
+type SigintGuard = ReturnType<typeof createSigintGuard>;
+
 export const runLoadTest = async (options: RunLoadTestOptions): Promise<RunLoadTestResult> => {
+  // R16 (loadtest/REVIEW.md): see `runLoadTestWith`.
+  const logger = options.logger ?? ((line: string) => process.stderr.write(`${line}\n`));
+  const guard = createSigintGuard(logger);
+  try {
+    return await runLoadTestWith(options, guard);
+  } finally {
+    guard.dispose();
+  }
+};
+
+const runLoadTestWith = async (
+  options: RunLoadTestOptions,
+  guard: SigintGuard
+): Promise<RunLoadTestResult> => {
   const { config, activeAssetIndices, configPath, repoRoot, outDir } = options;
   // R16 (loadtest/REVIEW.md): a silent no-op default meant a caller that
   // simply omitted `logger` (any programmatic embedder, not `cli.ts`'s own
@@ -610,6 +1129,15 @@ export const runLoadTest = async (options: RunLoadTestOptions): Promise<RunLoadT
         'This gates the load test itself (real bridge transactions from real funded wallets), not just `fund` — ' +
         'see loadtest/REVIEW.md R0.'
     );
+  }
+
+  // S53: the schema already refuses a pump wallet inside the user range, but
+  // `--users` is applied after parsing and can grow that range over the pump
+  // index — re-check with the FINAL user count, before any wallet is derived or
+  // funded, so the pump can never share a wallet with a user.
+  if (config.pump?.enabled === true) {
+    const overlap = pumpWalletOverlap(config.users, config.pump);
+    if (overlap !== null) throw new Error(`PUMP_WALLET_OVERLAPS_USERS: ${overlap}`);
   }
 
   const clock: Clock = systemClock;
@@ -650,6 +1178,14 @@ export const runLoadTest = async (options: RunLoadTestOptions): Promise<RunLoadT
   }
   logger('preflight: all checks passed.');
 
+  // SD5: gas-token chains are headless-only — the UI build has no WETH
+  // currency entry for them, so browser users would bridge the native token.
+  if (config.users.browser > 0 && Object.keys(preflight.gasTokenChains).length > 0) {
+    throw new Error(
+      `BROWSER_GAS_TOKEN_UNSUPPORTED: users.browser=${config.users.browser} but ring chain(s) ${Object.keys(preflight.gasTokenChains).join(', ')} are gas-token chains — run headless only (--browser 0)`
+    );
+  }
+
   fs.mkdirSync(outDir, { recursive: true });
 
   // --- UI build/serve (browser mode only, and only if not already served) ---
@@ -678,9 +1214,14 @@ export const runLoadTest = async (options: RunLoadTestOptions): Promise<RunLoadT
   // handle specifically so `globalThis.fetch` doesn't stay monkey-patched
   // (and the collector reachable through its closure) past this run —
   // captured and called in `disposeEverything` below.
-  const uninstallTimingFetch = installTimingFetch(collector, clock).uninstall;
+  // S53 F1: RPC traffic is named `rpc/<CHAIN_KEY>/<method>`, never by the URL's
+  // last path segment (which is the API key for a keyed provider URL).
+  const uninstallTimingFetch = installTimingFetch(collector, clock, {
+    resolveChainKey: buildChainKeyResolver(config.chains)
+  }).uninstall;
 
   let browserPool: BrowserPool | null = null;
+  let harness: HarnessWorkers | null = null;
   let fatalError: unknown = null;
   // Guards `browserPool.dispose()` / `uiHandle.close()` / `collector.close()`
   // against running twice — the success path calls it once before
@@ -698,6 +1239,10 @@ export const runLoadTest = async (options: RunLoadTestOptions): Promise<RunLoadT
     if (disposed) return;
     disposed = true;
     eventLoopDelay.disable();
+    // S53: a failure path never waits for a pump receipt or takes final samples.
+    await harness?.abort().catch((error: unknown) => {
+      logger(`run: harness workers abort failed: ${redactError(error)}`);
+    });
     if (browserPool) {
       await browserPool
         .dispose()
@@ -810,11 +1355,14 @@ export const runLoadTest = async (options: RunLoadTestOptions): Promise<RunLoadT
           assets: config.assets,
           aggkitProxyUrl: config.aggkitProxyUrl,
           bridgeGasOffset: config.gas.bridgeGasOffset,
+          claimGasOffset: config.gas.claimGasOffset,
           collector,
           clock,
           // R4 (loadtest/REVIEW.md): bounds viem's receipt wait to the same
           // budget `ring.ts` enforces, instead of viem's 180s default.
-          receiptTimeoutMs: config.timeouts.txReceiptMs
+          receiptTimeoutMs: config.timeouts.txReceiptMs,
+          // S53 M9: off unless `measurement.claimPreState` is set.
+          claimPreState: config.measurement?.claimPreState === true
         }) as UserDriver,
         cellsByAsset: activeAssetIndices.map(() => [] as Cell[]),
         lapCounterByAsset: activeAssetIndices.map(() => 0)
@@ -855,7 +1403,7 @@ export const runLoadTest = async (options: RunLoadTestOptions): Promise<RunLoadT
 
     const usersById = new Map(users.map((u) => [u.userId, u]));
     const hopSpecsByAssetSlot = activeAssetIndices.map((assetIndex) =>
-      buildHopSpecs(config, assetIndex)
+      buildHopSpecs(config, assetIndex, preflight.gasTokenChains)
     );
 
     collector.runStart({
@@ -864,6 +1412,17 @@ export const runLoadTest = async (options: RunLoadTestOptions): Promise<RunLoadT
       host: getHostInfo(),
       rampUpSeconds: config.load.rampUpSeconds
     });
+
+    // S53: pump + samplers (a no-op without a pump block / matching measurement fields).
+    harness = createHarnessWorkers({
+      config,
+      wallets,
+      collector,
+      clock,
+      logger,
+      chainClientFactory: options.chainClientFactory ?? defaultChainClientFactory
+    });
+    await harness.start();
 
     const engine = createRingEngine({ clock, timeouts: config.timeouts });
     const scheduler = createScheduler({
@@ -936,7 +1495,10 @@ export const runLoadTest = async (options: RunLoadTestOptions): Promise<RunLoadT
         clock,
         collector,
         getDrainDeadline: () => scheduler.drainDeadline(),
-        logger
+        logger,
+        assets: config.assets,
+        stageProbeIntervalMs: config.measurement?.stageProbeIntervalMs ?? null,
+        measurementEnabled: config.measurement !== undefined
       };
 
       const task = runLapToCompletion({ ctx, cell })
@@ -1017,32 +1579,42 @@ export const runLoadTest = async (options: RunLoadTestOptions): Promise<RunLoadT
     const printStatus = (): void => {
       const now = clock.now();
       const elapsedSec = Math.max(1, Math.round((now - runStartedAtMs) / 1000));
-      const snap = collector.snapshot();
+      // S53 F6: O(1) running counters. `collector.snapshot()` re-sorts every HTTP
+      // and phase sample array — at stage-3 scale that is hundreds of thousands
+      // of samples every 5 s, which blocked the event loop the tool is measuring.
+      const live = collector.liveCounters();
       const activeUsers = users.filter((u) =>
         u.cellsByAsset.some((cells) => cells.some((c) => c.lap.state === 'LAP_RUNNING'))
       ).length;
-      const inflightHops = users.reduce(
-        (sum, u) =>
-          sum +
-          u.cellsByAsset.reduce(
-            (s, cells) => s + cells.filter((c) => c.lap.state === 'LAP_RUNNING').length,
-            0
-          ),
-        0
-      );
+      let inflightHops = 0;
+      // S53 M6: laps currently in flight per route (the hop each one is on).
+      const inflightByRoute = new Map<string, number>();
+      for (const u of users) {
+        for (const cells of u.cellsByAsset) {
+          for (const cell of cells) {
+            if (cell.lap.state !== 'LAP_RUNNING') continue;
+            inflightHops += 1;
+            const route = cell.lap.hops[cell.lap.currentHopIndex]?.spec.hopRoute;
+            if (route !== undefined) {
+              inflightByRoute.set(route, (inflightByRoute.get(route) ?? 0) + 1);
+            }
+          }
+        }
+      }
       // S11 retry defect (1): the live status line's `rate=` must be
       // comparable to the requested `--rate` (lap-starts/user/min), so it
       // is driven by `lapStartsSubmitted` (one per lap start), never the
       // hop-level `hopBridgesSubmitted` attempt #1 used here (which reads
       // `ring.length - 1` times too high for any multi-hop ring).
-      const lapStartsSubmitted = snap.scheduler.lapStartsSubmitted;
+      const lapStartsSubmitted = live.lapStartsSubmitted;
       const ratePerMin = lapStartsSubmitted / (elapsedSec / 60);
-      const errorsTotal = Object.values(snap.errors.byClass).reduce(
-        (a: number, b) => a + (b ?? 0),
-        0
-      );
+      const routeOrder = config.ring.slice(0, -1).map((key, i) => `${key}->${config.ring[i + 1]}`);
+      const byRoute = [...inflightByRoute.entries()]
+        .sort(([a], [b]) => routeOrder.indexOf(a) - routeOrder.indexOf(b))
+        .map(([route, count]) => `${route}:${count}`)
+        .join(',');
       logger(
-        `[status] t=${elapsedSec}s phase=${scheduler.phase()} usersActive=${activeUsers}/${users.length} lapStartsSubmitted=${lapStartsSubmitted} rate=${ratePerMin.toFixed(2)}/min inflightHops=${inflightHops} skippedBackpressure=${snap.scheduler.skippedBackpressure} errors=${errorsTotal}`
+        `[status] t=${elapsedSec}s phase=${scheduler.phase()} usersActive=${activeUsers}/${users.length} lapStartsSubmitted=${lapStartsSubmitted} rate=${ratePerMin.toFixed(2)}/min inflightHops=${inflightHops} skippedBackpressure=${live.skippedBackpressure} errors=${live.errorsTotal} inflightByRoute=${byRoute === '' ? '-' : byRoute}${harness?.statusSuffix() ?? ''}`
       );
     };
 
@@ -1063,7 +1635,10 @@ export const runLoadTest = async (options: RunLoadTestOptions): Promise<RunLoadT
       if (sigintCount === 1) lapsInFlightAtDrainStart = inflightAtSigint.length;
       scheduler.beginDrain('sigint', inflightAtSigint);
     };
-    process.on('SIGINT', onSigint);
+    // S58a M6: the guard has held the process-wide listener since the run began; hand it the
+    // loop's handler, and replay any SIGINT that arrived during preflight / start-up.
+    const earlySigints = guard.attach(onSigint);
+    for (let i = 0; i < earlySigints; i += 1) onSigint();
 
     const PUMP_INTERVAL_MS = 1000;
     const STATUS_INTERVAL_MS = 5000;
@@ -1146,8 +1721,13 @@ export const runLoadTest = async (options: RunLoadTestOptions): Promise<RunLoadT
         scheduler.beginDrain('fatal', inflightAtFatal);
       }
     } finally {
-      process.off('SIGINT', onSigint);
+      guard.detach();
     }
+
+    // S53: the pump and samplers stop when the main loop exits (end of drain, or
+    // abort), and a pending pump receipt is awaited (bounded by `txReceiptMs`)
+    // BEFORE `runEnd`/`writeReportFiles`, so the report holds the final accounting.
+    await harness.stop();
 
     await Promise.allSettled(activeLapTasks);
     sampleResources();
@@ -1175,7 +1755,12 @@ export const runLoadTest = async (options: RunLoadTestOptions): Promise<RunLoadT
         }
       })
     );
-    const written = writeReportFiles({ dir: outDir, snapshot: collector.snapshot(), config });
+    const written = writeReportFiles({
+      dir: outDir,
+      snapshot: collector.snapshot(),
+      config,
+      gasTokenChains: preflight.gasTokenChains
+    });
 
     await disposeEverything();
 

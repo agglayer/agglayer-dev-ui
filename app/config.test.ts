@@ -9,6 +9,7 @@ import {
   isAppConfigReady,
   resetAppConfig
 } from '@/app/config';
+import ciDevnetConfigJson from '@/config/config.ci.devnet.json';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Same fixture shape as config/configLoader.test.mjs / configValidator.test.mjs
@@ -96,6 +97,16 @@ describe('buildAppConfig — loader success (A-5 item 1)', () => {
       TERMS_OF_USE: 'https://terms.example',
       CONTACT_SUPPORT: 'https://support.example'
     });
+  });
+});
+
+describe('buildAppConfig — shipped CI devnet config', () => {
+  it('resolves every autoclaim route as not expected (the CI devnet has no autoclaimer)', () => {
+    const { autoclaim } = buildAppConfig(ciDevnetConfigJson as unknown as JsonConfig);
+
+    expect(autoclaim.l1_to_l2.expectedAutoclaim).toBe(false);
+    expect(autoclaim.l2_to_l2.expectedAutoclaim).toBe(false);
+    expect(autoclaim.l2_to_l1.expectedAutoclaim).toBe(false);
   });
 });
 

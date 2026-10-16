@@ -1,0 +1,564 @@
+{
+  "schemaVersion": 1,
+  "run": {
+    "startedAt": "2026-10-14T12:00:00.000Z",
+    "endedAt": "2026-10-14T12:00:27.000Z",
+    "durationMs": 27000,
+    "aborted": false,
+    "abortCause": null,
+    "lapsInFlightAtStop": 0,
+    "toolVersion": "golden-tool",
+    "sdkVersion": "golden-sdk",
+    "host": {
+      "cores": 4,
+      "totalMemMb": 8192,
+      "platform": "linux"
+    }
+  },
+  "config": {
+    "env": "devnet",
+    "uiBaseUrl": "http://127.0.0.1:3100",
+    "aggkitProxyUrl": "http://127.0.0.1:8555/aggkitapi",
+    "chains": [
+      {
+        "key": "L1",
+        "chainId": 271828,
+        "networkId": 0,
+        "rpcUrl": "http://127.0.0.1:8555/<redacted>",
+        "bridgeAddress": "0xC8cbEBf950B9Df44d987c8619f092beA980fF038",
+        "explorerUrl": "",
+        "nativeSymbol": "ETH"
+      },
+      {
+        "key": "L2A",
+        "chainId": 20201,
+        "networkId": 1,
+        "rpcUrl": "http://127.0.0.1:8555/<redacted>",
+        "bridgeAddress": "0xC8cbEBf950B9Df44d987c8619f092beA980fF038",
+        "explorerUrl": "",
+        "nativeSymbol": "ETH"
+      },
+      {
+        "key": "L2B",
+        "chainId": 20202,
+        "networkId": 2,
+        "rpcUrl": "http://127.0.0.1:8555/<redacted>",
+        "bridgeAddress": "0xC8cbEBf950B9Df44d987c8619f092beA980fF038",
+        "explorerUrl": "",
+        "nativeSymbol": "ETH"
+      }
+    ],
+    "ring": [
+      "L1",
+      "L2A",
+      "L2B",
+      "L1"
+    ],
+    "autoclaim": {
+      "L1->L2A": {
+        "expected": false
+      },
+      "L2A->L2B": {
+        "expected": false
+      },
+      "L2B->L1": {
+        "expected": false
+      }
+    },
+    "assets": [
+      {
+        "kind": "eth",
+        "amount": "0.001",
+        "decimals": 18
+      },
+      {
+        "kind": "erc20",
+        "address": "0xe293A6b8F558422813499bb5C89B60adD8c54636",
+        "originNetworkId": 0,
+        "amount": "0.01",
+        "decimals": 18
+      }
+    ],
+    "users": {
+      "total": 3,
+      "browser": 0,
+      "wallets": {
+        "mnemonicRef": {
+          "ref": "env:LOADTEST_TEST_MNEMONIC"
+        },
+        "startIndex": 0
+      },
+      "funder": {
+        "privateKeyRef": {
+          "ref": "env:LOADTEST_TEST_FUNDER_KEY"
+        },
+        "gasPerChain": {
+          "L1": "0.05",
+          "L2A": "0.05",
+          "L2B": "0.05"
+        },
+        "maxTotalSpend": {
+          "L1": "500",
+          "L2A": "500",
+          "L2B": "500"
+        }
+      },
+      "devnetFunding": "anvil_setBalance"
+    },
+    "load": {
+      "bridgesPerMinutePerUser": 2,
+      "durationMinutes": 30,
+      "rampUpSeconds": 60,
+      "maxInflightLapsPerUser": 3
+    },
+    "browser": {
+      "contextsPerBrowser": 8,
+      "headless": true,
+      "trace": false,
+      "recycleContextAfterLaps": 10
+    },
+    "timeouts": {
+      "txReceiptMs": 60000,
+      "appearsInActivityMs": 60000,
+      "readyToClaimMs": 900000,
+      "claimedMs": 900000,
+      "hopMs": 1200000,
+      "lapMs": 3600000,
+      "pageLoadMs": 30000,
+      "walletConnectMs": 15000
+    },
+    "gas": {
+      "bridgeGasOffset": 300000,
+      "claimGasOffset": 60000
+    },
+    "output": {
+      "dir": "loadtest-results/golden",
+      "activityLog": true
+    }
+  },
+  "requested": {
+    "users": 3,
+    "browser": 0,
+    "ratePerUserPerMin": 2,
+    "minutes": 30
+  },
+  "achieved": {
+    "ticksOffered": 4,
+    "lapStartsSubmitted": 3,
+    "skippedBackpressure": 1,
+    "ticksLostToRamp": 0,
+    "ticksExpected": 4,
+    "hopBridgesSubmitted": 3,
+    "steadyStateRatePerUserPerMin": 0,
+    "steadyStateRatePerUserPerModeMin": {
+      "browser": null,
+      "headless": null
+    }
+  },
+  "hops": {
+    "byOutcome": {
+      "hop_completed_manual": 2,
+      "timeout_ready_to_claim": 1
+    },
+    "byRoute": {
+      "L1->L2A": {
+        "byOutcome": {
+          "hop_completed_manual": 2,
+          "timeout_ready_to_claim": 1
+        },
+        "byOutcomeByMode": {
+          "browser": {},
+          "headless": {
+            "hop_completed_manual": 2,
+            "timeout_ready_to_claim": 1
+          }
+        },
+        "phases": {
+          "bridge_submit": {
+            "browser": null,
+            "headless": {
+              "n": 3,
+              "p50": 410,
+              "p90": 420,
+              "p99": 420,
+              "max": 420
+            }
+          },
+          "ready_to_claim": {
+            "browser": null,
+            "headless": {
+              "n": 3,
+              "p50": 31000,
+              "p90": 32000,
+              "p99": 32000,
+              "max": 32000
+            }
+          },
+          "claim_receipt": {
+            "browser": null,
+            "headless": {
+              "n": 2,
+              "p50": 5000,
+              "p90": 5000,
+              "p99": 5000,
+              "max": 5000
+            }
+          }
+        }
+      }
+    },
+    "byRouteMode": {
+      "L1->L2A": {
+        "browser": {
+          "attempted": 0,
+          "completed": 0,
+          "completionRate": null
+        },
+        "headless": {
+          "attempted": 3,
+          "completed": 2,
+          "completionRate": 0.6666666666666666
+        }
+      }
+    }
+  },
+  "laps": {
+    "byOutcome": {
+      "LAP_DONE": 2,
+      "LAP_FAILED": 1,
+      "LAP_ABORTED": 0
+    },
+    "byMode": {
+      "browser": {
+        "attempted": 0,
+        "completed": 0,
+        "completionRate": null
+      },
+      "headless": {
+        "attempted": 3,
+        "completed": 2,
+        "completionRate": 0.6666666666666666
+      }
+    }
+  },
+  "phases": {
+    "bridge_submit": {
+      "browser": null,
+      "headless": {
+        "n": 3,
+        "p50": 410,
+        "p90": 420,
+        "p99": 420,
+        "max": 420
+      }
+    },
+    "ready_to_claim": {
+      "browser": null,
+      "headless": {
+        "n": 3,
+        "p50": 31000,
+        "p90": 32000,
+        "p99": 32000,
+        "max": 32000
+      }
+    },
+    "claim_receipt": {
+      "browser": null,
+      "headless": {
+        "n": 2,
+        "p50": 5000,
+        "p90": 5000,
+        "p99": 5000,
+        "max": 5000
+      }
+    }
+  },
+  "phaseCensoredCounts": {
+    "claim_receipt": 1
+  },
+  "uncontextedRequests": 0,
+  "http": {
+    "tracker/activity": {
+      "browser": {
+        "ui": null,
+        "harness": null
+      },
+      "headless": {
+        "ui": {
+          "n": 3,
+          "p50": 21,
+          "p90": 22,
+          "p99": 22,
+          "max": 22,
+          "byStatus": {
+            "200": 2,
+            "503": 1
+          },
+          "retries": 0
+        },
+        "harness": null
+      }
+    },
+    "rpc/l1rpc/eth_call": {
+      "browser": {
+        "ui": null,
+        "harness": null
+      },
+      "headless": {
+        "ui": {
+          "n": 3,
+          "p50": 11,
+          "p90": 11,
+          "p99": 11,
+          "max": 11,
+          "byStatus": {
+            "200": 3
+          },
+          "retries": 0
+        },
+        "harness": null
+      }
+    },
+    "bridge/claim-proof[1]": {
+      "browser": {
+        "ui": null,
+        "harness": null
+      },
+      "headless": {
+        "ui": null,
+        "harness": {
+          "n": 3,
+          "p50": 90,
+          "p90": 90,
+          "p99": 90,
+          "max": 90,
+          "byStatus": {
+            "200": 3
+          },
+          "retries": 1
+        }
+      }
+    }
+  },
+  "gates": {
+    "claim-proof": {
+      "hopsEntered": 3,
+      "totalMs": 93003,
+      "p50": 31001,
+      "p90": 31002,
+      "p99": 31002,
+      "blockedTicks": 1,
+      "timedOutVisits": 1
+    }
+  },
+  "errors": {
+    "byClass": {
+      "internal": 1,
+      "proxy_5xx": 1
+    },
+    "top": [
+      {
+        "class": "internal",
+        "count": 1,
+        "firstSeen": "2026-10-14T12:00:21.000Z",
+        "lastSeen": "2026-10-14T12:00:21.000Z",
+        "sample": "golden internal error"
+      },
+      {
+        "class": "proxy_5xx",
+        "count": 1,
+        "firstSeen": "2026-10-14T12:00:21.000Z",
+        "lastSeen": "2026-10-14T12:00:21.000Z",
+        "sample": "HTTP 503",
+        "endpointClass": "tracker/activity"
+      }
+    ],
+    "suppressed": {
+      "notReady": 1,
+      "benignExternalAsset": 0
+    }
+  },
+  "policy": {
+    "autoclaimOverdue": 0,
+    "unexpectedAutoclaim": 0,
+    "claimRaceLost": 3
+  },
+  "resources": {
+    "samples": [
+      {
+        "toolRssMb": 210.5,
+        "toolCpuPct": 12.25,
+        "browserProcesses": [],
+        "eventLoopDelayP99Ms": 4.5,
+        "ts": "2026-10-14T12:00:26.000Z"
+      }
+    ]
+  },
+  "measurements": {
+    "probeIntervalMs": null,
+    "hops": [
+      {
+        "hopId": "u0:a0:l0:h0",
+        "lapId": "u0:a0:l0",
+        "userId": "u0",
+        "mode": "headless",
+        "hopRoute": "L1->L2A",
+        "fromNetworkId": 0,
+        "toNetworkId": 1,
+        "assetKind": "eth",
+        "assetIndex": 0,
+        "outcome": "hop_completed_manual",
+        "depositCount": 0,
+        "bridge": {
+          "txHash": "0xabababababababababababababababababababababababababababababababab",
+          "blockNumber": "100",
+          "minedObservedAt": 1791979207000,
+          "gas": {
+            "blockNumber": "100",
+            "gasUsed": "90000",
+            "effectiveGasPrice": "1000000"
+          }
+        },
+        "stages": null,
+        "readyObservedAt": 1791979237000,
+        "claim": {
+          "txHash": "0xabababababababababababababababababababababababababababababababab",
+          "blockNumber": "120",
+          "sentAt": 1791979238000,
+          "minedObservedAt": 1791979240000,
+          "gas": {
+            "blockNumber": "120",
+            "gasUsed": "150000",
+            "effectiveGasPrice": "1000251"
+          },
+          "claimKind": "eth"
+        }
+      },
+      {
+        "hopId": "u0:a0:l1:h0",
+        "lapId": "u0:a0:l1",
+        "userId": "u0",
+        "mode": "headless",
+        "hopRoute": "L1->L2A",
+        "fromNetworkId": 0,
+        "toNetworkId": 1,
+        "assetKind": "eth",
+        "assetIndex": 0,
+        "outcome": "hop_completed_manual",
+        "depositCount": 1,
+        "bridge": {
+          "txHash": "0xabababababababababababababababababababababababababababababababab",
+          "blockNumber": "100",
+          "minedObservedAt": 1791979214000,
+          "gas": {
+            "blockNumber": "100",
+            "gasUsed": "90000",
+            "effectiveGasPrice": "1000000"
+          }
+        },
+        "stages": null,
+        "readyObservedAt": 1791979244000,
+        "claim": {
+          "txHash": "0xabababababababababababababababababababababababababababababababab",
+          "blockNumber": "120",
+          "sentAt": 1791979245000,
+          "minedObservedAt": 1791979247000,
+          "gas": {
+            "blockNumber": "120",
+            "gasUsed": "150001",
+            "effectiveGasPrice": "1000251"
+          },
+          "claimKind": "eth"
+        }
+      },
+      {
+        "hopId": "u0:a0:l2:h0",
+        "lapId": "u0:a0:l2",
+        "userId": "u0",
+        "mode": "headless",
+        "hopRoute": "L1->L2A",
+        "fromNetworkId": 0,
+        "toNetworkId": 1,
+        "assetKind": "eth",
+        "assetIndex": 0,
+        "outcome": "timeout_ready_to_claim",
+        "depositCount": 2,
+        "bridge": {
+          "txHash": "0xabababababababababababababababababababababababababababababababab",
+          "blockNumber": "100",
+          "minedObservedAt": 1791979221000,
+          "gas": {
+            "blockNumber": "100",
+            "gasUsed": "90000",
+            "effectiveGasPrice": "1000000"
+          }
+        },
+        "stages": null,
+        "readyObservedAt": 1791979251000,
+        "claim": {
+          "txHash": "0xabababababababababababababababababababababababababababababababab",
+          "blockNumber": "120",
+          "sentAt": 1791979252000,
+          "minedObservedAt": 1791979254000,
+          "gas": {
+            "blockNumber": "120",
+            "gasUsed": "150002",
+            "effectiveGasPrice": "1000251"
+          },
+          "claimKind": "eth"
+        }
+      }
+    ],
+    "claimGas": [
+      {
+        "toNetworkId": 1,
+        "claimKind": "eth",
+        "n": 2,
+        "gasUsed": {
+          "n": 2,
+          "min": "150000",
+          "median": "150000",
+          "max": "150001"
+        },
+        "effectiveGasPrice": {
+          "n": 2,
+          "min": "1000251",
+          "median": "1000251",
+          "max": "1000251"
+        },
+        "l1Fee": null,
+        "totalFeeWei": {
+          "n": 2,
+          "min": "150037650000",
+          "median": "150038150125",
+          "max": "150038650251"
+        }
+      }
+    ],
+    "stageLatency": [
+      {
+        "route": "L1->L2A",
+        "hops": 2,
+        "deltas": {
+          "l1InfoTreeIndex": null,
+          "injectedLeaf": null,
+          "claimProof": null,
+          "trackerLag": null,
+          "claimTx": {
+            "n": 2,
+            "min": 2000,
+            "median": 2000,
+            "max": 2000
+          },
+          "endToEnd": {
+            "n": 2,
+            "min": 33000,
+            "median": 33000,
+            "max": 33000
+          }
+        }
+      }
+    ],
+    "excludedHops": 1
+  }
+}

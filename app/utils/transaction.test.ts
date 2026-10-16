@@ -6,7 +6,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { TransactionParams } from '@agglayer/sdk';
 
-import { BRIDGE_GAS_BUFFER, buildClaimAssetParams, mapTransactionRequest } from './transaction';
+import {
+  BRIDGE_GAS_BUFFER,
+  buildClaimAssetParams,
+  CLAIM_GAS_BUFFER,
+  mapTransactionRequest
+} from './transaction';
 
 const baseTransactionParams: TransactionParams = {
   to: '0x1111111111111111111111111111111111111111',
@@ -61,6 +66,16 @@ describe('mapTransactionRequest — gas forwarding (C4), nonce withheld, gas buf
 
   it('BRIDGE_GAS_BUFFER matches the headless worker gas.bridgeGasOffset default, so both modes now send the same headroom', () => {
     expect(BRIDGE_GAS_BUFFER).toBe(BigInt(300_000));
+  });
+
+  it('CLAIM_GAS_BUFFER lifts the 202,542 estimate that reverted above the worst gas a claim used (245,542)', () => {
+    const params: TransactionParams = { ...baseTransactionParams, gas: '202542' };
+
+    const request = mapTransactionRequest(params, { gasBuffer: CLAIM_GAS_BUFFER });
+
+    expect(CLAIM_GAS_BUFFER).toBe(BigInt(60_000));
+    expect(request.gas).toBe(BigInt(262542));
+    expect(request.gas).toBeGreaterThan(BigInt(245542));
   });
 
   it('never forwards nonce, even when the SDK supplies one', () => {

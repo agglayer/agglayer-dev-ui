@@ -1,0 +1,85 @@
+# Builds and publishes ghcr.io/agglayer/agglayer-dev-ui-loadtest -- the
+# runnable image for loadtest/ (Dockerfile.loadtest), headless workers only.
+#
+# workflow_dispatch only, deliberately: unlike docker-publish.yaml (which
+# also fires on `release: published`), this image has no release/semver
+# lifecycle of its own yet, so there is no push/PR trigger here either --
+# publishing is a separate, explicit human action, run against whichever
+# branch/tag is selected in the "Run workflow" dropdown (or `--ref` on
+# `gh workflow run`).
+#
+# Mirrors docker-publish.yaml's auth/login/permissions pattern: GHCR login
+# via docker/login-action with the workflow's own GITHUB_TOKEN (packages:
+# write), QEMU + Buildx for a multi-arch (amd64/arm64) push.
+name: Build and Publish Loadtest Image
+
+on:
+  workflow_dispatch: {}
+
+concurrency:
+  # Not `cancel-in-progress`, same rationale as docker-publish.yaml: a
+  # cancelled mid-push could leave a partially written manifest/tag in
+  # GHCR. Overlapping dispatches queue and run serially instead.
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY_IMAGE: ghcr.io/agglayer/agglayer-dev-ui-loadtest
+
+jobs:
+  build-and-publish:
+    name: Build, publish, and verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout agglayer-dev-ui
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Resolve build metadata
+        id: meta
+        run: |
+          set -euo pipefail
+          echo "built_sha=$(git rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        # Enables an emulated linux/arm64 build on this amd64 ubuntu-latest
+        # runner, same as docker-publish.yaml -- see that workflow's own
+        # comment for why ubuntu-latest + QEMU is used here instead of an
+        # org arm runner pool.
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.loadtest
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.REGISTRY_IMAGE }}:${{ steps.meta.outputs.built_sha }}
+
+      - name: Verify published manifest
+        run: docker buildx imagetools inspect "${{ env.REGISTRY_IMAGE }}@${{ steps.build.outputs.digest }}"
+
+      - name: Smoke test pushed image
+        run: |
+          set -euo pipefail
+          IMAGE_REF="${{ env.REGISTRY_IMAGE }}@${{ steps.build.outputs.digest }}"
+          docker run --rm "$IMAGE_REF" pnpm loadtest

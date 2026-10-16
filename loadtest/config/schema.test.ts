@@ -14,6 +14,7 @@ import { deriveDevnetConfig } from './deriveDevnet';
 import {
   checkOperationalConstraints,
   parseLoadtestConfig,
+  pumpWalletOverlap,
   serializeLoadtestConfig
 } from './schema';
 
@@ -62,6 +63,250 @@ describe('loadtestConfigSchema — happy path examples', () => {
     expect(config.chains).toHaveLength(2);
     expect(config.ring).toStrictEqual(['SEPOLIA', 'BOKUTO', 'SEPOLIA']);
     expect(config.chains.find((chain) => chain.key === 'BOKUTO')?.networkId).toBe(37);
+  });
+});
+
+describe('loadtestConfigSchema — measurement block (S45 C2)', () => {
+  it('is absent by default: no `measurement` key appears in the parsed config (probe off)', () => {
+    const config = parseLoadtestConfig(validDevnetDoc());
+    expect(config.measurement).toBeUndefined();
+    expect('measurement' in config).toBe(false);
+  });
+
+  it('accepts measurement.stageProbeIntervalMs >= 1000 and round-trips', () => {
+    const doc = { ...validDevnetDoc(), measurement: { stageProbeIntervalMs: 5000 } };
+    const first = parseLoadtestConfig(doc);
+    expect(first.measurement).toStrictEqual({ stageProbeIntervalMs: 5000 });
+    expect(parseLoadtestConfig(JSON.parse(serializeLoadtestConfig(first)))).toStrictEqual(first);
+  });
+
+  it('rejects an interval below 1000 ms, a non-integer, a missing field and unknown keys', () => {
+    const withMeasurement = (measurement: unknown) => ({ ...validDevnetDoc(), measurement });
+    expect(() => parseLoadtestConfig(withMeasurement({ stageProbeIntervalMs: 999 }))).toThrow();
+    expect(() => parseLoadtestConfig(withMeasurement({ stageProbeIntervalMs: 1500.5 }))).toThrow();
+    expect(() => parseLoadtestConfig(withMeasurement({}))).toThrow();
+    expect(() =>
+      parseLoadtestConfig(withMeasurement({ stageProbeIntervalMs: 5000, extra: true }))
+    ).toThrow();
+  });
+});
+
+describe('loadtestConfigSchema — S53 measurement additions (heavy-load design §1.4)', () => {
+  const withMeasurement = (measurement: unknown) => ({ ...validDevnetDoc(), measurement });
+  const GER_MANAGER = '0x00000000000000000000000000000000000000a1';
+
+  it('accepts a block carrying only the new samplers (stageProbeIntervalMs is optional) and round-trips', () => {
+    const doc = withMeasurement({
+      walletBalanceIntervalMs: 300_000,
+      l1InfoTree: { pollIntervalMs: 60_000, gerManagerAddress: GER_MANAGER },
+      httpWindowMs: 60_000,
+      claimPreState: true
+    });
+    const first = parseLoadtestConfig(doc);
+    expect(first.measurement).toStrictEqual({
+      walletBalanceIntervalMs: 300_000,
+      l1InfoTree: { pollIntervalMs: 60_000, gerManagerAddress: GER_MANAGER },
+      httpWindowMs: 60_000,
+      claimPreState: true
+    });
+    expect(first.measurement?.stageProbeIntervalMs).toBeUndefined();
+    expect(parseLoadtestConfig(JSON.parse(serializeLoadtestConfig(first)))).toStrictEqual(first);
+  });
+
+  it('accepts l1InfoTree without a gerManagerAddress (it is discovered at run time)', () => {
+    const first = parseLoadtestConfig(withMeasurement({ l1InfoTree: { pollIntervalMs: 15_000 } }));
+    expect(first.measurement?.l1InfoTree).toStrictEqual({ pollIntervalMs: 15_000 });
+  });
+
+  it('enforces the floors: walletBalanceIntervalMs >= 60000, l1InfoTree.pollIntervalMs >= 15000, httpWindowMs >= 10000', () => {
+    expect(() =>
+      parseLoadtestConfig(withMeasurement({ walletBalanceIntervalMs: 59_999 }))
+    ).toThrow();
+    expect(() =>
+      parseLoadtestConfig(withMeasurement({ l1InfoTree: { pollIntervalMs: 14_999 } }))
+    ).toThrow();
+    expect(() => parseLoadtestConfig(withMeasurement({ httpWindowMs: 9_999 }))).toThrow();
+    expect(() =>
+      parseLoadtestConfig(withMeasurement({ walletBalanceIntervalMs: 60_000.5 }))
+    ).toThrow();
+  });
+
+  it('is strict: unknown keys (also inside l1InfoTree), a zero or malformed GER address and a non-boolean claimPreState are rejected', () => {
+    expect(() =>
+      parseLoadtestConfig(withMeasurement({ httpWindowMs: 10_000, extra: 1 }))
+    ).toThrow();
+    expect(() =>
+      parseLoadtestConfig(withMeasurement({ l1InfoTree: { pollIntervalMs: 15_000, extra: 1 } }))
+    ).toThrow();
+    expect(() =>
+      parseLoadtestConfig(
+        withMeasurement({
+          l1InfoTree: {
+            pollIntervalMs: 15_000,
+            gerManagerAddress: '0x0000000000000000000000000000000000000000'
+          }
+        })
+      )
+    ).toThrow();
+    expect(() =>
+      parseLoadtestConfig(
+        withMeasurement({ l1InfoTree: { pollIntervalMs: 15_000, gerManagerAddress: '0x1234' } })
+      )
+    ).toThrow();
+    expect(() => parseLoadtestConfig(withMeasurement({ claimPreState: 'yes' }))).toThrow();
+  });
+
+  it('still rejects an empty measurement block (MEASUREMENT_EMPTY)', () => {
+    expect(() => parseLoadtestConfig(withMeasurement({}))).toThrow(/MEASUREMENT_EMPTY/);
+  });
+});
+
+describe('loadtestConfigSchema — pump block (S53, heavy-load design §1.3)', () => {
+  // The fixture devnet ring is L1 (networkId 0) -> L2A (1) -> L2B (2); its
+  // wallets are `{mnemonicRef, startIndex: 0}` with a handful of users.
+  const goodPump = (): Record<string, unknown> => ({
+    enabled: true,
+    chainKey: 'L1',
+    destinationNetworkId: 1,
+    walletIndex: 999,
+    amount: '0',
+    intervalSeconds: 600,
+    maxTotalSpend: '0.07',
+    maxGasPriceGwei: 5
+  });
+  const withPump = (pump: unknown, mutate?: (doc: Record<string, unknown>) => void) => {
+    const doc = { ...validDevnetDoc(), pump };
+    mutate?.(doc);
+    return doc;
+  };
+
+  it('is absent by default: no `pump` key in the parsed config', () => {
+    const config = parseLoadtestConfig(validDevnetDoc());
+    expect(config.pump).toBeUndefined();
+    expect('pump' in config).toBe(false);
+  });
+
+  it('accepts a valid block, defaults amount to "0" (decision D2) and round-trips', () => {
+    const { amount: _omit, ...withoutAmount } = goodPump();
+    const first = parseLoadtestConfig(withPump(withoutAmount));
+    expect(first.pump).toStrictEqual({ ...goodPump(), amount: '0' });
+    expect(parseLoadtestConfig(JSON.parse(serializeLoadtestConfig(first)))).toStrictEqual(first);
+    expect(parseLoadtestConfig(withPump({ ...goodPump(), amount: '0.000001' })).pump?.amount).toBe(
+      '0.000001'
+    );
+  });
+
+  it('is strict: an unknown key, a missing required field or a wrong type is rejected', () => {
+    expect(() => parseLoadtestConfig(withPump({ ...goodPump(), extra: 1 }))).toThrow();
+    for (const key of [
+      'enabled',
+      'chainKey',
+      'destinationNetworkId',
+      'walletIndex',
+      'intervalSeconds',
+      'maxTotalSpend',
+      'maxGasPriceGwei'
+    ]) {
+      const { [key]: _removed, ...rest } = goodPump();
+      expect(() => parseLoadtestConfig(withPump(rest)), `missing ${key}`).toThrow();
+    }
+    expect(() => parseLoadtestConfig(withPump({ ...goodPump(), maxGasPriceGwei: 0 }))).toThrow();
+    expect(() => parseLoadtestConfig(withPump({ ...goodPump(), maxTotalSpend: '0' }))).toThrow();
+    expect(() => parseLoadtestConfig(withPump({ ...goodPump(), amount: '-1' }))).toThrow();
+    expect(() => parseLoadtestConfig(withPump({ ...goodPump(), walletIndex: -1 }))).toThrow();
+    expect(() =>
+      parseLoadtestConfig(withPump({ ...goodPump(), intervalSeconds: 600.5 }))
+    ).toThrow();
+  });
+
+  it('PUMP_CHAIN_NOT_L1: the chain is not the networkId 0 chain, or is unknown', () => {
+    expect(() => parseLoadtestConfig(withPump({ ...goodPump(), chainKey: 'L2A' }))).toThrow(
+      /PUMP_CHAIN_NOT_L1/
+    );
+    expect(() => parseLoadtestConfig(withPump({ ...goodPump(), chainKey: 'NOPE' }))).toThrow(
+      /PUMP_CHAIN_NOT_L1/
+    );
+  });
+
+  it('PUMP_DESTINATION_UNKNOWN: unknown networkId, or the L1 itself', () => {
+    expect(() =>
+      parseLoadtestConfig(withPump({ ...goodPump(), destinationNetworkId: 77 }))
+    ).toThrow(/PUMP_DESTINATION_UNKNOWN/);
+    expect(() => parseLoadtestConfig(withPump({ ...goodPump(), destinationNetworkId: 0 }))).toThrow(
+      /PUMP_DESTINATION_UNKNOWN/
+    );
+  });
+
+  it('PUMP_INTERVAL_TOO_SHORT: below 60 s; exactly 60 s is accepted', () => {
+    expect(() => parseLoadtestConfig(withPump({ ...goodPump(), intervalSeconds: 59 }))).toThrow(
+      /PUMP_INTERVAL_TOO_SHORT/
+    );
+    expect(() =>
+      parseLoadtestConfig(withPump({ ...goodPump(), intervalSeconds: 60 }))
+    ).not.toThrow();
+  });
+
+  it('PUMP_WALLET_REQUIRES_MNEMONIC: a privateKeysRef wallet set', () => {
+    const doc = withPump(goodPump(), (d) => {
+      (d.users as Record<string, unknown>).wallets = { privateKeysRef: { env: 'SOME_KEYS' } };
+    });
+    expect(() => parseLoadtestConfig(doc)).toThrow(/PUMP_WALLET_REQUIRES_MNEMONIC/);
+  });
+
+  it('PUMP_WALLET_OVERLAPS_USERS: the pump index sits inside [startIndex, startIndex + total)', () => {
+    const doc = (startIndex: number, total: number, walletIndex: number) =>
+      withPump({ ...goodPump(), walletIndex }, (d) => {
+        const users = d.users as Record<string, unknown>;
+        users.wallets = { mnemonicRef: { env: 'SOME_MNEMONIC' }, startIndex };
+        users.total = total;
+        users.browser = 0;
+        delete d.uiBaseUrl;
+      });
+    expect(() => parseLoadtestConfig(doc(90, 10, 99))).toThrow(/PUMP_WALLET_OVERLAPS_USERS/);
+    expect(() => parseLoadtestConfig(doc(0, 100, 99))).toThrow(/PUMP_WALLET_OVERLAPS_USERS/);
+    // The first index past the range and an index below it are fine.
+    expect(() => parseLoadtestConfig(doc(90, 9, 99))).not.toThrow();
+    expect(() => parseLoadtestConfig(doc(100, 10, 99))).not.toThrow();
+  });
+
+  it('pumpWalletOverlap re-checks after a --users style override and ignores privateKeysRef sets', () => {
+    const parsed = parseLoadtestConfig(
+      withPump(goodPump(), (d) => {
+        const users = d.users as Record<string, unknown>;
+        users.wallets = { mnemonicRef: { env: 'SOME_MNEMONIC' }, startIndex: 0 };
+        users.total = 50;
+        users.browser = 0;
+        delete d.uiBaseUrl;
+      })
+    );
+    const pump = parsed.pump as NonNullable<typeof parsed.pump>;
+    expect(pumpWalletOverlap(parsed.users, pump)).toBeNull();
+    expect(pumpWalletOverlap({ ...parsed.users, total: 1000 }, pump)).toMatch(
+      /pump\.walletIndex 999 falls inside/
+    );
+    expect(
+      pumpWalletOverlap({ total: 100, wallets: { privateKeysRef: { env: 'K' } } }, pump)
+    ).toBeNull();
+  });
+
+  it('enabled: false behaves exactly like an absent block (no cross-field checks), but stays strict', () => {
+    // Values that would each trip a PUMP_* code when enabled.
+    const disabled = {
+      ...goodPump(),
+      enabled: false,
+      chainKey: 'L2A',
+      destinationNetworkId: 77,
+      intervalSeconds: 5
+    };
+    const config = parseLoadtestConfig(withPump(disabled));
+    expect(config.pump?.enabled).toBe(false);
+    expect(() => parseLoadtestConfig(withPump({ ...disabled, extra: 1 }))).toThrow();
+  });
+
+  it('INLINE_PRIVATE_KEY_FORBIDDEN still scans the pump block', () => {
+    expect(() =>
+      parseLoadtestConfig(withPump({ ...goodPump(), amount: `0x${'11'.repeat(32)}` }))
+    ).toThrow();
   });
 });
 
@@ -363,5 +608,30 @@ describe('gas headroom parity between the UI and the headless worker', () => {
   it("the schema's bridgeGasOffset default equals the UI's BRIDGE_GAS_BUFFER", () => {
     const config = parseLoadtestConfig(buildRawDevnetExample());
     expect(BigInt(config.gas.bridgeGasOffset)).toBe(BRIDGE_GAS_BUFFER);
+  });
+});
+
+describe('gas.claimGasOffset', () => {
+  it('defaults to 60000 and bridgeGasOffset is unchanged', () => {
+    const doc = validDevnetDoc();
+    delete doc.gas;
+    const config = parseLoadtestConfig(doc);
+    expect(config.gas).toStrictEqual({ bridgeGasOffset: 300_000, claimGasOffset: 60_000 });
+  });
+
+  it('accepts an explicit non-negative integer (0 disables the margin)', () => {
+    for (const value of [0, 1, 123_456]) {
+      const doc = validDevnetDoc();
+      doc.gas = { claimGasOffset: value };
+      expect(parseLoadtestConfig(doc).gas.claimGasOffset).toBe(value);
+    }
+  });
+
+  it('rejects negative, fractional and non-numeric values', () => {
+    for (const value of [-1, 1.5, '60000']) {
+      const doc = validDevnetDoc();
+      doc.gas = { claimGasOffset: value };
+      expect(() => parseLoadtestConfig(doc)).toThrow();
+    }
   });
 });

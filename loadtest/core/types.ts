@@ -189,6 +189,17 @@ export type ErrorClass =
   | 'ui_assertion'
   | 'browser_crash'
   | 'console_error'
+  // Finding C13 (S40): a per-network `warnings[]` entry on a SUCCESSFUL
+  // `tracker/activity` response (upstream bridge service not fully synced).
+  // Recorded, never a hop failure, and deliberately NOT `proxy_5xx` (no 5xx
+  // occurred — the request returned 200).
+  | 'activity_warning'
+  // S53 (heavy-load design F3/F4): `tracker/activity` answered 503 "activity
+  // for this address is not ready yet" — expected for a first-time address (the
+  // tracker is still registering it), not a failure of the system under test.
+  // Recorded in its own class so it neither fails a hop nor counts toward the
+  // proxy 5xx stop criterion. "activity registry is full" stays `proxy_5xx`.
+  | 'tracker_not_ready'
   | 'funding'
   | 'config'
   // R10 (loadtest/REVIEW.md), fixed S26: a browser context's connected
@@ -315,6 +326,14 @@ export interface HopSpec {
   assetIndex: number;
   assetKind: AssetKind;
   assetAddress?: Hex;
+  // Design B (gas-token chains). Both optional and omitted on ETH-gas hops.
+  // `fromWethToken`: set iff the asset is `eth` and `fromChain` is a
+  // gas-token chain — the driver bridges out by burning this WETH
+  // (`token = fromWethToken`, no msg.value, no approval).
+  fromWethToken?: Hex;
+  // Set iff either end of the hop is a gas-token chain: the origin identity
+  // the bridge leaf must carry (`eth` -> network 0 / zero address).
+  expectedOrigin?: { networkId: number; address: Hex };
   amount: string;
   decimals: number;
   autoclaim: HopAutoclaim;

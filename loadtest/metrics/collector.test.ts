@@ -903,3 +903,381 @@ describe('collector — run lifecycle', () => {
     expect(run.lapsInFlightAtStop).toBe(3);
   });
 });
+
+describe('collector — hopMeasurement (S45 C3)', () => {
+  const record = {
+    hopId: 'h1',
+    lapId: 'l1',
+    userId: 'u1',
+    mode: 'headless' as const,
+    hopRoute: 'A->B',
+    fromNetworkId: 82,
+    toNetworkId: 85,
+    assetKind: 'eth' as const,
+    assetIndex: 0,
+    outcome: 'hop_completed_manual' as const,
+    depositCount: 4,
+    bridge: { txHash: '0xb', blockNumber: '10', minedObservedAt: 1, gas: null },
+    stages: null,
+    readyObservedAt: 5,
+    claim: {
+      txHash: '0xc',
+      blockNumber: '12',
+      sentAt: 6,
+      minedObservedAt: 8,
+      gas: { blockNumber: '12', gasUsed: '1', effectiveGasPrice: '2' },
+      claimKind: 'eth' as const
+    }
+  };
+
+  it('writes one hop_measurement ndjson line per hop and keeps the record for the snapshot', () => {
+    const sink = createMemoryActivitySink();
+    const collector = createCollector({ activitySink: sink });
+    collector.hopMeasurement(record);
+
+    expect(sink.lines).toHaveLength(1);
+    const line = JSON.parse(sink.lines[0]);
+    expect(line).toMatchObject({
+      kind: 'hop_measurement',
+      userId: 'u1',
+      mode: 'headless',
+      hopId: 'h1',
+      hopRoute: 'A->B',
+      depositCount: 4,
+      claim: { claimKind: 'eth', gas: { gasUsed: '1' } }
+    });
+    expect(collector.snapshot().hopMeasurements).toStrictEqual([record]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// S53 (heavy-load design §1.3/§1.4): harness records, HTTP windows, live counters.
+// ---------------------------------------------------------------------------
+
+describe('collector — pump records (S53)', () => {
+  const started = {
+    kind: 'state' as const,
+    state: 'started' as const,
+    sender: '0x00000000000000000000000000000000000000b1',
+    intervalSeconds: 600,
+    maxTotalSpendWei: '70000000000000000',
+    maxGasPriceWei: '5000000000',
+    destinationNetworkId: 82,
+    amountWei: '0'
+  };
+  const deposit = (n: number, cumulative: string) => ({
+    kind: 'deposit' as const,
+    txHash: `0x${n.toString(16).padStart(64, '0')}`,
+    blockNumber: String(100 + n),
+    depositCount: n,
+    status: 'success' as const,
+    gasUsed: '437125',
+    effectiveGasPrice: '1000000',
+    costWei: '437125000000',
+    cumulativeSpendWei: cumulative,
+    sentAt: 1000 * n,
+    minedObservedAt: 1000 * n + 12
+  });
+
+  it('writes pump_state / pump_deposit / pump_skipped under userId harness:pump with a null mode', () => {
+    const sink = createMemoryActivitySink();
+    const collector = createCollector({ activitySink: sink });
+    collector.pumpEvent(started);
+    collector.pumpEvent(deposit(1, '437125000000'));
+    collector.pumpEvent({
+      kind: 'skipped',
+      reason: 'gas_price',
+      gasPriceWei: '6000000000',
+      cumulativeSpendWei: '437125000000'
+    });
+    collector.pumpEvent({
+      ...started,
+      state: 'stopped',
+      pendingAtStop: false,
+      totalSpendWei: '437125000000'
+    });
+
+    const lines = sink.lines.map((l) => JSON.parse(l));
+    expect(lines.map((l) => l.kind)).toStrictEqual([
+      'pump_state',
+      'pump_deposit',
+      'pump_skipped',
+      'pump_state'
+    ]);
+    for (const line of lines) {
+      expect(line.userId).toBe('harness:pump');
+      expect(line.mode).toBeNull();
+    }
+    expect(lines[0]).toMatchObject({ state: 'started', sender: started.sender, amountWei: '0' });
+    expect(lines[1]).toMatchObject({
+      txHash: deposit(1, '').txHash,
+      depositCount: 1,
+      cumulativeSpendWei: '437125000000'
+    });
+    expect(lines[2]).toMatchObject({ reason: 'gas_price', gasPriceWei: '6000000000' });
+    expect(lines[3]).toMatchObject({ state: 'stopped', pendingAtStop: false });
+    // The `kind` discriminator of the input is not leaked into the payload twice.
+    expect(lines[1].kind).toBe('pump_deposit');
+  });
+
+  it('snapshots a pump block, and only once a pump started', () => {
+    const collector = createCollector();
+    expect('pump' in collector.snapshot()).toBe(false);
+
+    collector.pumpEvent(started);
+    collector.pumpEvent(deposit(1, '100'));
+    collector.pumpEvent(deposit(2, '200'));
+    collector.pumpEvent({ kind: 'skipped', reason: 'previous_pending', cumulativeSpendWei: '200' });
+    collector.pumpEvent({ kind: 'skipped', reason: 'previous_pending', cumulativeSpendWei: '200' });
+    collector.pumpEvent({ kind: 'skipped', reason: 'cap_reached', cumulativeSpendWei: '250' });
+
+    const pump = collector.snapshot().pump;
+    expect(pump).toMatchObject({
+      enabled: true,
+      sender: started.sender,
+      destinationNetworkId: 82,
+      intervalSeconds: 600,
+      maxTotalSpendWei: '70000000000000000',
+      maxGasPriceWei: '5000000000',
+      skipped: { gas_price: 0, cap_reached: 1, previous_pending: 2, send_error: 0 },
+      totalSpendWei: '250',
+      pendingAtStop: false
+    });
+    expect(pump?.deposits.map((d) => d.depositCount)).toStrictEqual([1, 2]);
+    // The per-line running total is an event field, not part of the results record.
+    expect(pump?.deposits[0]).not.toHaveProperty('cumulativeSpendWei');
+  });
+
+  it('a stopped record carries pendingAtStop and the final counted total into the snapshot', () => {
+    const collector = createCollector();
+    collector.pumpEvent(started);
+    collector.pumpEvent({
+      ...started,
+      state: 'stopped',
+      pendingAtStop: true,
+      totalSpendWei: '999'
+    });
+    expect(collector.snapshot().pump).toMatchObject({ pendingAtStop: true, totalSpendWei: '999' });
+  });
+
+  it('keeps pump records out of every hop, lap, tick, phase and error aggregate', () => {
+    const collector = createCollector();
+    collector.pumpEvent(started);
+    collector.pumpEvent(deposit(1, '100'));
+    collector.pumpEvent({ kind: 'skipped', reason: 'send_error', cumulativeSpendWei: '100' });
+    const snap = collector.snapshot();
+    expect(snap.hopsByOutcome).toStrictEqual({});
+    expect(snap.lapsByOutcome).toStrictEqual({ LAP_DONE: 0, LAP_FAILED: 0, LAP_ABORTED: 0 });
+    expect(snap.scheduler.lapStartsSubmitted).toBe(0);
+    expect(snap.phases).toStrictEqual({});
+    expect(snap.errors.byClass).toStrictEqual({});
+  });
+});
+
+describe('collector — wallet balance and L1 info tree records (S53)', () => {
+  it('wallet_balance: an ndjson line (null user and mode) per call, kept in order for the snapshot', () => {
+    const clock = FAKE_CLOCK();
+    const sink = createMemoryActivitySink();
+    const collector = createCollector({ clock, activitySink: sink });
+    expect('walletBalances' in collector.snapshot()).toBe(false);
+
+    const sample = {
+      chainKey: 'BALI_82',
+      n: 3,
+      minWei: '1',
+      medianWei: '2',
+      maxWei: '3',
+      lowest: [{ userId: 'u1', wei: '1' }]
+    };
+    collector.walletBalance(sample);
+    clock.advance(60_000);
+    collector.walletBalance({ ...sample, chainKey: 'BALI_85' });
+
+    const lines = sink.lines.map((l) => JSON.parse(l));
+    expect(lines[0]).toMatchObject({ kind: 'wallet_balance', userId: null, mode: null, ...sample });
+    const snap = collector.snapshot().walletBalances;
+    expect(snap?.map((s) => s.chainKey)).toStrictEqual(['BALI_82', 'BALI_85']);
+    expect(snap?.[1].ts).toBe(new Date(60_000).toISOString());
+  });
+
+  it('l1_info_leaf / l1_info_poll_error: ndjson kinds, a redacted error message, and the l1InfoTree snapshot', () => {
+    const sink = createMemoryActivitySink();
+    const collector = createCollector({ activitySink: sink });
+    expect('l1InfoTree' in collector.snapshot()).toBe(false);
+
+    collector.l1InfoTreeStart({
+      gerManagerAddress: '0x00000000000000000000000000000000000000a1',
+      baselineLeafCount: 500
+    });
+    collector.l1InfoLeaf({
+      blockNumber: '1010',
+      leafCount: 501,
+      txHash: '0xaa',
+      minTimestamp: 7,
+      fromPump: true
+    });
+    collector.l1InfoPollError('boom URL: https://rpc.example.invalid/AbCdEf0123456789TokenXyz');
+
+    const lines = sink.lines.map((l) => JSON.parse(l));
+    expect(lines.map((l) => l.kind)).toStrictEqual(['l1_info_leaf', 'l1_info_poll_error']);
+    expect(lines[0]).toMatchObject({
+      blockNumber: '1010',
+      leafCount: 501,
+      txHash: '0xaa',
+      minTimestamp: 7,
+      fromPump: true
+    });
+    expect(JSON.stringify(lines[1])).not.toContain('AbCdEf0123456789TokenXyz');
+
+    const tree = collector.snapshot().l1InfoTree;
+    expect(tree).toMatchObject({
+      gerManagerAddress: '0x00000000000000000000000000000000000000a1',
+      baselineLeafCount: 500,
+      pollErrors: 1
+    });
+    expect(tree?.leaves).toHaveLength(1);
+  });
+});
+
+describe('collector — flushHttpWindow (M4)', () => {
+  const sample = (
+    collector: ReturnType<typeof createCollector>,
+    endpointClass: string,
+    over: Partial<{
+      status: number;
+      durationMs: number;
+      origin: 'ui' | 'harness';
+      mode: 'browser' | 'headless';
+    }> = {}
+  ) =>
+    collector.recordHttpSample({
+      userId: 'u0',
+      mode: over.mode ?? 'headless',
+      endpointClass,
+      method: 'GET',
+      status: over.status ?? 200,
+      durationMs: over.durationMs ?? 10,
+      attempt: 0,
+      origin: over.origin ?? 'ui'
+    });
+  const windows = (sink: ReturnType<typeof createMemoryActivitySink>) =>
+    sink.lines.map((l) => JSON.parse(l)).filter((l) => l.kind === 'http_window');
+
+  it('groups tracker/activity, tracker/other, bridge/<route> without the network suffix and rpc/<chainKey> without the method', () => {
+    const sink = createMemoryActivitySink();
+    const collector = createCollector({ activitySink: sink });
+    sample(collector, 'tracker/activity');
+    sample(collector, 'tracker/tx');
+    sample(collector, 'tracker/health');
+    sample(collector, 'bridge/claim-proof[82]');
+    sample(collector, 'bridge/claim-proof[85]');
+    sample(collector, 'rpc/BALI_82/eth_call');
+    sample(collector, 'rpc/BALI_82/eth_getBalance');
+    sample(collector, 'rpc/BALI_85/eth_call');
+    collector.flushHttpWindow(60_000);
+
+    const [window] = windows(sink);
+    expect(window).toMatchObject({
+      kind: 'http_window',
+      userId: null,
+      mode: null,
+      windowMs: 60_000
+    });
+    expect(Object.keys(window.classes)).toStrictEqual([
+      'bridge/claim-proof',
+      'rpc/BALI_82',
+      'rpc/BALI_85',
+      'tracker/activity',
+      'tracker/other'
+    ]);
+    expect(window.classes['bridge/claim-proof'].ui.n).toBe(2);
+    expect(window.classes['rpc/BALI_82'].ui.n).toBe(2);
+    expect(window.classes['tracker/other'].ui.n).toBe(2);
+  });
+
+  it('reports n, status mix and a nearest-rank p90 per origin, with ui and harness kept apart (and browser merged with headless)', () => {
+    const sink = createMemoryActivitySink();
+    const collector = createCollector({ activitySink: sink });
+    for (let i = 1; i <= 10; i += 1) sample(collector, 'tracker/activity', { durationMs: i * 10 });
+    sample(collector, 'tracker/activity', { status: 503, durationMs: 5 });
+    sample(collector, 'tracker/activity', { origin: 'harness', durationMs: 900 });
+    sample(collector, 'tracker/activity', { mode: 'browser', durationMs: 1 });
+    collector.flushHttpWindow(10_000);
+
+    const activity = windows(sink)[0].classes['tracker/activity'];
+    expect(activity.ui).toStrictEqual({ n: 12, byStatus: { '200': 11, '503': 1 }, p90: 90 });
+    expect(activity.harness).toStrictEqual({ n: 1, byStatus: { '200': 1 }, p90: 900 });
+  });
+
+  it('only covers samples since the previous flush; an idle window is an empty classes object', () => {
+    const sink = createMemoryActivitySink();
+    const collector = createCollector({ activitySink: sink });
+    sample(collector, 'tracker/activity');
+    collector.flushHttpWindow(60_000);
+    sample(collector, 'tracker/activity', { status: 500 });
+    sample(collector, 'tracker/activity', { status: 500 });
+    collector.flushHttpWindow(60_000);
+    collector.flushHttpWindow(60_000);
+
+    const [first, second, third] = windows(sink);
+    expect(first.classes['tracker/activity'].ui).toMatchObject({ n: 1, byStatus: { '200': 1 } });
+    expect(second.classes['tracker/activity'].ui).toMatchObject({ n: 2, byStatus: { '500': 2 } });
+    expect(third.classes).toStrictEqual({});
+  });
+
+  it('does not change the cumulative http statistics in the snapshot', () => {
+    const collector = createCollector();
+    for (let i = 0; i < 5; i += 1)
+      sample(collector, 'tracker/activity', { durationMs: 10 * (i + 1) });
+    const before = collector.snapshot().http;
+    collector.flushHttpWindow(60_000);
+    expect(collector.snapshot().http).toStrictEqual(before);
+  });
+});
+
+describe('collector — liveCounters (F6)', () => {
+  it('tracks lap starts, backpressure skips and non-suppressed errors without a snapshot', () => {
+    const collector = createCollector();
+    expect(collector.liveCounters()).toStrictEqual({
+      lapStartsSubmitted: 0,
+      skippedBackpressure: 0,
+      errorsTotal: 0,
+      errorsByClass: {}
+    });
+    collector.tick('u0', 'headless');
+    collector.tick('u1', 'headless');
+    collector.setSchedulerCounters({ ticksOffered: 5, skippedBackpressure: 3, ticksLostToRamp: 0 });
+    collector.error({ userId: 'u0', mode: 'headless', errorClass: 'proxy_5xx', message: 'a' });
+    collector.error({ userId: 'u0', mode: 'headless', errorClass: 'proxy_5xx', message: 'b' });
+    collector.error({
+      userId: 'u0',
+      mode: 'headless',
+      errorClass: 'tracker_not_ready',
+      message: 'c'
+    });
+    // Suppressed (`not_ready`) errors are not counted, exactly as in `errors.byClass`.
+    collector.error({ userId: 'u0', mode: 'headless', errorClass: 'not_ready', message: 'd' });
+
+    expect(collector.liveCounters()).toStrictEqual({
+      lapStartsSubmitted: 2,
+      skippedBackpressure: 3,
+      errorsTotal: 3,
+      errorsByClass: { proxy_5xx: 2, tracker_not_ready: 1 }
+    });
+  });
+
+  it('agrees with the full snapshot', () => {
+    const collector = createCollector();
+    collector.tick('u0', 'headless');
+    collector.error({ userId: 'u0', mode: 'headless', errorClass: 'internal', message: 'x' });
+    collector.setSchedulerCounters({ ticksOffered: 2, skippedBackpressure: 1, ticksLostToRamp: 0 });
+    const live = collector.liveCounters();
+    const snap = collector.snapshot();
+    expect(live.lapStartsSubmitted).toBe(snap.scheduler.lapStartsSubmitted);
+    expect(live.skippedBackpressure).toBe(snap.scheduler.skippedBackpressure);
+    expect(live.errorsByClass).toStrictEqual(snap.errors.byClass);
+    expect(live.errorsTotal).toBe(
+      Object.values(snap.errors.byClass).reduce((a, b) => a + (b ?? 0), 0)
+    );
+  });
+});
