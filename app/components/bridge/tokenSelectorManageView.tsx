@@ -77,7 +77,9 @@ export const ManageTokensView: React.FC<ManageTokensViewProps> = ({
         decimals: origin.metadata.decimals,
         symbol: origin.metadata.symbol,
         name: origin.metadata.name,
-        logoURI: origin.metadata.logoURI || getTokenLogoUrl({ chainId: origin.chainId, address: origin.metadata.tokenAddress }),
+        logoURI:
+          origin.metadata.logoURI ||
+          getTokenLogoUrl({ chainId: origin.chainId, address: origin.metadata.tokenAddress }),
         isCustom: true
       });
     } catch (err) {

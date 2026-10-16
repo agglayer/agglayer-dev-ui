@@ -14,6 +14,7 @@
 /coverage
 /playwright-report/
 /playwright-report-container/
+/playwright-report-loadtest-e2e/
 /test-results/
 /.last-run.json
 /blob-report/
@@ -36,6 +37,13 @@
 /build
 /dist
 
+# loadtest tool (plans/bridge-loadtest-plan.md S04) -- generated config and
+# per-run output, never committed. config/examples/*.loadtest.json is NOT
+# matched by this (it lives under loadtest/config/examples/, not the repo
+# root), so the committed worked examples stay tracked.
+/loadtest.config.json
+/loadtest-results/
+
 # orchestration/evidence scratch (kept outside the repo at
 # /home/brolygon/repos/plans/<plan>/<step-id>-evidence/ -- never commit here)
 /plans/
@@ -53,6 +61,14 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env
 .env.local
+# R12 (loadtest/REVIEW.md): the exact-name patterns above did not cover a
+# `.bak`/backup copy of an env file (S01 moved the stale `.env.local` aside
+# to `.env.local.bak` rather than deleting it, and the pattern gap meant
+# `git add -A` was one command away from committing it, holding-secrets-
+# by-purpose file that it is). Widened so any `.env*` variant, `.bak`
+# suffix included, is covered.
+.env.local*
+.env*.bak
 
 # vercel
 .vercel

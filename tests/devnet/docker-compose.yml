@@ -1,13 +1,13 @@
 # Self-contained devnet snapshot -- flavor: anvil-aggkit
 #
-# Vendored from 0xPolygon/kurtosis-cdk (branch feat/aggkit-bridge-ui-backend)
-# @ 631f202cc28c249a42f1a4e3a012bb1dc418be30. See ./README.md for the full
+# Vendored from 0xPolygon/kurtosis-cdk (branch chore/devui-snapshot-aggkit-rc17)
+# @ a8301d050c683d08711513a286ce530f1010089f. See ./README.md for the full
 # regenerate-and-bump procedure -- do not hand-edit an image reference below
 # without following it (E2E_ERC20_ADDRESS in .github/workflows/e2e.yaml is
 # nonce-dependent per snapshot and MUST be bumped in lockstep if it changes).
 #
 # Publish run this bundle came from:
-# https://github.com/0xPolygon/kurtosis-cdk/actions/runs/34205065470
+# https://github.com/0xPolygon/kurtosis-cdk/actions/runs/37952075609
 #
 # Enclave: cdk
 #
@@ -37,7 +37,7 @@
 
 services:
   anvil-001:
-    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-anvil-001@sha256:b117376ad4dfe594433faf46fe4f984c3fc09d2c7f3102572e8f9fa3f91f115e # v1.5.1-1788858014
+    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-anvil-001@sha256:25e716044bda4e1b3d0427da4fb5a9a2a0b9a68963b43842e778408d233cf11f # v1.5.1-1791560572
     hostname: anvil-001
     ports:
       - '${L1_RPC_PORT:-8545}:8545' # L1 JSON-RPC (debug)
@@ -50,7 +50,7 @@ services:
       start_period: 5s
 
   l2-anvil-001:
-    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-l2-anvil-001@sha256:dda82fffe8e51ac4e3a97081e37332a72125c22c21245a8c50f066feb9ac55f0 # v1.5.1-1788858014
+    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-l2-anvil-001@sha256:ef934f0a4d1d88e056ba044849f37292f17f653b9a754bfc158d728bf94cb12a # v1.5.1-1791560572
     hostname: l2-anvil-001
     ports:
       - '${L2_001_HTTP_PORT:-11545}:8545' # L2 chain 20201 JSON-RPC (debug)
@@ -63,7 +63,7 @@ services:
       start_period: 5s
 
   l2-anvil-002:
-    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-l2-anvil-002@sha256:6e11ca471d7e85c2cb2920247bcda0266489a4869042318659921c11fad5d21d # v1.5.1-1788858014
+    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-l2-anvil-002@sha256:be1cbe6c449589042481db8f87b592540c33beafc413f767885acca3d73a4154 # v1.5.1-1791560572
     hostname: l2-anvil-002
     ports:
       - '${L2_002_HTTP_PORT:-12545}:8545' # L2 chain 20202 JSON-RPC (debug)
@@ -76,12 +76,20 @@ services:
       start_period: 5s
 
   agglayer:
-    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-agglayer@sha256:454a851d6208049872abc09b8f150de9e3ccab83599d23cb131dade6e4133a49 # 0.6.0-rc.8-1788858014
+    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-agglayer@sha256:4eff544cd59179ccc100b4a9f9c10e776b716ad28ced855ccd60a24290374c8d # 0.6.0-rc.8-1791560572
     hostname: agglayer
     entrypoint: ['/usr/local/bin/agglayer']
     command: ['run', '--cfg', '/etc/agglayer/config.toml']
     environment:
       - RUST_BACKTRACE=1
+    # S34: the agglayer node team traced our C1 SIGBUS (signal: 7,
+    # error.rs:171:29) to an undersized /dev/shm backing the SP1 local
+    # prover's shared-memory mapping -- same signature they hit on 0.5.0,
+    # fixed there via a Kubernetes emptyDir{medium:Memory,sizeLimit:4Gi}.
+    # Docker's default is 64 MB; this is the Compose-native equivalent (the
+    # Kubernetes pod memory/CPU bumps they also applied do not transfer --
+    # this Compose service has no pod resource ceiling on this host).
+    shm_size: '4gb'
     ports:
       - '${AGGLAYER_GRPC_PORT:-4443}:4443' # gRPC
       - '${AGGLAYER_READRPC_PORT:-4444}:4444' # read RPC
@@ -116,11 +124,10 @@ services:
       start_period: 10s
 
   aggkit-001:
-    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-aggkit-001@sha256:15924f8bad20346a7dfd2d539f31568dfca085e40296795e601762406096e203 # 0.11.0-rc9-1788858014
+    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-aggkit-001@sha256:d01d67781d507fb1c14fe46971d9126647a4b63fe76bb5034fa61b8cd6a1a158 # 0.11.0-rc17-1791560572
     hostname: aggkit-001
     entrypoint: ['/usr/local/bin/aggkit']
-    command:
-      ['run', '--cfg=/etc/aggkit/config.toml', '--components=aggsender,aggoracle,autoclaim,bridge']
+    command: ['run', '--cfg=/etc/aggkit/config.toml', '--components=aggsender,aggoracle,bridge']
     ports:
       - '${L2_001_AGGKIT_RPC_PORT:-11576}:5576' # JSON-RPC (debug)
       - '${L2_001_AGGKIT_REST_PORT:-11577}:5577' # bridge REST API
@@ -140,11 +147,10 @@ services:
       start_period: 10s
 
   aggkit-002:
-    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-aggkit-002@sha256:350f17584abd4aea815bd08b14ba6ad03dcabf477b7f2eb5565169011fdc3bd8 # 0.11.0-rc9-1788858014
+    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-aggkit-002@sha256:902670fa5e3fdba17dcf43a7ab529c3cb0e51df831dd6e69c796abb77c63f9ec # 0.11.0-rc17-1791560572
     hostname: aggkit-002
     entrypoint: ['/usr/local/bin/aggkit']
-    command:
-      ['run', '--cfg=/etc/aggkit/config.toml', '--components=aggsender,aggoracle,autoclaim,bridge']
+    command: ['run', '--cfg=/etc/aggkit/config.toml', '--components=aggsender,aggoracle,bridge']
     ports:
       - '${L2_002_AGGKIT_RPC_PORT:-12576}:5576' # JSON-RPC (debug)
       - '${L2_002_AGGKIT_REST_PORT:-12577}:5577' # bridge REST API
@@ -164,7 +170,7 @@ services:
       start_period: 10s
 
   aggkit-proxy-001:
-    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-aggkit-proxy-001@sha256:422decec9b780d89498adc22c4f91e27d35dd12e922090d3fb447035dca1c0c6 # 0.11.0-rc9-1788858014
+    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-aggkit-proxy-001@sha256:0b0861f8e9f2ac1eb0d662f1641b323e7ddfbe537f655c8f4a0195d8dfae416c # 0.11.0-rc17-1791560572
     hostname: aggkit-proxy-001
     entrypoint: ['/usr/local/bin/aggkit-proxy']
     command: ['run', '--cfg=/etc/aggkit-proxy/config.toml', '--components=proxy,tracker']
@@ -186,7 +192,7 @@ services:
       start_period: 10s
 
   agglayer-dev-ui-002:
-    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-agglayer-dev-ui-002@sha256:3dba479372fc7869e069fc72017deb7176982117a10ed636716c68545679409e # dispatch-feat-aggkit-backend-8563dd4ba87-1788858014
+    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-agglayer-dev-ui-002@sha256:c99673027b5f31b98bf66b8d2e5734c0da1ad3f4d629d78b1ba9e44ba28d6a6d # dispatch-feat-aggkit-backend-8563dd4ba87-1791560572
     hostname: agglayer-dev-ui-002
     # NOT started by a plain `docker compose up` / `up -d --wait` -- CI never
     # uses this container (only bare `/` through haproxy's default_backend
@@ -204,7 +210,7 @@ services:
       start_period: 5s
 
   agglayer-dev-ui-proxy-002:
-    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-agglayer-dev-ui-proxy-002@sha256:e4afb73f70363876c2272536e707f4e43f9cc957ef091e6b706a7060dda4c2d6 # 3.2-bookworm-1788858014
+    image: ghcr.io/0xpolygon/kurtosis-cdk-snapshot-agglayer-dev-ui-proxy-002@sha256:ece753b70efcae5d7ef4543a9f55b84a2f2ec66f8afde9db6adab2e4179b8e09 # 3.2-bookworm-1791560572
     hostname: agglayer-dev-ui-proxy-002
     ports:
       - '${DEVNET_PROXY_PORT:-8555}:80' # THE dev-ui CI origin

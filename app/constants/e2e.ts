@@ -144,10 +144,12 @@ export const E2E_NATIVE_BRIDGE_AMOUNT =
 export const E2E_ERC20_BRIDGE_AMOUNT =
   normalizeEnvValue(process.env.E2E_ERC20_BRIDGE_AMOUNT) || '0.01';
 
-// Timeouts tuned per backend. Devnet's ~1s block time and built-in aggkit
-// autoclaim are both far faster than real Sepolia/Bokuto testnet
-// infrastructure (measured on the devnet: deposit -> ready ~6-35s, ready ->
-// claimed ~10-90s -- worst case budgeted below with margin).
+// Timeouts tuned per backend. Devnet's ~1s block time is far faster than real
+// Sepolia/Bokuto testnet infrastructure (measured on the devnet with the
+// former built-in autoclaimer: deposit -> ready ~6-35s, ready -> claimed
+// ~10-90s; the devnet now has no autoclaimer and the specs click Claim tokens,
+// so these budgets cover ready and claim confirmation separately -- numbers
+// unchanged, worst case budgeted below with margin).
 const DEFAULT_BRIDGE_SUCCESS_TIMEOUT_MS = E2E_BACKEND_MODE === 'testnet' ? 120_000 : 60_000;
 const DEFAULT_CLAIM_TIMEOUT_MS = E2E_BACKEND_MODE === 'testnet' ? 300_000 : 150_000;
 
