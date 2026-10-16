@@ -1,12 +1,8 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import {
-  deriveStatus,
-  fetchActivity,
-  quotePrecisionUnsafeIntegers,
-  resolveAggkitProxyBaseUrl,
-  toTransaction
-} from './activity';
+import type { AggkitBridgeAggregator } from '@agglayer/sdk';
+
+import { deriveStatus, fetchActivity, toTransaction } from './activity';
 
 const baseBridge = {
   tx_hash: '0xabc',
@@ -27,111 +23,35 @@ const baseBridge = {
   txn_sender: '0xsender'
 };
 
+// BREAKING (agglayer/aggkit#1830, SDK PR #1831): the endpoint's old `claimed`
+// tri-state is gone, replaced by `claim_status: AggkitClaimStatus`
+// ('pending'/'readyToClaim'/'claimed'/'error'), already resolved
+// server-side -- deriveStatus no longer inspects `tracking` itself (see its
+// own comment in activity.ts), so these cases collapse to one per value.
 describe('deriveStatus', () => {
-  it('maps claimed "true" to CLAIMED', () => {
-    expect(deriveStatus({ claimed: 'true' })).toEqual({ status: 'CLAIMED' });
-  });
-
-  it('maps claim_status "claimed" (tracker api_revision 5, no `claimed` field) to CLAIMED', () => {
+  it('maps claim_status "claimed" to CLAIMED', () => {
     expect(deriveStatus({ claim_status: 'claimed' })).toEqual({ status: 'CLAIMED' });
   });
 
-  it('keeps an unrecognised claim_status on the unclaimed derivation', () => {
-    expect(deriveStatus({ claim_status: 'unclaimed' })).toEqual({ status: 'PENDING' });
-  });
-
-  it('maps claimed "error" to ERROR, surfacing errors.claim', () => {
+  it('maps claim_status "error" to ERROR, surfacing errors.claim', () => {
     expect(
-      deriveStatus({ claimed: 'error', errors: { claim: 'no bridge contract configured' } })
+      deriveStatus({ claim_status: 'error', errors: { claim: 'no bridge contract configured' } })
     ).toEqual({
       status: 'ERROR',
       statusError: 'no bridge contract configured'
     });
   });
 
-  it('maps unclaimed with no tracking yet to PENDING', () => {
-    expect(deriveStatus({ claimed: 'false' })).toEqual({ status: 'PENDING' });
+  it('maps claim_status "readyToClaim" to READY_TO_CLAIM', () => {
+    expect(deriveStatus({ claim_status: 'readyToClaim' })).toEqual({ status: 'READY_TO_CLAIM' });
   });
 
-  it('maps unclaimed + current step WaitingClaim/inProgress to READY_TO_CLAIM', () => {
-    expect(
-      deriveStatus({
-        claimed: 'false',
-        tracking: {
-          tracking_status: 'running',
-          network_id: 0,
-          tx_hash: '0xabc',
-          bridge_status: null,
-          step_index: 0,
-          all_steps: [{ step_index: 0, step_name: 'WaitingClaim', status: 'inProgress' }],
-          error: null
-        }
-      })
-    ).toEqual({ status: 'READY_TO_CLAIM' });
-  });
-
-  it('maps unclaimed + current step WaitingClaim/done to PENDING (claimed flag not caught up yet)', () => {
-    expect(
-      deriveStatus({
-        claimed: 'false',
-        tracking: {
-          tracking_status: 'finished',
-          network_id: 0,
-          tx_hash: '0xabc',
-          bridge_status: null,
-          step_index: 1,
-          all_steps: [
-            { step_index: 0, step_name: 'WaitingClaim', status: 'done' },
-            { step_index: 1, step_name: 'Claimed', status: 'done' }
-          ],
-          error: null
-        }
-      })
-    ).toEqual({ status: 'PENDING' });
-  });
-
-  it('maps unclaimed + an earlier step in progress to PENDING', () => {
-    expect(
-      deriveStatus({
-        claimed: 'false',
-        tracking: {
-          tracking_status: 'running',
-          network_id: 0,
-          tx_hash: '0xabc',
-          bridge_status: null,
-          step_index: 0,
-          all_steps: [
-            { step_index: 0, step_name: 'WaitingGERUpdate', status: 'inProgress' },
-            { step_index: 1, step_name: 'WaitingClaim', status: 'pending' }
-          ],
-          error: null
-        }
-      })
-    ).toEqual({ status: 'PENDING' });
+  it('maps claim_status "pending" to PENDING', () => {
+    expect(deriveStatus({ claim_status: 'pending' })).toEqual({ status: 'PENDING' });
   });
 });
 
 describe('toTransaction', () => {
-  it('maps a claim_status "claimed" row (no `claimed` field) to CLAIMED with the claim tx hash', () => {
-    const tx = toTransaction({
-      bridge: baseBridge,
-      bridge_network_id: 0,
-      claim_status: 'claimed',
-      claim_network_id: 1,
-      claim: {
-        tx_hash: '0xclaimtx',
-        block_num: 77,
-        block_timestamp: 555,
-        global_index: '5'
-      },
-      creation_timestamp: 1,
-      last_updated_timestamp: 2
-    } as unknown as Parameters<typeof toTransaction>[0]);
-    expect(tx.status).toBe('CLAIMED');
-    expect(tx.claimTransactionHash).toBe('0xclaimtx');
-    expect(tx.claimBlockNumber).toBe(77);
-  });
-
   it('maps a claimed bridge, preferring bridge.destination_network over the raw origin/destination pair', () => {
     const tx = toTransaction({
       bridge: baseBridge,
@@ -156,7 +76,7 @@ describe('toTransaction', () => {
         rollup_exit_root: '0xrer'
       },
       claim_network_id: 1,
-      claimed: 'true',
+      claim_status: 'claimed',
       creation_timestamp: 50,
       last_updated_timestamp: 200
     });
@@ -181,14 +101,14 @@ describe('toTransaction', () => {
     const asset = toTransaction({
       bridge: baseBridge,
       bridge_network_id: 0,
-      claimed: 'false',
+      claim_status: 'pending',
       creation_timestamp: 50,
       last_updated_timestamp: 50
     });
     const message = toTransaction({
       bridge: { ...baseBridge, leaf_type: 1 },
       bridge_network_id: 0,
-      claimed: 'false',
+      claim_status: 'pending',
       creation_timestamp: 50,
       last_updated_timestamp: 50
     });
@@ -201,7 +121,7 @@ describe('toTransaction', () => {
     const tx = toTransaction({
       bridge: baseBridge,
       bridge_network_id: 0,
-      claimed: 'false',
+      claim_status: 'pending',
       creation_timestamp: 50,
       last_updated_timestamp: 50
     });
@@ -209,80 +129,61 @@ describe('toTransaction', () => {
   });
 });
 
-describe('resolveAggkitProxyBaseUrl', () => {
-  it('returns any one URL from the per-network map (they are all identical)', () => {
-    expect(
-      resolveAggkitProxyBaseUrl({ 1: 'https://proxy.example', 2: 'https://proxy.example' })
-    ).toBe('https://proxy.example');
-  });
+// fetchActivity is now a thin wrapper over AggkitBridgeAggregator.getActivity
+// (agglayer/sdk#30/#31) instead of calling fetch() directly -- the request/
+// response parsing and error handling live in the SDK now, so this only
+// needs to mock the aggregator's own return value / rejection.
+const makeMockAggregator = (
+  getActivity: AggkitBridgeAggregator['getActivity']
+): AggkitBridgeAggregator => ({ getActivity }) as unknown as AggkitBridgeAggregator;
 
-  it('returns undefined when the mode has no configured networks', () => {
-    expect(resolveAggkitProxyBaseUrl({})).toBeUndefined();
-  });
-});
-
-// The OK-path mocks below stub `text()`, not `json()`: fetchActivity reads the
-// body as text and runs it through parseActivityResponse, because
-// `response.json()` would round `global_index` past repair (see that
-// function's comment). The non-OK path still uses json() -- an error body is
-// only {code, message}.
+// fetchActivity no longer stubs the global fetch: it goes through the
+// aggregator passed in, so these mocks just stub `getActivity`'s resolved
+// value / rejection directly.
 describe('fetchActivity', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it('requests includeTracking=true and maps the returned bridges', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      text: () =>
-        Promise.resolve(
-          JSON.stringify({
-            from_address: [],
-            bridges: [
-              {
-                bridge: baseBridge,
-                bridge_network_id: 0,
-                claimed: 'true',
-                creation_timestamp: 0,
-                last_updated_timestamp: 0
-              }
-            ]
-          })
-        )
+  it('requests includeTracking: true and maps the returned bridges', async () => {
+    const getActivity = vi.fn().mockResolvedValue({
+      bridges: [
+        {
+          bridge: baseBridge,
+          bridge_network_id: 0,
+          claim_status: 'claimed',
+          creation_timestamp: 0,
+          last_updated_timestamp: 0
+        }
+      ],
+      warnings: []
     });
-    vi.stubGlobal('fetch', fetchMock);
 
-    const result = await fetchActivity({ baseUrl: 'https://proxy.example', fromAddress: '0xabc' });
+    const result = await fetchActivity({
+      aggregator: makeMockAggregator(getActivity),
+      fromAddress: '0xabc'
+    });
 
     expect(result.transactions).toHaveLength(1);
     expect(result.transactions[0].status).toBe('CLAIMED');
     expect(result.warnings).toEqual([]);
-    const requestedUrl = new URL(fetchMock.mock.calls[0][0] as string);
-    expect(requestedUrl.pathname).toBe('/tracker/v1/activity/from/0xabc');
-    expect(requestedUrl.searchParams.get('includeTracking')).toBe('true');
+    expect(getActivity).toHaveBeenCalledWith({
+      fromAddress: '0xabc',
+      includeTracking: true
+    });
   });
 
   it('passes through the warnings array when present', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      text: () =>
-        Promise.resolve(
-          JSON.stringify({
-            from_address: [],
-            bridges: [],
-            warnings: [
-              {
-                network_id: 84,
-                message:
-                  'fetching bridges from 0x43...: dial tcp 34.147.196.6:5577: no route to host'
-              }
-            ]
-          })
-        )
+    const getActivity = vi.fn().mockResolvedValue({
+      bridges: [],
+      warnings: [
+        {
+          network_id: 84,
+          message: 'fetching bridges from 0x43...: dial tcp 34.147.196.6:5577: no route to host'
+        }
+      ]
     });
-    vi.stubGlobal('fetch', fetchMock);
 
-    const result = await fetchActivity({ baseUrl: 'https://proxy.example', fromAddress: '0xabc' });
+    const result = await fetchActivity({
+      aggregator: makeMockAggregator(getActivity),
+      fromAddress: '0xabc'
+    });
 
     expect(result.warnings).toEqual([
       {
@@ -309,25 +210,21 @@ describe('fetchActivity', () => {
       { tx_hash: '0xtx6', deposit_count: 6, block_num: 835 },
       { tx_hash: '0xtx7', deposit_count: 7, block_num: 883 }
     ];
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      text: () =>
-        Promise.resolve(
-          JSON.stringify({
-            from_address: [],
-            bridges: deposits.map((deposit) => ({
-              bridge: { ...baseBridge, ...deposit, bridge_hash: sharedBridgeHash },
-              bridge_network_id: 0,
-              claimed: 'false',
-              creation_timestamp: 0,
-              last_updated_timestamp: 0
-            }))
-          })
-        )
+    const getActivity = vi.fn().mockResolvedValue({
+      bridges: deposits.map((deposit) => ({
+        bridge: { ...baseBridge, ...deposit, bridge_hash: sharedBridgeHash },
+        bridge_network_id: 0,
+        claim_status: 'pending',
+        creation_timestamp: 0,
+        last_updated_timestamp: 0
+      })),
+      warnings: []
     });
-    vi.stubGlobal('fetch', fetchMock);
 
-    const result = await fetchActivity({ baseUrl: 'https://proxy.example', fromAddress: '0xabc' });
+    const result = await fetchActivity({
+      aggregator: makeMockAggregator(getActivity),
+      fromAddress: '0xabc'
+    });
 
     expect(result.transactions).toHaveLength(5);
     expect(result.transactions.map((tx) => tx.transactionHash)).toEqual([
@@ -348,130 +245,33 @@ describe('fetchActivity', () => {
   });
 
   it('gives distinct hubUIDs to two deposits batched into one transaction', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      text: () =>
-        Promise.resolve(
-          JSON.stringify({
-            from_address: [],
-            bridges: [0, 1].map((depositCount) => ({
-              bridge: { ...baseBridge, tx_hash: '0xbatched', deposit_count: depositCount },
-              bridge_network_id: 0,
-              claimed: 'false',
-              creation_timestamp: 0,
-              last_updated_timestamp: 0
-            }))
-          })
-        )
+    const getActivity = vi.fn().mockResolvedValue({
+      bridges: [0, 1].map((depositCount) => ({
+        bridge: { ...baseBridge, tx_hash: '0xbatched', deposit_count: depositCount },
+        bridge_network_id: 0,
+        claim_status: 'pending',
+        creation_timestamp: 0,
+        last_updated_timestamp: 0
+      })),
+      warnings: []
     });
-    vi.stubGlobal('fetch', fetchMock);
 
-    const result = await fetchActivity({ baseUrl: 'https://proxy.example', fromAddress: '0xabc' });
+    const result = await fetchActivity({
+      aggregator: makeMockAggregator(getActivity),
+      fromAddress: '0xabc'
+    });
 
     expect(result.transactions.map((tx) => tx.hubUID)).toEqual(['0xbatched:0', '0xbatched:1']);
   });
 
-  it('keeps each L1-origin global_index exact when the wire sends it as a bare 2^64+ number', async () => {
-    // Two consecutive L1 deposits as the rc8 devnet actually reports them:
-    // global_index is an unquoted JSON number, 2^64 + deposit_count. A plain
-    // response.json() rounds both onto the identical 18446744073709551616 --
-    // which is what silently mis-built manual claims (see C13 /
-    // parseActivityResponse).
-    const wire = `{
-      "from_address": [],
-      "bridges": [
-        {
-          "bridge": { "tx_hash": "0xtx0", "amount": "1000", "block_num": 82, "block_pos": 0,
-            "block_timestamp": 0, "bridge_hash": "0xhash", "deposit_count": 0,
-            "destination_address": "0xdest", "destination_network": 1,
-            "global_index": 18446744073709551616, "leaf_type": 0, "metadata": "0x",
-            "origin_address": "0xorigin", "origin_network": 0, "to_address": "0xdest",
-            "txn_sender": "0xsender" },
-          "bridge_network_id": 0, "claimed": "false",
-          "creation_timestamp": 0, "last_updated_timestamp": 0
-        },
-        {
-          "bridge": { "tx_hash": "0xtx1", "amount": "1000", "block_num": 199, "block_pos": 0,
-            "block_timestamp": 0, "bridge_hash": "0xhash", "deposit_count": 1,
-            "destination_address": "0xdest", "destination_network": 1,
-            "global_index": 18446744073709551617, "leaf_type": 0, "metadata": "0x",
-            "origin_address": "0xorigin", "origin_network": 0, "to_address": "0xdest",
-            "txn_sender": "0xsender" },
-          "bridge_network_id": 0, "claimed": "false",
-          "creation_timestamp": 0, "last_updated_timestamp": 0
-        }
-      ]
-    }`;
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({ ok: true, text: () => Promise.resolve(wire) })
-    );
-
-    const result = await fetchActivity({ baseUrl: 'https://proxy.example', fromAddress: '0xabc' });
-
-    expect(result.transactions.map((tx) => tx.globalIndex)).toEqual([
-      '18446744073709551616',
-      '18446744073709551617'
-    ]);
-  });
-
-  it('throws with the server-provided message on a non-OK response', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: false,
-        status: 400,
-        json: () => Promise.resolve({ code: 400, message: 'invalid from_address' })
-      })
-    );
+  it('propagates a genuine aggregator failure (e.g. AggkitApiError) rather than swallowing it', async () => {
+    const getActivity = vi.fn().mockRejectedValue(new Error('invalid from_address'));
 
     await expect(
-      fetchActivity({ baseUrl: 'https://proxy.example', fromAddress: 'not-an-address' })
+      fetchActivity({
+        aggregator: makeMockAggregator(getActivity),
+        fromAddress: 'not-an-address'
+      })
     ).rejects.toThrow('invalid from_address');
-  });
-});
-
-describe('quotePrecisionUnsafeIntegers', () => {
-  it('quotes an integer no double can hold exactly, so its digits survive JSON.parse', () => {
-    // The live rc8 devnet value for an L1-origin deposit with deposit_count 1.
-    const wire = '{"global_index":18446744073709551617}';
-
-    expect(quotePrecisionUnsafeIntegers(wire)).toBe('{"global_index":"18446744073709551617"}');
-    expect(JSON.parse(quotePrecisionUnsafeIntegers(wire)).global_index).toBe(
-      '18446744073709551617'
-    );
-    // ...which a plain parse cannot do: it lands on 2^64, losing exactly the
-    // deposit_count that distinguishes consecutive L1 deposits.
-    expect(BigInt(JSON.parse(wire).global_index)).toBe(BigInt(2) ** BigInt(64));
-  });
-
-  it('leaves safely representable numbers, floats, exponents and negatives as sent', () => {
-    const wire = '{"a":0,"b":-12,"c":9007199254740991,"d":1.5,"e":-2.5e-3,"f":[1,2,3]}';
-
-    expect(quotePrecisionUnsafeIntegers(wire)).toBe(wire);
-  });
-
-  it('does not touch digits inside string values', () => {
-    // A real `warnings[].message`: a naive `": <digits>"` regex would rewrite
-    // the port here, corrupting the message.
-    const wire =
-      '{"warnings":[{"network_id":84,"message":"dial tcp 34.147.196.6:5577 12345678901234567890: no route"}]}';
-
-    expect(quotePrecisionUnsafeIntegers(wire)).toBe(wire);
-  });
-
-  it('passes an already-quoted large value straight through', () => {
-    const wire = '{"global_index":"18446744073709551617"}';
-
-    expect(quotePrecisionUnsafeIntegers(wire)).toBe(wire);
-  });
-
-  it('is not fooled by an escaped quote inside a string', () => {
-    const wire =
-      '{"message":"he said \\"12345678901234567890\\"","global_index":18446744073709551617}';
-
-    expect(quotePrecisionUnsafeIntegers(wire)).toBe(
-      '{"message":"he said \\"12345678901234567890\\"","global_index":"18446744073709551617"}'
-    );
   });
 });

@@ -9,7 +9,7 @@ import { useTokenBalance } from '@/app/hooks/useTokenBalance';
 import { getChainById } from '@/app/utils/chains';
 import { cn } from '@/app/utils/common';
 import { normalize } from '@/app/utils/format';
-import { formatTokenBalance, getTokenLogoBySymbol } from '@/app/utils/tokens';
+import { formatTokenBalance, getTokenLogoUrl } from '@/app/utils/tokens';
 
 interface TokenSelectorItemProps {
   token: Token;
@@ -57,7 +57,9 @@ export const TokenSelectorItem = ({ token, selectedToken, onSelect }: TokenSelec
       >
         <div className="flex items-center gap-3">
           <BadgeImageFallback
-            src={token.logoURI || getTokenLogoBySymbol(token.symbol)}
+            src={
+              token.logoURI || getTokenLogoUrl({ chainId: token.chainId, address: token.address })
+            }
             size="md"
             fallbackText={token.symbol}
           />

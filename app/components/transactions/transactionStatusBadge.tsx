@@ -6,6 +6,12 @@ import { AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
 interface TransactionStatusBadgeProps {
   status: TransactionStatus;
   className?: string;
+  // Overrides `status`'s usual label/icon with a neutral loading state --
+  // used right after a successful claim, while the row still reports its
+  // pre-claim status (typically READY_TO_CLAIM) because the next activity
+  // poll hasn't landed yet. See transactionsView.tsx's
+  // pendingClaimConfirmationIds.
+  isConfirming?: boolean;
 }
 
 const STATUS_CONFIG: Record<
@@ -41,8 +47,18 @@ const VARIANT_STYLES = {
   pending: 'bg-grey-light text-black border-border'
 };
 
-export const TransactionStatusBadge = ({ status, className }: TransactionStatusBadgeProps) => {
-  const config = STATUS_CONFIG[status];
+export const TransactionStatusBadge = ({
+  status,
+  className,
+  isConfirming
+}: TransactionStatusBadgeProps) => {
+  const config = isConfirming
+    ? {
+        label: 'Updating status…',
+        icon: <Loader2 size={16} className="animate-spin" />,
+        variant: 'pending' as const
+      }
+    : STATUS_CONFIG[status];
   const variantStyle = VARIANT_STYLES[config.variant];
 
   return (

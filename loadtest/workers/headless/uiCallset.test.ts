@@ -102,20 +102,20 @@ describe('activity cadence scheduler (DESIGN §9.1 P1, findings C1/C2)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Activity status derivation — DESIGN §9.2: text parse through
-// `quotePrecisionUnsafeIntegers`, ERROR status (finding C12), row identity
+// Activity status derivation — DESIGN §9.2: big-int-safe text parse
+// (`parseActivityText`, mirroring the SDK's `quoteGlobalIndex`), ERROR status (finding C12), row identity
 // tx_hash:deposit_count.
 // ---------------------------------------------------------------------------
 
 const L1_ORIGIN_GLOBAL_INDEX_DIGITS = '18446744073709551617'; // 2^64 + 1, past Number.MAX_SAFE_INTEGER.
 
 // Deliberately built as a plain JS object (the real wire shape — matching
-// `RawActivityItem`/`RawBridge` in app/services/activity.ts, which aren't
-// exported, so nothing here is type-checked against them) and
+// @agglayer/sdk's `AggkitActivityItem`, though nothing here is type-checked
+// against it) and
 // JSON.stringify'd, then patched so the huge `global_index` values land as
 // BARE JSON numbers (never quoted) — exactly how the live endpoint sends
 // them for an L1-origin deposit, and exactly what
-// `quotePrecisionUnsafeIntegers` must repair before `JSON.parse` sees them.
+// `parseActivityText` must repair before `JSON.parse` sees them.
 const GLOBAL_INDEX_SENTINEL_1 = '"__GLOBAL_INDEX_1__"';
 const GLOBAL_INDEX_SENTINEL_2 = '"__GLOBAL_INDEX_2__"';
 
@@ -144,7 +144,7 @@ const rawActivityFixture = (): string => {
           txn_sender: '0xffff000000000000000000000000000000000f'
         },
         bridge_network_id: 0,
-        claimed: 'true',
+        claim_status: 'claimed',
         creation_timestamp: 1_700_000_000,
         last_updated_timestamp: 1_700_000_000
       },
@@ -169,9 +169,9 @@ const rawActivityFixture = (): string => {
           txn_sender: '0xffff000000000000000000000000000000000f'
         },
         bridge_network_id: 0,
-        // claimed === 'error' -- must derive to the ERROR status, never a
+        // claim_status === 'error' -- must derive to the ERROR status, never a
         // falsy "not claimed" (DESIGN finding C12).
-        claimed: 'error',
+        claim_status: 'error',
         errors: { claim: 'isClaimed check failed' },
         creation_timestamp: 1_700_000_100,
         last_updated_timestamp: 1_700_000_100
@@ -194,12 +194,12 @@ describe('mapActivityResponseText (DESIGN §9.2)', () => {
     expect(rows[0].globalIndex).not.toBe(rows[1].globalIndex);
   });
 
-  it('derives CLAIMED from claimed:"true"', () => {
+  it('derives CLAIMED from claim_status:"claimed"', () => {
     const { rows } = mapActivityResponseText(rawActivityFixture());
     expect(rows[0].status).toBe('CLAIMED');
   });
 
-  it('derives ERROR (never a falsy \'not claimed\') from claimed:"error", carrying statusError', () => {
+  it('derives ERROR (never a falsy \'not claimed\') from claim_status:"error", carrying statusError', () => {
     const { rows } = mapActivityResponseText(rawActivityFixture());
     expect(rows[1].status).toBe('ERROR');
     expect(rows[1].status).not.toBe(false);

@@ -46,6 +46,20 @@ COPY . .
 # container instance with no rebuild. A container run with no real project
 # id mounted (or the baked default's placeholder) runs Reown AppKit in the
 # documented degraded `basic: true` mode -- see app/context/wallet.tsx.
+#
+# DEV_UI_BUILD_COMMIT / DEV_UI_BUILD_VERSION: forwarded to
+# scripts/writeVersionInfo.mjs (invoked by build:production) so the baked
+# public/version.json reflects the real commit and released version instead
+# of falling back to "unknown" / package.json's untouched placeholder. This
+# stage has no .git directory (see the HUSKY=0 comment above), so a build
+# pipeline that knows both -- e.g. docker-publish.yaml, which already
+# resolves the built SHA and the release/dispatch tag for image tagging --
+# must pass them in as build args; unset here (a plain `docker build .`)
+# writeVersionInfo.mjs falls back to "unknown" / package.json as before.
+ARG DEV_UI_BUILD_COMMIT
+ARG DEV_UI_BUILD_VERSION
+ENV DEV_UI_BUILD_COMMIT=${DEV_UI_BUILD_COMMIT}
+ENV DEV_UI_BUILD_VERSION=${DEV_UI_BUILD_VERSION}
 RUN pnpm run build:production
 
 # =============================================================================

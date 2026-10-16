@@ -17,7 +17,8 @@ describe('getTrackerStepLabel', () => {
     ['CertificatePending', 'Waiting for the certificate to settle'],
     ['WaitL1SettledGER', 'Waiting for settlement to confirm on L1'],
     ['WaitingGERInjection', 'Waiting for the exit root to reach Devnet L1'],
-    ['WaitingClaim', 'Finalizing claim data for Devnet L1'],
+    ['WaitingL1InfoLeafAvailable', 'Waiting until the claim proof can be generated'],
+    ['WaitingClaim', 'Waiting for the claim on Devnet L1'],
     ['Claimed', 'Claimed']
   ])('keeps the existing copy for %s', (stepName, expected) => {
     expect(getTrackerStepLabel(stepName, params)).toBe(expected);

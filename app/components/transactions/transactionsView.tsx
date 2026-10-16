@@ -1,6 +1,6 @@
 'use client';
 
-import type { TransactionStatus, Transaction } from '@/app/types/transaction';
+import type { ClaimExecutionResult, TransactionStatus, Transaction } from '@/app/types/transaction';
 
 import { ClaimResultModal } from '@/app/components/transactions/claimResultModal';
 import { getTransactionInitialStatus } from '@/app/components/transactions/intialStatus';
@@ -10,6 +10,7 @@ import { TransactionList } from '@/app/components/transactions/transactionList';
 import { Button } from '@/app/components/ui/button';
 import { Card } from '@/app/components/ui/card';
 import { Modal } from '@/app/components/ui/modal';
+import { ACTIVITY_PAGE_SIZE } from '@/app/constants/activity';
 import { useAppMode } from '@/app/context/appMode';
 import { useRefetch } from '@/app/context/refetch';
 import { useWallet } from '@/app/context/walletContext';
@@ -40,14 +41,23 @@ export const TransactionsView = () => {
   // whatever Transaction object it's handed.
   const [selectedTransactionId, setSelectedTransactionId] = useState<string | null>(null);
   const [warningsModalOpen, setWarningsModalOpen] = useState(false);
+  // hubUIDs whose claim just succeeded, kept flagged (button hidden, status
+  // badge shows a loading state) until the next activity poll actually
+  // confirms it -- see the cleanup effect below and
+  // transactionListItem.tsx's isPendingClaimConfirmation. Needed because
+  // useClaimExecution's own success state clears on modal close/reset, well
+  // before the row's real status (still READY_TO_CLAIM from the last poll)
+  // catches up.
+  const [pendingClaimConfirmationIds, setPendingClaimConfirmationIds] = useState<Set<string>>(
+    () => new Set()
+  );
 
   const queryFilters = useMemo(
     () => ({
       fromAddress: address,
       status: filters.status,
       updatedSince: filters.updatedSince,
-      order: 'desc' as const,
-      limit: 20
+      limit: ACTIVITY_PAGE_SIZE
     }),
     [address, filters]
   );
@@ -61,6 +71,7 @@ export const TransactionsView = () => {
     warnings,
     isLoading,
     isFetchingNextPage,
+    fetchNextPageError,
     hasNextPage,
     fetchNextPage,
     error,
@@ -80,14 +91,41 @@ export const TransactionsView = () => {
     return () => clearTimeout(timeout);
   }, [aggressiveRefetch, clearAggressiveRefetch]);
 
-  const handleClaimComplete = useCallback(() => {
-    triggerAggressiveRefetch();
-    // useReadyToClaimCount (header badge) shares this exact queryKey
-    // (['activity', mode, chainId, address], see useTransactions/
-    // useReadyToClaimCount) so refetching here also refreshes the badge --
-    // no separate invalidation needed.
-    void refetch();
-  }, [refetch, triggerAggressiveRefetch]);
+  const handleClaimComplete = useCallback(
+    (result: ClaimExecutionResult) => {
+      triggerAggressiveRefetch();
+      if (result.status === 'success') {
+        setPendingClaimConfirmationIds((prev) => {
+          const next = new Set(prev);
+          next.add(result.transactionId);
+          return next;
+        });
+      }
+      // useTransactions' refetch also invalidates useReadyToClaimCount's
+      // query, so the header badge refreshes along with the list.
+      void refetch();
+    },
+    [refetch, triggerAggressiveRefetch]
+  );
+
+  // Clears a row's "pending confirmation" flag once a poll actually reflects
+  // the claim -- its status moved off READY_TO_CLAIM (typically to CLAIMED),
+  // or it dropped out of the current filtered page entirely.
+  useEffect(() => {
+    setPendingClaimConfirmationIds((prev) => {
+      if (prev.size === 0) return prev;
+      let changed = false;
+      const next = new Set(prev);
+      for (const id of prev) {
+        const tx = allTransactions.find((transaction) => transaction.hubUID === id);
+        if (!tx || tx.status !== 'READY_TO_CLAIM') {
+          next.delete(id);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [allTransactions]);
 
   const ensureCorrectChain = useEnforceCorrectChain();
   const claimExecution = useClaimExecution({
@@ -161,7 +199,10 @@ export const TransactionsView = () => {
           </p>
           {totalCount > 0 && (
             <p className="text-base font-semibold text-muted">
-              Total transactions: <span className="text-black">{totalCount}</span>
+              Total transactions:{' '}
+              <span className="text-black" data-test-id="transactions-total">
+                {allTransactions.length} / {totalCount}
+              </span>
             </p>
           )}
         </div>
@@ -276,12 +317,14 @@ export const TransactionsView = () => {
           isLoading={isLoading}
           isFetchingNextPage={isFetchingNextPage}
           hasNextPage={hasNextPage}
+          loadMoreError={fetchNextPageError}
           onLoadMore={() => fetchNextPage()}
           onClaim={handleClaim}
           onSelect={handleSelectTransaction}
           claimingTxId={claimingTxId}
           claimStep={claimStep}
           isAnyClaiming={isAnyClaiming}
+          pendingClaimConfirmationIds={pendingClaimConfirmationIds}
         />
       )}
 
@@ -323,6 +366,9 @@ export const TransactionsView = () => {
         onClaim={handleClaim}
         claimStep={selectedTransaction?.hubUID === claimingTxId ? claimStep : undefined}
         isAnyClaiming={isAnyClaiming}
+        isPendingClaimConfirmation={
+          selectedTransaction ? pendingClaimConfirmationIds.has(selectedTransaction.hubUID) : false
+        }
       />
 
       <ClaimResultModal

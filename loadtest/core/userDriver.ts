@@ -147,9 +147,9 @@ export interface UserDriver {
   init(): Promise<void>;
   // approve? + bridgeAsset.
   bridge(hop: HopSpec): Promise<BridgeSubmission>;
-  // The UI's activity poll — parsed with `parseActivityResponse` semantics
-  // (DESIGN §9.2: text + `quotePrecisionUnsafeIntegers`, row identity
-  // `tx_hash:deposit_count`, READY_TO_CLAIM derived client-side).
+  // The UI's activity poll — parsed with the SDK's getActivity semantics
+  // (DESIGN §9.2: text + `global_index` quoting, row identity
+  // `tx_hash:deposit_count`, status from the tracker's `claim_status`).
   observeActivity(): Promise<ObservedRow[]>;
   claim(hop: HopSpec, row: ObservedRow): Promise<ClaimSubmission>;
   readState(hop: HopSpec, row: ObservedRow | null): Promise<HopReadState>;

@@ -1,19 +1,18 @@
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vitest/config';
 
+const rootDir = path.dirname(fileURLToPath(import.meta.url));
+
 export default defineConfig({
   plugins: [react()],
-  // Mirrors tsconfig.json's `@/*` -> `./*` path mapping (Next.js resolves
-  // this natively; Vite/Vitest does not without an explicit alias). Needed
-  // so tests can import app code the same way the app itself does — the
-  // only pre-existing test (app/utils/address.test.ts) sidestepped this by
-  // using a relative import, which isn't viable once a hook/component under
-  // test pulls in its own `@/app/...` dependencies (S8).
   resolve: {
+    // Mirrors tsconfig.json's "@/*": ["./*"] so tests can import modules that use the
+    // `@/` alias (e.g. app/utils/tokens.ts importing '@/app/utils/bigNumber').
     alias: {
-      '@': path.resolve(__dirname, '.')
+      '@': rootDir
     }
   },
   test: {

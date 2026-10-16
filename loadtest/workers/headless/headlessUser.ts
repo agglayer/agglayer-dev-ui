@@ -383,7 +383,7 @@ export class HeadlessUser implements UserDriver {
     for (const chain of this.chains) {
       if (chain.networkId !== 0) networks[chain.networkId] = this.aggkitProxyUrl;
     }
-    this.aggregator = new AggkitBridgeAggregator({ networks });
+    this.aggregator = new AggkitBridgeAggregator({ networks, aggkitProxyUrl: this.aggkitProxyUrl });
 
     this.runtimes = new Map(
       this.chains.map((chain) => {
@@ -947,7 +947,10 @@ export class HeadlessUser implements UserDriver {
                 result.injectedLeafIndex = result.l1InfoTreeIndex;
               } else {
                 result.polls += 1;
-                const probe = await clientFor(destinationNetwork, sourceNetwork).getInjectedL1InfoLeaf({
+                const probe = await clientFor(
+                  destinationNetwork,
+                  sourceNetwork
+                ).getInjectedL1InfoLeaf({
                   networkId: destinationNetwork,
                   leafIndex: result.l1InfoTreeIndex as number
                 });

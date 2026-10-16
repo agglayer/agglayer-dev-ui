@@ -4,14 +4,19 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Since S-review 2026-08-28, useReadyToClaimCount reads from the same
-// GET /tracker/v1/activity/from/{address} call useTransactions makes (see
-// app/services/activity.ts) instead of AggkitBridgeAggregator's fan-out, so
-// this suite mocks `fetch` directly rather than useAggkitAggregator.
+import type { AggkitBridgeAggregator } from '@agglayer/sdk';
+
+// useReadyToClaimCount calls AggkitBridgeAggregator.getActivity with
+// filterBridges: 'readyToClaim' and reads the total off `count`, so this suite
+// mocks useAggkitAggregator directly.
 vi.mock('@/app/context/appMode', () => ({
   useAppMode: vi.fn()
 }));
+vi.mock('@/app/context/aggLayerSdk', () => ({
+  useAggkitAggregator: vi.fn()
+}));
 
+import { useAggkitAggregator } from '@/app/context/aggLayerSdk';
 import { useAppMode } from '@/app/context/appMode';
 
 import { useReadyToClaimCount } from './useReadyToClaimCount';
@@ -21,33 +26,7 @@ const wrapper = ({ children }: { children: ReactNode }) => {
   return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
 };
 
-const rawBridge = (bridgeHash: string) => ({
-  tx_hash: '0x1',
-  amount: '1',
-  block_num: 1,
-  block_pos: 0,
-  block_timestamp: 0,
-  bridge_hash: bridgeHash,
-  deposit_count: 1,
-  destination_address: '0xabc',
-  destination_network: 1,
-  global_index: '1',
-  leaf_type: 0,
-  metadata: '0x',
-  origin_address: '0x0',
-  origin_network: 0,
-  to_address: '0xabc',
-  txn_sender: '0xabc'
-});
-
-const mockFetchOk = (body: unknown) =>
-  vi.stubGlobal(
-    'fetch',
-    vi.fn().mockResolvedValue({
-      ok: true,
-      text: () => Promise.resolve(JSON.stringify(body))
-    })
-  );
+const mockGetActivity = vi.fn();
 
 describe('useReadyToClaimCount', () => {
   beforeEach(() => {
@@ -55,58 +34,33 @@ describe('useReadyToClaimCount', () => {
       mode: 'mainnet',
       config: { aggkitBridgeApis: { 1: 'https://proxy.example' } }
     } as unknown as ReturnType<typeof useAppMode>);
+    vi.mocked(useAggkitAggregator).mockReturnValue({
+      getActivity: mockGetActivity
+    } as unknown as AggkitBridgeAggregator);
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
+    mockGetActivity.mockReset();
   });
 
-  it('counts only bridges that are unclaimed and waiting on just the claim step', async () => {
-    mockFetchOk({
-      from_address: [],
-      bridges: [
-        // claimed -- not counted
-        {
-          bridge: rawBridge('0x1'),
-          bridge_network_id: 0,
-          claimed: 'true',
-          creation_timestamp: 0,
-          last_updated_timestamp: 0
-        },
-        // unclaimed, current step is WaitingClaim/inProgress -- counted
-        {
-          bridge: rawBridge('0x2'),
-          bridge_network_id: 0,
-          claimed: 'false',
-          creation_timestamp: 0,
-          last_updated_timestamp: 0,
-          tracking: {
-            tracking_status: 'running',
-            network_id: 0,
-            tx_hash: '0x2',
-            bridge_status: null,
-            step_index: 0,
-            all_steps: [{ step_index: 0, step_name: 'WaitingClaim', status: 'inProgress' }],
-            error: null
-          }
-        },
-        // unclaimed, no tracking yet -- not counted (PENDING, not READY_TO_CLAIM)
-        {
-          bridge: rawBridge('0x3'),
-          bridge_network_id: 0,
-          claimed: 'false',
-          creation_timestamp: 0,
-          last_updated_timestamp: 0
-        }
-      ]
-    });
+  it('asks the tracker for the ready-to-claim total instead of loading the whole history', async () => {
+    // The badge needs only the total: a page of size 1 filtered server-side
+    // to readyToClaim, with the answer read off `count`.
+    mockGetActivity.mockResolvedValue({ bridges: [], count: 7, warnings: [] });
 
     const { result } = renderHook(() => useReadyToClaimCount({ chainId: 1, address: '0xabc' }), {
       wrapper
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data).toBe(1);
+    expect(result.current.data).toBe(7);
     expect(result.current.isError).toBe(false);
+    expect(mockGetActivity).toHaveBeenCalledTimes(1);
+    expect(mockGetActivity).toHaveBeenCalledWith({
+      fromAddress: '0xabc',
+      filterBridges: 'readyToClaim',
+      pageNumber: 1,
+      pageSize: 1
+    });
   });
 });

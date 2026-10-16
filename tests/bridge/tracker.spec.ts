@@ -60,12 +60,8 @@ const L2_TO_L2_STEP_LABEL_PATTERNS = [
   /Waiting for the certificate to settle/,
   /Waiting for settlement to confirm on L1/,
   /Waiting for the exit root to reach .+/,
-  // WaitingL1InfoLeafAvailable has no label in app/utils/trackerSteps.ts yet
-  // (the SDK's AggkitBridgeStep union lacks it, so the app renders "Unrecognized
-  // step"); deliberately not pinned here -- step identity is asserted via
-  // data-step above.
-  /.+/,
-  /Finalizing claim data for .+/,
+  /Waiting until the claim proof can be generated/,
+  /Waiting for the claim on .+/,
   /Claimed/
 ];
 
@@ -294,7 +290,9 @@ test('L2-1→L2-2 tracker: 8-step bar, modal detail mid-flight, disappears on Co
   // already warm from the bar above -- no extra wait needed for it to
   // populate.
   await bridgePage.openTransactionDetails(transactionHash);
-  await expect(bridgePage.trackerDetail).toBeVisible();
+  // Reaches TrackerDetail whether the row is still in flight or already
+  // CLAIMED ("Show bridge steps" button) -- see BridgePage.revealTrackerDetail.
+  await bridgePage.revealTrackerDetail();
 
   for (const [index, pattern] of L2_TO_L2_STEP_LABEL_PATTERNS.entries()) {
     await expect(bridgePage.getTrackerDetailStep(index)).toContainText(pattern);

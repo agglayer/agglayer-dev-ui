@@ -396,7 +396,10 @@ export class BrowserUser implements UserDriver {
       const networks: Record<number, string> = {};
       for (const chain of this.chains)
         if (chain.networkId !== 0) networks[chain.networkId] = this.aggkitProxyUrl;
-      this.aggregator = new AggkitBridgeAggregator({ networks });
+      this.aggregator = new AggkitBridgeAggregator({
+        networks,
+        aggkitProxyUrl: this.aggkitProxyUrl
+      });
 
       await this.openFreshPage();
     });

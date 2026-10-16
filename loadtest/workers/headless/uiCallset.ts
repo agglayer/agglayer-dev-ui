@@ -6,22 +6,25 @@
 //
 // Two things are deliberately REUSED rather than re-derived, per DESIGN
 // §9.2's mandatory parity rules:
-//  - `parseActivityResponse` / `toTransaction` (app/services/activity.ts) —
-//    the big-int-safe text parse and the exact PENDING/READY_TO_CLAIM/
-//    CLAIMED/ERROR status derivation the UI itself uses. Both are pure
-//    functions with no React/Next dependency (verified: their only runtime
-//    imports are local, their `@/app/...`/`@agglayer/sdk` imports are
-//    `import type`, erased at compile time) — safe to import standalone.
+//  - `toTransaction` (app/services/activity.ts) — the exact PENDING/
+//    READY_TO_CLAIM/CLAIMED/ERROR status derivation the UI itself uses. A
+//    pure function with no React/Next dependency (its `@/app/...`/
+//    `@agglayer/sdk` imports are `import type`, erased at compile time) —
+//    safe to import standalone. The big-int-safe text parse is NOT reusable
+//    any more: the UI now gets parsed rows from the SDK's
+//    `AggkitBridgeAggregator.getActivity`, whose `quoteGlobalIndex` helper is
+//    not exported, so `parseActivityText` below mirrors it byte for byte.
 //  - `toRowKey` (loadtest/core/types.ts) — so our mapped `rowKey` is
 //    byte-identical to the ring core's own `tx_hash:deposit_count` identity.
 import { AsyncLocalStorage } from 'node:async_hooks';
 
-import type { ActivityWarning } from '../../../app/services/activity';
+import type { AggkitActivityResult, AggkitActivityWarning } from '@agglayer/sdk';
+
 import type { ObservedRow } from '../../core/types';
 import type { DriverMode } from '../../core/userDriver';
 import type { Collector, HttpOrigin } from '../../metrics/collector';
 
-import { parseActivityResponse, toTransaction } from '../../../app/services/activity';
+import { toTransaction } from '../../../app/services/activity';
 import { toRowKey } from '../../core/types';
 import { isTokenLikeSegment } from '../../wallets/redact';
 
@@ -559,18 +562,28 @@ export const installTimingFetch = (
 
 // ---------------------------------------------------------------------------
 // Activity row mapping — DESIGN §9.2: parse as text through
-// `parseActivityResponse` (big-int safe), reuse `toTransaction`'s status
+// `parseActivityText` (big-int safe), reuse `toTransaction`'s status
 // derivation, then map onto the ring core's own `ObservedRow`/`toRowKey`
 // identity (never `bridge_hash`, never a bare-number `global_index`).
 // ---------------------------------------------------------------------------
 
 export interface MappedActivity {
   rows: ObservedRow[];
-  warnings: ActivityWarning[];
+  warnings: AggkitActivityWarning[];
 }
 
+// Same parse the UI's rows go through: @agglayer/sdk's (unexported)
+// `quoteGlobalIndex` + `JSON.parse` in `AggkitBridgeClient.getActivity`.
+// Quoting every bare `global_index` keeps an L1-origin index (2^64 +
+// deposit_count, past Number.MAX_SAFE_INTEGER) digit-exact.
+const parseActivityText = (text: string): Pick<AggkitActivityResult, 'bridges' | 'warnings'> =>
+  JSON.parse(text.replace(/"global_index":\s*(-?\d+)/g, '"global_index":"$1"')) as Pick<
+    AggkitActivityResult,
+    'bridges' | 'warnings'
+  >;
+
 export const mapActivityResponseText = (text: string): MappedActivity => {
-  const raw = parseActivityResponse(text);
+  const raw = parseActivityText(text);
   const rows: ObservedRow[] = raw.bridges.map((bridge) => {
     const tx = toTransaction(bridge);
     const transactionHash = tx.transactionHash as `0x${string}`;

@@ -113,7 +113,7 @@ describe('HeadlessUser.observeActivity — unproven tracker `claimed` is not tru
             txn_sender: USER
           },
           bridge_network_id: 0,
-          claimed: 'true',
+          claim_status: 'claimed',
           ...(withClaimObject
             ? { claim: { tx_hash: '0xc1a1', block_num: 7, block_timestamp: 8, global_index: '5' } }
             : {}),

@@ -14,7 +14,7 @@ import { useTokenMetadata } from '@/app/hooks/useTokenMetadata';
 import { shortenAddress } from '@/app/utils/address';
 import { getChainByNetworkId } from '@/app/utils/chains';
 import { formatDateTime } from '@/app/utils/date';
-import { getTokenLogoBySymbol } from '@/app/utils/tokens';
+import { getTokenLogoUrl } from '@/app/utils/tokens';
 import { formatTransactionAmount, isNativeToken } from '@/app/utils/transaction';
 import { ExternalLink, Loader2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -27,6 +27,10 @@ interface TransactionDetailsModalProps {
   onClaim?: (transaction: Transaction) => void;
   claimStep?: ClaimStep;
   isAnyClaiming?: boolean;
+  // See transactionListItem.tsx's isPendingClaimConfirmation: true right
+  // after this transaction's claim succeeded, until the next activity poll
+  // confirms it (status moving off READY_TO_CLAIM).
+  isPendingClaimConfirmation?: boolean;
 }
 
 export const TransactionDetailsModal = ({
@@ -36,7 +40,8 @@ export const TransactionDetailsModal = ({
   isDifferentAddress,
   onClaim,
   claimStep,
-  isAnyClaiming
+  isAnyClaiming,
+  isPendingClaimConfirmation
 }: TransactionDetailsModalProps) => {
   const tx = transaction;
   const { getToken } = useTokens();
@@ -66,7 +71,9 @@ export const TransactionDetailsModal = ({
     : localToken?.symbol || tokenMetadata?.symbol || '';
   const tokenLogo = isNative
     ? originChain?.nativeCurrency?.logoURI || originChain?.icon
-    : localToken?.logoURI || tokenMetadata?.logoURI || getTokenLogoBySymbol(tokenSymbol);
+    : localToken?.logoURI ||
+      tokenMetadata?.logoURI ||
+      getTokenLogoUrl({ chainId: originChain?.id, address: tx?.originTokenAddress });
   const formattedAmount = tx ? formatTransactionAmount(tx.amount, decimals) : '-';
 
   // A completed row has no embedded tracking to show automatically (see
@@ -82,7 +89,7 @@ export const TransactionDetailsModal = ({
 
   if (!tx) return null;
 
-  const isClaimable = tx.status === 'READY_TO_CLAIM';
+  const isClaimable = tx.status === 'READY_TO_CLAIM' && !isPendingClaimConfirmation;
 
   return (
     <Modal open={open} onClose={onClose} title="Transaction Details" contentClassName="space-y-6">
@@ -210,6 +217,16 @@ export const TransactionDetailsModal = ({
               'Claim tokens'
             )}
           </Button>
+        )}
+
+        {isPendingClaimConfirmation && (
+          <div
+            className="flex items-center justify-center gap-2 text-sm text-grey"
+            data-test-id="claim-confirmation-loading"
+          >
+            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+            Updating status…
+          </div>
         )}
       </div>
     </Modal>
