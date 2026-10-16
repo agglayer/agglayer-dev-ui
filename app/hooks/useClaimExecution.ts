@@ -16,6 +16,7 @@ import { fetchClaimProof } from '@/app/services/claimProof';
 import { isValidEthereumAddress } from '@/app/utils/address';
 import {
   buildClaimAssetParams,
+  CLAIM_GAS_BUFFER,
   mapTransactionRequest,
   resolveLeafIndex
 } from '@/app/utils/transaction';
@@ -113,7 +114,7 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
         const claimTx = await bridge.buildClaimAsset(claimParams, walletAddress);
 
         localClaimHash = await sendTransactionAsync({
-          ...mapTransactionRequest(claimTx),
+          ...mapTransactionRequest(claimTx, { gasBuffer: CLAIM_GAS_BUFFER }),
           account: senderAccount,
           chainId: destinationChainId
         });

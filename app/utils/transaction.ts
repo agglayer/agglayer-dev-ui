@@ -23,7 +23,24 @@ export const isNativeToken = (address: string) => {
   return address === '0x0000000000000000000000000000000000000000';
 };
 
-export const mapTransactionRequest = (params: TransactionParams) => {
+// Extra gas added on top of the SDK's eth_estimateGas for a claimAsset send.
+// Load test 2026-10-16 (history/2026-10-16__bali-all__bridge-loadtest-ramp-82-85-saturation.md,
+// finding A): 4 claims ran out of gas because the bufferless estimate for a
+// first-mint wrapped-token claim (202,542) was taken before concurrent claims
+// changed state; execution then needed ~228k, up to ~245.5k. Additive rather
+// than a percentage because the shortfall is fixed storage/mint cost, not
+// proportional to the estimate. +60,000 gives 262,542 for that case, ~17k
+// above the worst gas seen. Gas limit is a cap and unused gas is refunded, so
+// the only cost is that the wallet must hold gasLimit * maxFeePerGas up front.
+export const CLAIM_GAS_BUFFER = BigInt(60_000);
+
+// `options.gasBuffer` opts a call into forwarding the SDK's `gas` plus the
+// buffer. Without it (approve, bridge) or when the SDK supplies no `gas`, no
+// `gas` key is emitted and viem/the wallet estimates as before.
+export const mapTransactionRequest = (
+  params: TransactionParams,
+  options?: { gasBuffer?: bigint }
+) => {
   const to = isValidEthereumAddress(params.to) ? params.to : undefined;
   if (!to) throw new Error('Invalid transaction recipient');
 
@@ -33,7 +50,10 @@ export const mapTransactionRequest = (params: TransactionParams) => {
   return {
     to,
     data,
-    value: toBigInt(params.value)
+    value: toBigInt(params.value),
+    ...(options?.gasBuffer !== undefined && params.gas
+      ? { gas: BigInt(params.gas) + options.gasBuffer }
+      : {})
   };
 };
 
