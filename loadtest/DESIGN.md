@@ -147,6 +147,7 @@ the schema may not have defaults that are lost on write-back.
 | `browser.headless` | bool | no | `true` | — |
 | `browser.trace` | bool | no | `false` | **Not yet wired up (R25, loadtest/REVIEW.md)** — accepted by the schema but no call site reads it (no `context.tracing.start()`/`stop()` anywhere in `loadtest/`). Whoever wires it up must route the Playwright trace file through redaction first: a trace at higher verbosity records the literal arguments passed to `context.addInitScript(fn, key)` — i.e. the raw per-user private key. |
 | `browser.recycleContextAfterLaps` | int ≥1 | no | `10` | §7.4 |
+| `browser.corsRelay` | bool | no | off (absent) | §8.1 — local-only CORS shim for browser mode; also `run --cors-relay` |
 | `timeouts.*` | ints (ms) | no | §3.3 table | every key has a default; all overridable |
 | `gas.bridgeGasOffset` | int ≥0 | no | `300000` | headless only (§9.4) |
 | `gas.claimGasOffset` | int ≥0 | no | `60000` | headless only, claim send only (§9.4); additive margin on the SDK claim `gas` (or one `eth_estimateGas`); `0` = viem's own estimate, as the UI does |
@@ -1100,6 +1101,25 @@ The generated `config.json` must set the `autoclaim` block to the same values
 as the loadtest config's `autoclaim` map — otherwise the browser users' gate
 (`useAutoclaimGate`) and the headless users' gate (§3.4) would use different
 `waitMs` values and the two modes would not be comparable. A test asserts this.
+
+### 8.1 Optional local CORS relay (`browser.corsRelay`)
+
+The page calls the proxy cross-origin, and the shared proxy's CORS allowlist only
+matches its own domain family, so a UI served from a local `uiBaseUrl` can't read
+`tracker/activity`. With `browser.corsRelay: true` (`run --cors-relay`; off by default,
+absent from the config means off) `run` starts `ui/corsRelay.ts` — a forwarder bound to
+`127.0.0.1` on a random port — **before** the UI build and passes its URL to `buildUi`
+as the proxy URL (`NEXT_PUBLIC_AGGKIT_PROXY` and the generated `config.json`'s
+`aggkitProxy`). Only the page is redirected: `aggkitProxyUrl` itself, the harness's tracker
+polling and every headless call are unchanged, and the relay's origin is added to the
+browser driver's known hosts so page traffic through it is still classified as proxy
+traffic. The relay forwards method/path/query/body/headers unchanged (dropping `Host`,
+`Origin`, `Referer` and hop-by-hop headers), answers `OPTIONS` itself, replaces any
+upstream CORS headers, grants CORS only to the UI's own origin and rejects non-loopback
+`Host` headers. It has no authentication and is a measurement-path hop that real
+deployments do not have (their UI and proxy are on allowlisted domains), so browser
+latencies recorded through it include one extra local hop. It cannot be combined with an
+already-served UI (`run` refuses). Torn down with the run.
 
 ---
 

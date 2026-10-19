@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import type { LoadtestConfig } from './config/schema';
 import type { ResultsJson } from './metrics/report';
 
+import { applyCorsRelayFlag } from './config/corsRelayFlag';
 import { deriveDevnetConfig } from './config/deriveDevnet';
 import {
   checkOperationalConstraints,
@@ -43,7 +44,7 @@ const printUsage = (): void => {
       '  pnpm loadtest build-ui [<path>]',
       '  pnpm loadtest serve-ui [<path>] [--out <dir>]',
       '  pnpm loadtest run [--config <path>] [--users N] [--browser N] [--rate Y]',
-      '                    [--minutes Z] [--assets eth,erc20] [--fund]',
+      '                    [--minutes Z] [--assets eth,erc20] [--fund] [--cors-relay]',
       '                    [--i-know-this-is-mainnet] [--out <dir>]',
       '  pnpm loadtest report --dir <dir> [--html] [--html-out <file>] [--max-bytes N]',
       '  pnpm loadtest campaign-report --out <file.html> --run <label>=<dir>[,<dir>] [--run ...]',
@@ -352,6 +353,8 @@ const runRun = async (argv: string[]): Promise<void> => {
     }
     config = { ...config, load: { ...config.load, durationMinutes: minutes } };
   }
+
+  config = applyCorsRelayFlag(config, hasFlag(argv, '--cors-relay'));
 
   const activeAssetIndices = parseAssetsFlag(argv, config);
 

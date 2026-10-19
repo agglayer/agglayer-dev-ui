@@ -215,6 +215,7 @@ export const CONFIG_KEY_POLICY: Readonly<Record<string, ConfigKeyPolicy>> = {
   'browser.headless': 'show',
   'browser.trace': 'show',
   'browser.recycleContextAfterLaps': 'show',
+  'browser.corsRelay': 'show',
   'timeouts.txReceiptMs': 'show',
   'timeouts.appearsInActivityMs': 'show',
   'timeouts.readyToClaimMs': 'show',
@@ -332,7 +333,8 @@ export const allowlistedConfigView = (
       'contextsPerBrowser',
       'headless',
       'trace',
-      'recycleContextAfterLaps'
+      'recycleContextAfterLaps',
+      'corsRelay'
     ]),
     timeouts: pickDefined(asRecord(c.timeouts), [
       'txReceiptMs',

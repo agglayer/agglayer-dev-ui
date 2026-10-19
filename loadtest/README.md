@@ -192,7 +192,7 @@ devnet example with provenance, §2.4 this testnet example with provenance).
 | `preflight [<path>]` | Assert per-user gas on every ring chain, asset budget on the ring's origin chain, allowance state, both-sides `sync-status`, tracker health | `--users N` |
 | `build-ui [<path>]` | Build a standalone E2E-enabled static export (`out/`) without touching the repo's committed `config.json` | — |
 | `serve-ui [<path>]` | Serve a `build-ui` export on the config's `uiBaseUrl` until interrupted | `--out <dir>` |
-| `run` | Full pipeline: load+validate config -> preflight -> (fund if `--fund`) -> serve UI if needed -> drive workers -> write report | `--config <path>`, `--users N`, `--browser N`, `--rate Y`, `--minutes Z`, `--assets eth,erc20`, `--fund` (see the warning in Funding & safety), `--i-know-this-is-mainnet`, `--out <dir>` |
+| `run` | Full pipeline: load+validate config -> preflight -> (fund if `--fund`) -> serve UI if needed -> drive workers -> write report | `--config <path>`, `--users N`, `--browser N`, `--rate Y`, `--minutes Z`, `--assets eth,erc20`, `--fund` (see the warning in Funding & safety), `--cors-relay` (see [Browser mode and CORS](#browser-mode-and-cors-opt-in-local-relay)), `--i-know-this-is-mainnet`, `--out <dir>` |
 | `report` | Re-render `summary.md` (byte-identical to the original) **and** `report.html` from an existing run directory's `results.json` + `activity.ndjson` | `--dir <dir>` (required), `--html` (write only the HTML, leave `summary.md` alone), `--html-out <file>` (default `<dir>/report.html`), `--max-bytes N` (size cap, default 4194304) |
 | `campaign-report` | Render one roll-up page comparing several runs (e.g. a ramp's stages, or pump-off vs pump-on) | `--out <file.html>` (required), `--run <label>=<dir>[,<dir>]` (repeatable; several dirs under one label are pooled, e.g. the I and J rings of one stage) |
 | `check-stop` | Read-only evaluation of stop criteria SC1-SC13 over a live or finished run. Sends no signal, always exits 0 | `--dir <out dir>` (required, repeatable), `--config <path>`, `--json` |
@@ -896,6 +896,38 @@ tool bug.
     or a larger lag still fail); each tolerated side prints a `sync tolerance: ...`
     line. Unset (default `0`) keeps the strict check. A non-integer or negative
     value fails with `PREFLIGHT_SYNC_LAG_INVALID`. Not a secret; no credentials involved.
+
+## Browser mode and CORS (opt-in local relay)
+
+In browser mode the page reads tracker activity from the aggkit proxy cross-origin, so
+the proxy must send CORS headers for the page's origin. The shared proxies only allow
+their own domain family (e.g. `https://*.polygon.technology`), so a UI served from the
+default local `uiBaseUrl` (`http://127.0.0.1:<port>`) can load, send transactions and
+bridge, but cannot read tracker activity — the lap then fails with
+`timeout_appears_in_activity`. Headless users are unaffected (no browser, no CORS).
+
+- **When to use the relay:** local browser-mode runs against a shared proxy whose CORS
+  allowlist does not include the origin the UI is served from. Enable it with
+  `run --cors-relay` or `"browser": { "corsRelay": true }`. It is **off by default**.
+- **What it does:** `run` starts a forwarder on `127.0.0.1` (random port), builds the UI
+  with that URL as its proxy, and shuts the forwarder down when the run ends (including on
+  SIGINT or a failed run). It forwards method, path, query, body and headers to
+  `aggkitProxyUrl` unchanged (except `Host`, `Origin` and `Referer`), answers `OPTIONS`
+  preflights itself, and replaces the response's CORS headers with ones for the UI's own
+  origin. The harness's own tracker polling, and all headless traffic, still go straight
+  to the real proxy. It logs one `local-only CORS shim` line at start-up and the
+  `browser.corsRelay: true` setting appears in the run's `results.json`.
+- **Not needed in production-style deployments:** where the dev-ui is served under the
+  allowlisted domain (e.g. `agglayer-dev-ui-devnet.polygon.technology` against
+  `aggkit-proxy-devnet.polygon.technology`) the browser's request is cross-origin but
+  already allowlisted, so run without the relay.
+- **Security:** the relay adds **no authentication**. It only binds loopback, rejects
+  non-loopback `Host` headers and sends CORS headers only for the UI's own origin — do not
+  forward its port, bind it elsewhere or leave it running. It cannot be applied to a UI
+  that is already being served (the relay URL is baked into the build `run` makes), so
+  `run` refuses `corsRelay` when something already answers on `uiBaseUrl`.
+- **Cost:** the proxy URL is part of the UI build, and the relay port is random, so a
+  relay run does a fresh UI build each time instead of reusing the build cache.
 
 ## Two dev-ui changes this branch makes
 

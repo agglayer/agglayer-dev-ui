@@ -261,7 +261,13 @@ const browserSchema = z
     contextsPerBrowser: z.number().int().min(1).max(8).default(8),
     headless: z.boolean().default(true),
     trace: z.boolean().default(false),
-    recycleContextAfterLaps: z.number().int().min(1).default(10)
+    recycleContextAfterLaps: z.number().int().min(1).default(10),
+    // Opt-in local CORS shim for browser mode (loadtest/ui/corsRelay.ts): the
+    // built UI is pointed at a loopback forwarder that adds CORS headers in
+    // front of `aggkitProxyUrl`. Only for local runs whose UI origin is not in
+    // the proxy's CORS allowlist. Deliberately optional with NO default, so a
+    // run that doesn't use it carries no new field in its report.
+    corsRelay: z.boolean().optional()
   })
   .strict()
   .default({ contextsPerBrowser: 8, headless: true, trace: false, recycleContextAfterLaps: 10 });

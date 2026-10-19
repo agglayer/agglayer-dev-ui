@@ -241,6 +241,8 @@ export interface BrowserUserOptions {
   /** Same shape/role as `HeadlessUserOptions.assets` — resolves `hop.assetIndex` to `originNetworkId`. */
   assets?: readonly LoadtestAsset[];
   aggkitProxyUrl: string;
+  /** Extra origins whose page traffic counts as known-host traffic for timing -- the local CORS relay's origin, when enabled (the page then talks to it instead of `aggkitProxyUrl`). */
+  extraKnownHosts?: readonly string[];
   collector: Collector;
   clock?: { now(): number };
   pageLoadMs?: number;
@@ -368,7 +370,11 @@ export class BrowserUser implements UserDriver {
     this.harnessPollIntervalMs = options.harnessPollIntervalMs ?? 5_000;
 
     this.knownHosts = new Set<string>();
-    for (const candidate of [this.aggkitProxyUrl, ...this.chains.map((chain) => chain.rpcUrl)]) {
+    for (const candidate of [
+      this.aggkitProxyUrl,
+      ...(options.extraKnownHosts ?? []),
+      ...this.chains.map((chain) => chain.rpcUrl)
+    ]) {
       try {
         this.knownHosts.add(new URL(candidate).origin);
       } catch {

@@ -43,6 +43,7 @@ import type {
   UserDriver
 } from './core/userDriver';
 import type { Collector, HostInfo, LapOutcome } from './metrics/collector';
+import type { CorsRelayHandle } from './ui/corsRelay';
 import type { ServeUiHandle } from './ui/serve';
 import type { ChainClientFactory } from './wallets/chainClients';
 import type { DerivedWallet } from './wallets/derive';
@@ -63,6 +64,7 @@ import {
   l1InfoTreeClientFromViem
 } from './metrics/samplers';
 import { buildUi } from './ui/build';
+import { startCorsRelay } from './ui/corsRelay';
 import { serveUi } from './ui/serve';
 import { defaultChainClientFactory } from './wallets/chainClients';
 import { derivePumpAccount, deriveWallets } from './wallets/derive';
@@ -293,7 +295,12 @@ const endTime = (step: TxStepResult | null | undefined): number | null =>
 const sentTime = (step: TxStepResult | null | undefined): number | null =>
   step != null && step.txHash !== null ? step.submit.startedAt + step.submit.durationMs : null;
 
-export const hopMeasurementRecord = (ctx: LapRunCtx, hop: Hop, lapId: string, st: HopMeasureState) => {
+export const hopMeasurementRecord = (
+  ctx: LapRunCtx,
+  hop: Hop,
+  lapId: string,
+  st: HopMeasureState
+) => {
   const spec = hop.spec;
   const asset = ctx.assets[spec.assetIndex];
   const tokenOriginNetworkId =
@@ -864,7 +871,6 @@ export const pumpStatusSuffix = (
   return ` pump=on(${settledDeposits}/${planned},${formatEther(committedWei)}ETH)`;
 };
 
-
 // ---------------------------------------------------------------------------
 // S53: harness-side workers (heavy-load design §1.3/§1.4) — the L1 deposit pump
 // and the periodic samplers. All optional: with no `pump` block and no matching
@@ -1190,18 +1196,43 @@ const runLoadTestWith = async (
 
   // --- UI build/serve (browser mode only, and only if not already served) ---
   let uiHandle: ServeUiHandle | null = null;
+  let corsRelay: CorsRelayHandle | null = null;
   if (config.users.browser > 0) {
     if (config.uiBaseUrl === undefined) {
       throw new Error('run: users.browser > 0 requires uiBaseUrl in the config');
     }
     const reachable = await isUrlReachable(config.uiBaseUrl);
     if (reachable) {
+      if (config.browser.corsRelay === true) {
+        throw new Error(
+          `run: browser.corsRelay is enabled but a UI is already being served at ${config.uiBaseUrl}; ` +
+            'the relay URL is baked into a UI build made by this run, so it cannot be applied to an existing server. ' +
+            'Stop that server (or change uiBaseUrl) and let the run build and serve the UI itself.'
+        );
+      }
       logger(`run: UI already reachable at ${config.uiBaseUrl}, not building/serving`);
     } else {
-      logger(`run: building UI for ${config.uiBaseUrl}...`);
-      const built = await buildUi({ configPath, repoRoot });
-      uiHandle = await serveUi({ outDir: built.outDir, uiBaseUrl: config.uiBaseUrl });
-      logger(`run: serving UI at ${uiHandle.url}`);
+      if (config.browser.corsRelay === true) {
+        corsRelay = await startCorsRelay({
+          upstreamUrl: config.aggkitProxyUrl,
+          allowedOrigins: [new URL(config.uiBaseUrl).origin],
+          logger
+        });
+      }
+      try {
+        logger(`run: building UI for ${config.uiBaseUrl}...`);
+        const built = await buildUi({
+          configPath,
+          repoRoot,
+          aggkitProxyUrlOverride: corsRelay?.url
+        });
+        uiHandle = await serveUi({ outDir: built.outDir, uiBaseUrl: config.uiBaseUrl });
+        logger(`run: serving UI at ${uiHandle.url}`);
+      } catch (error) {
+        // The relay's listener would otherwise keep the process alive after a failed build.
+        await corsRelay?.close().catch(() => undefined);
+        throw error;
+      }
     }
   }
 
@@ -1254,6 +1285,11 @@ const runLoadTestWith = async (
       await uiHandle
         .close()
         .catch((error: unknown) => logger(`run: UI server close failed: ${redactError(error)}`));
+    }
+    if (corsRelay) {
+      await corsRelay
+        .close()
+        .catch((error: unknown) => logger(`run: CORS relay close failed: ${redactError(error)}`));
     }
     try {
       uninstallTimingFetch();
@@ -1329,6 +1365,7 @@ const runLoadTestWith = async (
           chains: config.chains,
           assets: config.assets,
           aggkitProxyUrl: config.aggkitProxyUrl,
+          extraKnownHosts: corsRelay ? [corsRelay.url] : undefined,
           collector,
           clock,
           pageLoadMs: config.timeouts.pageLoadMs,

@@ -189,7 +189,7 @@ interface AppChainConfig {
 // only requires ONE enabled mode with >=2 chainKeys and a config for
 // `appModes.default`, so a single-mode config.json is a valid, minimal app
 // config on its own.
-const buildAppConfig = (config: LoadtestConfig): unknown => {
+const buildAppConfig = (config: LoadtestConfig, aggkitProxyUrl: string): unknown => {
   // Ring order, deduped (the ring is closed: first === last).
   const chainKeysInOrder = Array.from(new Set(config.ring));
   const chainByKey = new Map(config.chains.map((chain) => [chain.key, chain]));
@@ -237,7 +237,7 @@ const buildAppConfig = (config: LoadtestConfig): unknown => {
           bridgeAddress: modeBridgeAddress,
           etaL1Minutes: etaMinutes,
           etaL2Minutes: etaMinutes,
-          aggkitProxy: config.aggkitProxyUrl,
+          aggkitProxy: aggkitProxyUrl,
           chainKeys: chainKeysInOrder,
           defaultFromChainKey: chainKeysInOrder[0],
           defaultToChainKey: chainKeysInOrder[1]
@@ -252,6 +252,11 @@ export interface BuildUiOptions {
   // convention every other CLI command uses.
   configPath?: string;
   repoRoot?: string;
+  // Overrides the proxy URL baked into the built UI (both the generated
+  // config.json and NEXT_PUBLIC_AGGKIT_PROXY) -- only the opt-in local CORS
+  // relay (`browser.corsRelay`) sets this. The loadtest config's own
+  // `aggkitProxyUrl` is untouched and still used by every non-page caller.
+  aggkitProxyUrlOverride?: string;
 }
 
 export interface BuildUiResult {
@@ -283,8 +288,9 @@ export const buildUi = async (options: BuildUiOptions = {}): Promise<BuildUiResu
 
   // `autoclaim` is a top-level config.json field, not per-mode (config/
   // configSchema.mjs's jsonConfigSchema).
+  const uiAggkitProxyUrl = options.aggkitProxyUrlOverride ?? config.aggkitProxyUrl;
   const appConfig = {
-    ...(buildAppConfig(config) as Record<string, unknown>),
+    ...(buildAppConfig(config, uiAggkitProxyUrl) as Record<string, unknown>),
     autoclaim: buildAppAutoclaim(config)
   };
 
@@ -315,7 +321,7 @@ export const buildUi = async (options: BuildUiOptions = {}): Promise<BuildUiResu
     NEXT_PUBLIC_E2E_ENABLED: 'true',
     NEXT_PUBLIC_E2E_PRIVATE_KEY: THROWAWAY_E2E_PRIVATE_KEY,
     NEXT_PUBLIC_E2E_WALLET_ADDRESS: throwawayAccount.address,
-    NEXT_PUBLIC_AGGKIT_PROXY: config.aggkitProxyUrl
+    NEXT_PUBLIC_AGGKIT_PROXY: uiAggkitProxyUrl
   };
 
   const startedAt = Date.now();
@@ -350,7 +356,7 @@ export const buildUi = async (options: BuildUiOptions = {}): Promise<BuildUiResu
     outDir,
     generatedConfigPath,
     appConfig,
-    aggkitProxyUrl: config.aggkitProxyUrl,
+    aggkitProxyUrl: uiAggkitProxyUrl,
     env: config.env,
     durationMs
   };
