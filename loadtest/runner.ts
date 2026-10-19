@@ -1364,8 +1364,10 @@ const runLoadTestWith = async (
           pool: browserPool as BrowserPool,
           chains: config.chains,
           assets: config.assets,
-          aggkitProxyUrl: config.aggkitProxyUrl,
-          extraKnownHosts: corsRelay ? [corsRelay.url] : undefined,
+          // The browser driver polls tracker activity from inside the page, so with
+          // the CORS relay on it must use the relay (the page's own proxy URL), not
+          // the real proxy the page origin is not allowed to read.
+          aggkitProxyUrl: corsRelay?.url ?? config.aggkitProxyUrl,
           collector,
           clock,
           pageLoadMs: config.timeouts.pageLoadMs,

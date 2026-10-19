@@ -914,8 +914,9 @@ bridge, but cannot read tracker activity — the lap then fails with
   SIGINT or a failed run). It forwards method, path, query, body and headers to
   `aggkitProxyUrl` unchanged (except `Host`, `Origin` and `Referer`), answers `OPTIONS`
   preflights itself, and replaces the response's CORS headers with ones for the UI's own
-  origin. The harness's own tracker polling, and all headless traffic, still go straight
-  to the real proxy. It logs one `local-only CORS shim` line at start-up and the
+  origin. Browser users' own tracker polling runs inside the page, so it goes through the
+  relay too; headless users, preflight and the harness samplers still go straight to the
+  real proxy. It logs one `local-only CORS shim` line at start-up and the
   `browser.corsRelay: true` setting appears in the run's `results.json`.
 - **Not needed in production-style deployments:** where the dev-ui is served under the
   allowlisted domain (e.g. `agglayer-dev-ui-devnet.polygon.technology` against

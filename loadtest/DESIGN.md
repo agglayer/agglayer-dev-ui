@@ -1110,10 +1110,11 @@ matches its own domain family, so a UI served from a local `uiBaseUrl` can't rea
 absent from the config means off) `run` starts `ui/corsRelay.ts` — a forwarder bound to
 `127.0.0.1` on a random port — **before** the UI build and passes its URL to `buildUi`
 as the proxy URL (`NEXT_PUBLIC_AGGKIT_PROXY` and the generated `config.json`'s
-`aggkitProxy`). Only the page is redirected: `aggkitProxyUrl` itself, the harness's tracker
-polling and every headless call are unchanged, and the relay's origin is added to the
-browser driver's known hosts so page traffic through it is still classified as proxy
-traffic. The relay forwards method/path/query/body/headers unchanged (dropping `Host`,
+`aggkitProxy`). The browser driver's own tracker poll runs inside the page
+(`page.evaluate(fetch)`), so browser users are also constructed with the relay URL as their
+proxy URL (which also makes it a known host for page-traffic classification). Headless users,
+preflight and the samplers keep using `aggkitProxyUrl` directly.
+The relay forwards method/path/query/body/headers unchanged (dropping `Host`,
 `Origin`, `Referer` and hop-by-hop headers), answers `OPTIONS` itself, replaces any
 upstream CORS headers, grants CORS only to the UI's own origin and rejects non-loopback
 `Host` headers. It has no authentication and is a measurement-path hop that real
