@@ -1,0 +1,186 @@
+name: Loadtest Tool E2E (compose devnet)
+
+# S13 (plans/bridge-loadtest-plan.md) — opt-in only: workflow_dispatch +
+# nightly. Deliberately NOT in the PR-blocking matrix (no `pull_request`
+# trigger) -- this exercises the `loadtest/` TOOL against the real compose
+# devnet (tests/loadtest-e2e/run.spec.ts), which per that spec's own doc
+# comment can take several minutes even on a healthy devnet and, per the
+# plan's reality check, depends on devnet certificate-settlement timing
+# that a PR-blocking gate should never be hostage to.
+on:
+  workflow_dispatch:
+  schedule:
+    # Nightly, offset from other scheduled jobs in this repo's org.
+    - cron: '17 4 * * *'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  loadtest-e2e:
+    runs-on: ubuntu-latest
+    # Budget: devnet bring-up mirrors e2e.yaml's (~24s warm, ~65s cold CI
+    # runner). `playwright.loadtest.config.ts`'s `testMatch` picks up EVERY
+    # `*.spec.ts` under `tests/loadtest-e2e/` and (`fullyParallel: false,
+    # workers: 1`) runs them strictly one after another, so this budget
+    # must cover BOTH specs' worst cases, not just one:
+    #   - run.spec.ts sets its own 75-minute Playwright test timeout
+    #     (healthy-devnet runs finish in minutes, but a stuck lap can
+    #     occupy up to its derived lapMs budget before the tool itself
+    #     gives up).
+    #   - run.fullring.spec.ts (S30, plans/bridge-loadtest-plan.md §7/§8)
+    #     sets its own 100-minute Playwright test timeout — it runs the
+    #     tool's UNSHORTENED 3-hop ring specifically to gate the
+    #     `L2A->L2B`/`L2B->L1` hops run.spec.ts's shortened ring can never
+    #     see; healthy-devnet runs of its exact config took ~15-18 minutes
+    #     in this session's measurements, but its own doc comment budgets
+    #     conservatively for a stuck hop the same way run.spec.ts does.
+    # 220 minutes pads over both worst cases plus install/build time —
+    # raised from 100 when run.fullring.spec.ts was added; well within
+    # GitHub's default 360-minute job cap.
+    timeout-minutes: 220
+    env:
+      CI: true
+      # Same rationale as e2e.yaml: every value below is either a
+      # well-known public devnet fixture or a literal computed from this
+      # job's own throwaway tests/devnet/summary.json -- nothing here is a
+      # repository secret.
+      E2E_PRIVATE_KEY: '0x12d7de8621a77640c9241b2595ba78ce443d05e94090365ab3bb5e19df82c625'
+      NEXT_PUBLIC_PROJECT_ID: ci-e2e
+      NEXT_PUBLIC_AGGKIT_PROXY: 'http://127.0.0.1:8555/aggkitapi'
+      E2E_FROM_CHAIN_ID: '271828'
+      E2E_TO_CHAIN_ID: '20201'
+      E2E_L2_CHAIN_IDS: '20201,20202'
+      E2E_ERC20_ADDRESS: '0xe293A6b8F558422813499bb5C89B60adD8c54636'
+      # loadtest/-specific: `deriveDevnetConfig()` references the funder key
+      # ONLY by env var name (never inlined into loadtest.config.json — see
+      # loadtest/DESIGN.md §2.2), so the actual value has to be exported
+      # here. It is the SAME devnet fixture key as E2E_PRIVATE_KEY above
+      # (tests/devnet/summary.json's `.accounts.e2e_wallet.private_key`),
+      # not a second secret.
+      LOADTEST_DEVNET_FUNDER_KEY: '0x12d7de8621a77640c9241b2595ba78ce443d05e94090365ab3bb5e19df82c625'
+      # The well-known public Hardhat/Foundry/Anvil default test mnemonic —
+      # used only to derive throwaway devnet wallets (loadtest/wallets/
+      # derive.ts), never to hold real funds.
+      LOADTEST_MNEMONIC: 'test test test test test test test test test test test junk'
+    steps:
+      # Checked out into a subdirectory, same layout e2e.yaml uses (working
+      # steps below all set `working-directory: dev-ui`).
+      - name: Checkout agglayer-dev-ui
+        uses: actions/checkout@v4
+        with:
+          path: dev-ui
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: dev-ui/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: dev-ui/.nvmrc
+          cache: pnpm
+          cache-dependency-path: dev-ui/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: dev-ui
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        working-directory: dev-ui
+        run: pnpm exec playwright install --with-deps chromium
+
+      # Mirrors e2e.yaml's "Assert workflow literals match
+      # tests/devnet/summary.json" step verbatim: this job doesn't build
+      # the dev-ui itself (loadtest/ui/build.ts generates its OWN
+      # config.json, never touching the repo's root one — see that
+      # module's doc), but it still depends on the SAME vendored devnet
+      # bundle e2e.yaml does, so the same drift (a bumped summary.json
+      # whose literals nobody updated here) would otherwise fail obscurely
+      # inside the loadtest tool's funding/preflight steps instead of
+      # failing loudly here.
+      - name: Assert workflow literals match tests/devnet/summary.json
+        working-directory: dev-ui
+        run: |
+          set -euo pipefail
+          fail=0
+          check() {
+            local label="$1" expected="$2" actual="$3"
+            if [ "$expected" != "$actual" ]; then
+              echo "::error::$label drift: loadtest-e2e.yaml has '$actual', tests/devnet/summary.json has '$expected'. Bump them together (see tests/devnet/README.md)." >&2
+              fail=1
+            else
+              echo "ok: $label = $actual"
+            fi
+          }
+          s=tests/devnet/summary.json
+          check E2E_ERC20_ADDRESS   "$(jq -er '.erc20_address' "$s")"        "$E2E_ERC20_ADDRESS"
+          check E2E_FROM_CHAIN_ID   "$(jq -er '.chain_ids.l1|tostring' "$s")"     "$E2E_FROM_CHAIN_ID"
+          check E2E_TO_CHAIN_ID     "$(jq -er '.chain_ids.l2_001|tostring' "$s")" "$E2E_TO_CHAIN_ID"
+          check E2E_L2_CHAIN_IDS    "$(jq -er '[.chain_ids.l2_001,.chain_ids.l2_002]|map(tostring)|join(",")' "$s")" "$E2E_L2_CHAIN_IDS"
+          check E2E_PRIVATE_KEY     "$(jq -er '.accounts.e2e_wallet.private_key' "$s")" "$E2E_PRIVATE_KEY"
+          check LOADTEST_DEVNET_FUNDER_KEY "$(jq -er '.accounts.e2e_wallet.private_key' "$s")" "$LOADTEST_DEVNET_FUNDER_KEY"
+          check proxy_host_port     "$(jq -er '.proxy.host_port|tostring' "$s")" "8555"
+          check NEXT_PUBLIC_AGGKIT_PROXY "$(jq -er '.aggkit_proxy.rest_url_via_proxy' "$s")" "$NEXT_PUBLIC_AGGKIT_PROXY"
+          compose_digests=$(grep -oE 'sha256:[0-9a-f]{64}' tests/devnet/docker-compose.yml | sort -u)
+          summary_digests=$(jq -er '[.images.services[].digest] | sort | .[]' "$s")
+          compose_count=$(printf '%s\n' "$compose_digests" | grep -c .)
+          summary_count=$(printf '%s\n' "$summary_digests" | grep -c .)
+          if [ "$compose_count" -ne 9 ] || [ "$summary_count" -ne 9 ]; then
+            echo "::error::expected 9 image digests each side, got $compose_count in docker-compose.yml and $summary_count in summary.json" >&2
+            fail=1
+          elif [ "$compose_digests" != "$summary_digests" ]; then
+            echo "::error::tests/devnet/docker-compose.yml's pinned image digests do not match tests/devnet/summary.json's images.services[].digest set. Bump them together (see tests/devnet/README.md)." >&2
+            diff <(echo "$compose_digests") <(echo "$summary_digests") >&2 || true
+            fail=1
+          else
+            echo "ok: all 9 compose image digests match summary.json"
+          fi
+          [ "$fail" -eq 0 ]
+
+      # Same vendored, self-contained bundle e2e.yaml brings up — see
+      # tests/devnet/README.md. No Kurtosis, no bind mounts.
+      - name: Start vendored devnet
+        working-directory: dev-ui
+        run: docker compose -f tests/devnet/docker-compose.yml up -d --wait
+
+      - name: Wait for devnet readiness
+        working-directory: dev-ui
+        run: node scripts/devnetReady.mjs --timeout-ms 300000 --interval-ms 3000
+
+      # Unlike e2e.yaml, there is no "Configure devnet fixture" step here:
+      # loadtest/ui/build.ts generates its own E2E-enabled config.json from
+      # loadtest.config.json and never reads or writes the repo's
+      # committed root config.json (see that module's doc comment).
+
+      - name: Run loadtest tool E2E (tests/loadtest-e2e)
+        working-directory: dev-ui
+        run: pnpm exec playwright test -c playwright.loadtest.config.ts
+
+      - name: Dump devnet logs
+        if: always()
+        working-directory: dev-ui
+        run: docker compose -f tests/devnet/docker-compose.yml logs --no-color > devnet-compose.log || true
+
+      - name: Tear down devnet
+        if: always()
+        working-directory: dev-ui
+        run: docker compose -f tests/devnet/docker-compose.yml down -v || true
+
+      - name: Upload Playwright + loadtest artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: loadtest-e2e-report-${{ github.run_id }}
+          path: |
+            dev-ui/playwright-report-loadtest-e2e
+            dev-ui/test-results
+            dev-ui/loadtest-results
+            dev-ui/devnet-compose.log
+          retention-days: 30
+          if-no-files-found: ignore

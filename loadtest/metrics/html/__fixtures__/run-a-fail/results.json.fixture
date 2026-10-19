@@ -1,0 +1,2502 @@
+{
+ "schemaVersion": 1,
+ "run": {
+  "startedAt": "2026-10-13T13:19:00.023Z",
+  "endedAt": "2026-10-13T14:36:03.448Z",
+  "durationMs": 4623425,
+  "aborted": false,
+  "abortCause": null,
+  "lapsInFlightAtStop": 1,
+  "toolVersion": "2ce2f5b",
+  "sdkVersion": "1.0.0-snapshot-ca6df75e",
+  "host": {
+   "cores": 64,
+   "totalMemMb": 64399,
+   "platform": "linux"
+  }
+ },
+ "config": {
+  "env": "testnet",
+  "aggkitProxyUrl": "https://aggkit-proxy-devnet.polygon.technology",
+  "chains": [
+   {
+    "key": "SEPOLIA",
+    "chainId": 11155111,
+    "networkId": 0,
+    "rpcUrl": "https://l1.example.invalid/FAKEKEYFAKEKEYFAKEKEYFAKE",
+    "bridgeAddress": "0x1348947e282138d8f377b467F7D9c2EB0F335d1f",
+    "explorerUrl": "https://sepolia.etherscan.io",
+    "nativeSymbol": "ETH"
+   },
+   {
+    "key": "BALI_82",
+    "chainId": 828282,
+    "networkId": 82,
+    "rpcUrl": "https://l1.example.invalid",
+    "bridgeAddress": "0x1348947e282138d8f377b467F7D9c2EB0F335d1f",
+    "explorerUrl": "",
+    "nativeSymbol": "ETH"
+   },
+   {
+    "key": "BALI_85",
+    "chainId": 858585,
+    "networkId": 85,
+    "rpcUrl": "https://l1.example.invalid",
+    "bridgeAddress": "0x1348947e282138d8f377b467F7D9c2EB0F335d1f",
+    "explorerUrl": "",
+    "nativeSymbol": "ETH"
+   }
+  ],
+  "ring": [
+   "SEPOLIA",
+   "BALI_82",
+   "BALI_85",
+   "SEPOLIA"
+  ],
+  "autoclaim": {
+   "SEPOLIA->BALI_82": {
+    "expected": false
+   },
+   "BALI_82->BALI_85": {
+    "expected": false
+   },
+   "BALI_85->SEPOLIA": {
+    "expected": false
+   }
+  },
+  "assets": [
+   {
+    "kind": "eth",
+    "amount": "0.00001",
+    "decimals": 18
+   }
+  ],
+  "users": {
+   "total": 1,
+   "browser": 0,
+   "wallets": {
+    "mnemonicRef": {
+     "ref": "env:LOADTEST_MNEMONIC"
+    },
+    "startIndex": 0
+   },
+   "funder": {
+    "privateKeyRef": {
+     "ref": "env:LOADTEST_FUNDER_PRIVATE_KEY"
+    },
+    "gasPerChain": {
+     "SEPOLIA": "0.02",
+     "BALI_82": "0.005",
+     "BALI_85": "0.005"
+    },
+    "maxTotalSpend": {
+     "SEPOLIA": "0.1",
+     "BALI_82": "0.03",
+     "BALI_85": "0.03"
+    }
+   }
+  },
+  "load": {
+   "bridgesPerMinutePerUser": 1,
+   "durationMinutes": 2,
+   "rampUpSeconds": 0,
+   "maxInflightLapsPerUser": 1
+  },
+  "browser": {
+   "contextsPerBrowser": 8,
+   "headless": true,
+   "trace": false,
+   "recycleContextAfterLaps": 10
+  },
+  "timeouts": {
+   "txReceiptMs": 180000,
+   "appearsInActivityMs": 300000,
+   "readyToClaimMs": 3600000,
+   "claimedMs": 1800000,
+   "hopMs": 7200000,
+   "lapMs": 14400000,
+   "pageLoadMs": 60000,
+   "walletConnectMs": 30000
+  },
+  "gas": {
+   "bridgeGasOffset": 300000
+  },
+  "output": {
+   "dir": "loadtest-results/20261013T131859Z",
+   "activityLog": true
+  }
+ },
+ "requested": {
+  "users": 1,
+  "browser": 0,
+  "ratePerUserPerMin": 1,
+  "minutes": 2
+ },
+ "achieved": {
+  "ticksOffered": 1,
+  "lapStartsSubmitted": 1,
+  "skippedBackpressure": 0,
+  "ticksLostToRamp": 0,
+  "ticksExpected": 2,
+  "hopBridgesSubmitted": 3,
+  "steadyStateRatePerUserPerMin": 0.012977392301162016,
+  "steadyStateRatePerUserPerModeMin": {
+   "browser": null,
+   "headless": 0.012977392301162016
+  }
+ },
+ "hops": {
+  "byOutcome": {
+   "hop_completed_manual": 2,
+   "timeout_ready_to_claim": 1
+  },
+  "byRoute": {
+   "SEPOLIA->BALI_82": {
+    "byOutcome": {
+     "hop_completed_manual": 1
+    },
+    "byOutcomeByMode": {
+     "browser": {},
+     "headless": {
+      "hop_completed_manual": 1
+     }
+    },
+    "phases": {
+     "bridge_submit": {
+      "browser": null,
+      "headless": {
+       "n": 1,
+       "p50": 156,
+       "p90": 156,
+       "p99": 156,
+       "max": 156
+      }
+     },
+     "bridge_receipt": {
+      "browser": null,
+      "headless": {
+       "n": 1,
+       "p50": 28239,
+       "p90": 28239,
+       "p99": 28239,
+       "max": 28239
+      }
+     },
+     "appears_in_activity": {
+      "browser": null,
+      "headless": {
+       "n": 1,
+       "p50": 2447,
+       "p90": 2447,
+       "p99": 2447,
+       "max": 2447
+      }
+     },
+     "ready_to_claim": {
+      "browser": null,
+      "headless": {
+       "n": 1,
+       "p50": 180088,
+       "p90": 180088,
+       "p99": 180088,
+       "max": 180088
+      }
+     },
+     "claim_inputs": {
+      "browser": null,
+      "headless": {
+       "n": 1,
+       "p50": 195,
+       "p90": 195,
+       "p99": 195,
+       "max": 195
+      }
+     },
+     "claim_submit": {
+      "browser": null,
+      "headless": {
+       "n": 1,
+       "p50": 66,
+       "p90": 66,
+       "p99": 66,
+       "max": 66
+      }
+     },
+     "claim_receipt": {
+      "browser": null,
+      "headless": {
+       "n": 1,
+       "p50": 4043,
+       "p90": 4043,
+       "p99": 4043,
+       "max": 4043
+      }
+     },
+     "claimed_observed": {
+      "browser": null,
+      "headless": {
+       "n": 1,
+       "p50": 25629,
+       "p90": 25629,
+       "p99": 25629,
+       "max": 25629
+      }
+     },
+     "hop_total": {
+      "browser": null,
+      "headless": {
+       "n": 1,
+       "p50": 241000,
+       "p90": 241000,
+       "p99": 241000,
+       "max": 241000
+      }
+     }
+    }
+   },
+   "BALI_82->BALI_85": {
+    "byOutcome": {
+     "hop_completed_manual": 1
+    },
+    "byOutcomeByMode": {
+     "browser": {},
+     "headless": {
+      "hop_completed_manual": 1
+     }
+    },
+    "phases": {
+     "bridge_submit": {
+      "browser": null,
+      "headless": {
+       "n": 1,
+       "p50": 23,
+       "p90": 23,
+       "p99": 23,
+       "max": 23
+      }
+     },
+     "bridge_receipt": {
+      "browser": null,
+      "headless": {
+       "n": 1,
+       "p50": 4045,
+       "p90": 4045,
+       "p99": 4045,
+       "max": 4045
+      }
+     },
+     "appears_in_activity": {
+      "browser": null,
+      "headless": {
+       "n": 1,
+       "p50": 26564,
+       "p90": 26564,
+       "p99": 26564,
+       "max": 26564
+      }
+     },
+     "ready_to_claim": {
+      "browser": null,
+      "headless": {
+       "n": 1,
+       "p50": 630067,
+       "p90": 630067,
+       "p99": 630067,
+       "max": 630067
+      }
+     },
+     "claim_inputs": {
+      "browser": null,
+      "headless": {
+       "n": 1,
+       "p50": 274,
+       "p90": 274,
+       "p99": 274,
+       "max": 274
+      }
+     },
+     "claim_submit": {
+      "browser": null,
+      "headless": {
+       "n": 1,
+       "p50": 25,
+       "p90": 25,
+       "p99": 25,
+       "max": 25
+      }
+     },
+     "claim_receipt": {
+      "browser": null,
+      "headless": {
+       "n": 1,
+       "p50": 4045,
+       "p90": 4045,
+       "p99": 4045,
+       "max": 4045
+      }
+     },
+     "claimed_observed": {
+      "browser": null,
+      "headless": {
+       "n": 1,
+       "p50": 25588,
+       "p90": 25588,
+       "p99": 25588,
+       "max": 25588
+      }
+     },
+     "hop_total": {
+      "browser": null,
+      "headless": {
+       "n": 1,
+       "p50": 690721,
+       "p90": 690721,
+       "p99": 690721,
+       "max": 690721
+      }
+     }
+    }
+   },
+   "BALI_85->SEPOLIA": {
+    "byOutcome": {
+     "timeout_ready_to_claim": 1
+    },
+    "byOutcomeByMode": {
+     "browser": {},
+     "headless": {
+      "timeout_ready_to_claim": 1
+     }
+    },
+    "phases": {
+     "bridge_submit": {
+      "browser": null,
+      "headless": {
+       "n": 1,
+       "p50": 21,
+       "p90": 21,
+       "p99": 21,
+       "max": 21
+      }
+     },
+     "bridge_receipt": {
+      "browser": null,
+      "headless": {
+       "n": 1,
+       "p50": 4039,
+       "p90": 4039,
+       "p99": 4039,
+       "max": 4039
+      }
+     },
+     "appears_in_activity": {
+      "browser": null,
+      "headless": {
+       "n": 1,
+       "p50": 26603,
+       "p90": 26603,
+       "p99": 26603,
+       "max": 26603
+      }
+     }
+    }
+   }
+  },
+  "byRouteMode": {
+   "SEPOLIA->BALI_82": {
+    "browser": {
+     "attempted": 0,
+     "completed": 0,
+     "completionRate": null
+    },
+    "headless": {
+     "attempted": 1,
+     "completed": 1,
+     "completionRate": 1
+    }
+   },
+   "BALI_82->BALI_85": {
+    "browser": {
+     "attempted": 0,
+     "completed": 0,
+     "completionRate": null
+    },
+    "headless": {
+     "attempted": 1,
+     "completed": 1,
+     "completionRate": 1
+    }
+   },
+   "BALI_85->SEPOLIA": {
+    "browser": {
+     "attempted": 0,
+     "completed": 0,
+     "completionRate": null
+    },
+    "headless": {
+     "attempted": 1,
+     "completed": 0,
+     "completionRate": 0
+    }
+   }
+  }
+ },
+ "laps": {
+  "byOutcome": {
+   "LAP_DONE": 0,
+   "LAP_FAILED": 1,
+   "LAP_ABORTED": 0
+  },
+  "byMode": {
+   "browser": {
+    "attempted": 0,
+    "completed": 0,
+    "completionRate": null
+   },
+   "headless": {
+    "attempted": 1,
+    "completed": 0,
+    "completionRate": 0
+   }
+  }
+ },
+ "phases": {
+  "bridge_submit": {
+   "browser": null,
+   "headless": {
+    "n": 3,
+    "p50": 23,
+    "p90": 156,
+    "p99": 156,
+    "max": 156
+   }
+  },
+  "bridge_receipt": {
+   "browser": null,
+   "headless": {
+    "n": 3,
+    "p50": 4045,
+    "p90": 28239,
+    "p99": 28239,
+    "max": 28239
+   }
+  },
+  "appears_in_activity": {
+   "browser": null,
+   "headless": {
+    "n": 3,
+    "p50": 26564,
+    "p90": 26603,
+    "p99": 26603,
+    "max": 26603
+   }
+  },
+  "ready_to_claim": {
+   "browser": null,
+   "headless": {
+    "n": 2,
+    "p50": 180088,
+    "p90": 630067,
+    "p99": 630067,
+    "max": 630067
+   }
+  },
+  "claim_inputs": {
+   "browser": null,
+   "headless": {
+    "n": 2,
+    "p50": 195,
+    "p90": 274,
+    "p99": 274,
+    "max": 274
+   }
+  },
+  "claim_submit": {
+   "browser": null,
+   "headless": {
+    "n": 2,
+    "p50": 25,
+    "p90": 66,
+    "p99": 66,
+    "max": 66
+   }
+  },
+  "claim_receipt": {
+   "browser": null,
+   "headless": {
+    "n": 2,
+    "p50": 4043,
+    "p90": 4045,
+    "p99": 4045,
+    "max": 4045
+   }
+  },
+  "claimed_observed": {
+   "browser": null,
+   "headless": {
+    "n": 2,
+    "p50": 25588,
+    "p90": 25629,
+    "p99": 25629,
+    "max": 25629
+   }
+  },
+  "hop_total": {
+   "browser": null,
+   "headless": {
+    "n": 2,
+    "p50": 241000,
+    "p90": 690721,
+    "p99": 690721,
+    "max": 690721
+   }
+  }
+ },
+ "phaseCensoredCounts": {
+  "ready_to_claim": 1
+ },
+ "uncontextedRequests": 0,
+ "http": {
+  "rpc/FAKEKEYFAKEKEYFAKEKEYFAKE/eth_gasPrice": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 1,
+     "p50": 37,
+     "p90": 37,
+     "p99": 37,
+     "max": 37,
+     "byStatus": {
+      "200": 1
+     },
+     "retries": 0
+    },
+    "harness": null
+   }
+  },
+  "rpc/FAKEKEYFAKEKEYFAKEKEYFAKE/eth_getBalance": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 1,
+     "p50": 21,
+     "p90": 21,
+     "p99": 21,
+     "max": 21,
+     "byStatus": {
+      "200": 1
+     },
+     "retries": 0
+    },
+    "harness": null
+   }
+  },
+  "rpc/FAKEKEYFAKEKEYFAKEKEYFAKE/eth_getTransactionCount": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 2,
+     "p50": 17,
+     "p90": 63,
+     "p99": 63,
+     "max": 63,
+     "byStatus": {
+      "200": 2
+     },
+     "retries": 1
+    },
+    "harness": null
+   }
+  },
+  "rpc/FAKEKEYFAKEKEYFAKEKEYFAKE/eth_estimateGas": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 1,
+     "p50": 26,
+     "p90": 26,
+     "p99": 26,
+     "max": 26,
+     "byStatus": {
+      "200": 1
+     },
+     "retries": 0
+    },
+    "harness": null
+   }
+  },
+  "rpc/FAKEKEYFAKEKEYFAKEKEYFAKE/eth_fillTransaction": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 1,
+     "p50": 17,
+     "p90": 17,
+     "p99": 17,
+     "max": 17,
+     "byStatus": {
+      "200": 1
+     },
+     "retries": 0
+    },
+    "harness": null
+   }
+  },
+  "rpc/FAKEKEYFAKEKEYFAKEKEYFAKE/eth_getBlockByNumber": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 4,
+     "p50": 34,
+     "p90": 53,
+     "p99": 53,
+     "max": 53,
+     "byStatus": {
+      "200": 4
+     },
+     "retries": 3
+    },
+    "harness": null
+   }
+  },
+  "rpc/FAKEKEYFAKEKEYFAKEKEYFAKE/eth_maxPriorityFeePerGas": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 1,
+     "p50": 20,
+     "p90": 20,
+     "p99": 20,
+     "max": 20,
+     "byStatus": {
+      "200": 1
+     },
+     "retries": 0
+    },
+    "harness": null
+   }
+  },
+  "rpc/FAKEKEYFAKEKEYFAKEKEYFAKE/eth_sendRawTransaction": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 1,
+     "p50": 23,
+     "p90": 23,
+     "p99": 23,
+     "max": 23,
+     "byStatus": {
+      "200": 1
+     },
+     "retries": 0
+    },
+    "harness": null
+   }
+  },
+  "rpc/FAKEKEYFAKEKEYFAKEKEYFAKE/eth_getTransactionReceipt": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 5,
+     "p50": 20,
+     "p90": 27,
+     "p99": 27,
+     "max": 27,
+     "byStatus": {
+      "200": 5
+     },
+     "retries": 4
+    },
+    "harness": null
+   }
+  },
+  "rpc/FAKEKEYFAKEKEYFAKEKEYFAKE/eth_blockNumber": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 8,
+     "p50": 25,
+     "p90": 29,
+     "p99": 29,
+     "max": 29,
+     "byStatus": {
+      "200": 8
+     },
+     "retries": 7
+    },
+    "harness": null
+   }
+  },
+  "rpc/FAKEKEYFAKEKEYFAKEKEYFAKE/eth_getTransactionByHash": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 1,
+     "p50": 21,
+     "p90": 21,
+     "p99": 21,
+     "max": 21,
+     "byStatus": {
+      "200": 1
+     },
+     "retries": 0
+    },
+    "harness": null
+   }
+  },
+  "tracker/activity": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 915,
+     "p50": 66,
+     "p90": 91,
+     "p99": 129,
+     "max": 2443,
+     "byStatus": {
+      "200": 915
+     },
+     "retries": 0
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.10/eth_call": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 1,
+     "p50": 17,
+     "p90": 17,
+     "p99": 17,
+     "max": 17,
+     "byStatus": {
+      "200": 1
+     },
+     "retries": 0
+    },
+    "harness": null
+   }
+  },
+  "bridge/l1-info-tree-index[0]": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 1,
+     "p50": 43,
+     "p90": 43,
+     "p99": 43,
+     "max": 43,
+     "byStatus": {
+      "200": 1
+     },
+     "retries": 0
+    },
+    "harness": null
+   }
+  },
+  "bridge/injected-l1-info-leaf[82]": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 1,
+     "p50": 103,
+     "p90": 103,
+     "p99": 103,
+     "max": 103,
+     "byStatus": {
+      "200": 1
+     },
+     "retries": 0
+    },
+    "harness": null
+   }
+  },
+  "bridge/claim-proof[0]": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 1,
+     "p50": 47,
+     "p90": 47,
+     "p99": 47,
+     "max": 47,
+     "byStatus": {
+      "200": 1
+     },
+     "retries": 0
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.10/eth_getTransactionCount": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 2,
+     "p50": 10,
+     "p90": 11,
+     "p99": 11,
+     "max": 11,
+     "byStatus": {
+      "200": 2
+     },
+     "retries": 1
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.10/eth_estimateGas": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 2,
+     "p50": 17,
+     "p90": 18,
+     "p99": 18,
+     "max": 18,
+     "byStatus": {
+      "200": 2
+     },
+     "retries": 1
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.10/eth_fillTransaction": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 2,
+     "p50": 10,
+     "p90": 53,
+     "p99": 53,
+     "max": 53,
+     "byStatus": {
+      "200": 2
+     },
+     "retries": 1
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.10/eth_sendRawTransaction": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 2,
+     "p50": 10,
+     "p90": 11,
+     "p99": 11,
+     "max": 11,
+     "byStatus": {
+      "200": 2
+     },
+     "retries": 1
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.10/eth_getTransactionReceipt": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 6,
+     "p50": 10,
+     "p90": 13,
+     "p99": 13,
+     "max": 13,
+     "byStatus": {
+      "200": 6
+     },
+     "retries": 5
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.10/eth_blockNumber": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 4,
+     "p50": 9,
+     "p90": 10,
+     "p99": 10,
+     "max": 10,
+     "byStatus": {
+      "200": 4
+     },
+     "retries": 3
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.10/eth_getTransactionByHash": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 2,
+     "p50": 10,
+     "p90": 11,
+     "p99": 11,
+     "max": 11,
+     "byStatus": {
+      "200": 2
+     },
+     "retries": 1
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.10/eth_getBlockByNumber": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 2,
+     "p50": 10,
+     "p90": 10,
+     "p99": 10,
+     "max": 10,
+     "byStatus": {
+      "200": 2
+     },
+     "retries": 1
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.10/eth_gasPrice": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 1,
+     "p50": 19,
+     "p90": 19,
+     "p99": 19,
+     "max": 19,
+     "byStatus": {
+      "200": 1
+     },
+     "retries": 0
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.10/eth_getBalance": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 1,
+     "p50": 10,
+     "p90": 10,
+     "p99": 10,
+     "max": 10,
+     "byStatus": {
+      "200": 1
+     },
+     "retries": 0
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.11/eth_call": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 1,
+     "p50": 19,
+     "p90": 19,
+     "p99": 19,
+     "max": 19,
+     "byStatus": {
+      "200": 1
+     },
+     "retries": 0
+    },
+    "harness": null
+   }
+  },
+  "bridge/l1-info-tree-index[82]": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 1,
+     "p50": 161,
+     "p90": 161,
+     "p99": 161,
+     "max": 161,
+     "byStatus": {
+      "200": 1
+     },
+     "retries": 0
+    },
+    "harness": null
+   }
+  },
+  "bridge/injected-l1-info-leaf[85]": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 1,
+     "p50": 71,
+     "p90": 71,
+     "p99": 71,
+     "max": 71,
+     "byStatus": {
+      "200": 1
+     },
+     "retries": 0
+    },
+    "harness": null
+   }
+  },
+  "bridge/claim-proof[82]": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 1,
+     "p50": 40,
+     "p90": 40,
+     "p99": 40,
+     "max": 40,
+     "byStatus": {
+      "200": 1
+     },
+     "retries": 0
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.11/eth_getTransactionCount": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 2,
+     "p50": 9,
+     "p90": 10,
+     "p99": 10,
+     "max": 10,
+     "byStatus": {
+      "200": 2
+     },
+     "retries": 1
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.11/eth_estimateGas": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 2,
+     "p50": 18,
+     "p90": 25,
+     "p99": 25,
+     "max": 25,
+     "byStatus": {
+      "200": 2
+     },
+     "retries": 1
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.11/eth_fillTransaction": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 2,
+     "p50": 8,
+     "p90": 11,
+     "p99": 11,
+     "max": 11,
+     "byStatus": {
+      "200": 2
+     },
+     "retries": 1
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.11/eth_sendRawTransaction": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 2,
+     "p50": 9,
+     "p90": 11,
+     "p99": 11,
+     "max": 11,
+     "byStatus": {
+      "200": 2
+     },
+     "retries": 1
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.11/eth_getTransactionReceipt": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 6,
+     "p50": 10,
+     "p90": 16,
+     "p99": 16,
+     "max": 16,
+     "byStatus": {
+      "200": 6
+     },
+     "retries": 5
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.11/eth_blockNumber": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 4,
+     "p50": 9,
+     "p90": 10,
+     "p99": 10,
+     "max": 10,
+     "byStatus": {
+      "200": 4
+     },
+     "retries": 3
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.11/eth_getTransactionByHash": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 2,
+     "p50": 8,
+     "p90": 10,
+     "p99": 10,
+     "max": 10,
+     "byStatus": {
+      "200": 2
+     },
+     "retries": 1
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.11/eth_getBlockByNumber": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 2,
+     "p50": 8,
+     "p90": 9,
+     "p99": 9,
+     "max": 9,
+     "byStatus": {
+      "200": 2
+     },
+     "retries": 1
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.11/eth_gasPrice": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 1,
+     "p50": 16,
+     "p90": 16,
+     "p99": 16,
+     "max": 16,
+     "byStatus": {
+      "200": 1
+     },
+     "retries": 0
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.11/eth_getBalance": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 1,
+     "p50": 9,
+     "p90": 9,
+     "p99": 9,
+     "max": 9,
+     "byStatus": {
+      "200": 1
+     },
+     "retries": 0
+    },
+    "harness": null
+   }
+  }
+ },
+ "gates": {
+  "activity-index": {
+   "hopsEntered": 3,
+   "totalMs": 55614,
+   "p50": 26564,
+   "p90": 26603,
+   "p99": 26603,
+   "blockedTicks": 0,
+   "timedOutVisits": 0
+  },
+  "claim-proof": {
+   "hopsEntered": 3,
+   "totalMs": 4410156,
+   "p50": 630067,
+   "p90": 3600001,
+   "p99": 3600001,
+   "blockedTicks": 0,
+   "timedOutVisits": 1
+  },
+  "claimed": {
+   "hopsEntered": 2,
+   "totalMs": 51217,
+   "p50": 25588,
+   "p90": 25629,
+   "p99": 25629,
+   "blockedTicks": 0,
+   "timedOutVisits": 0
+  }
+ },
+ "errors": {
+  "byClass": {
+   "activity_warning": 14
+  },
+  "top": [
+   {
+    "class": "activity_warning",
+    "count": 14,
+    "firstSeen": "2026-10-13T13:20:30.983Z",
+    "lastSeen": "2026-10-13T13:24:56.747Z",
+    "sample": "activity_warning[network_id=0]: bridge service for network 0 is not fully synchronized, some bridges may still be missing",
+    "endpointClass": "tracker/activity"
+   }
+  ],
+  "suppressed": {
+   "notReady": 0,
+   "benignExternalAsset": 0
+  }
+ },
+ "policy": {
+  "autoclaimOverdue": 0,
+  "unexpectedAutoclaim": 0,
+  "claimRaceLost": 0
+ },
+ "resources": {
+  "samples": [
+   {
+    "toolRssMb": 243.33203125,
+    "toolCpuPct": 0.2914868105515588,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.174463,
+    "ts": "2026-10-13T13:19:05.028Z"
+   },
+   {
+    "toolRssMb": 176.28515625,
+    "toolCpuPct": 0.1438,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.125311,
+    "ts": "2026-10-13T13:19:35.037Z"
+   },
+   {
+    "toolRssMb": 179.79296875,
+    "toolCpuPct": 2.11781287485006,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.346495,
+    "ts": "2026-10-13T13:20:05.051Z"
+   },
+   {
+    "toolRssMb": 181.265625,
+    "toolCpuPct": 0.4668532586965214,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.207231,
+    "ts": "2026-10-13T13:20:35.057Z"
+   },
+   {
+    "toolRssMb": 181.85546875,
+    "toolCpuPct": 0.39860083949630226,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.133503,
+    "ts": "2026-10-13T13:21:05.063Z"
+   },
+   {
+    "toolRssMb": 181.9453125,
+    "toolCpuPct": 0.32326,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.239999,
+    "ts": "2026-10-13T13:21:35.070Z"
+   },
+   {
+    "toolRssMb": 181.9453125,
+    "toolCpuPct": 0.29556088782243556,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.190847,
+    "ts": "2026-10-13T13:22:05.077Z"
+   },
+   {
+    "toolRssMb": 182.2265625,
+    "toolCpuPct": 0.3825069972011195,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.272767,
+    "ts": "2026-10-13T13:22:35.081Z"
+   },
+   {
+    "toolRssMb": 182.2265625,
+    "toolCpuPct": 0.26320735852829436,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.182655,
+    "ts": "2026-10-13T13:23:05.091Z"
+   },
+   {
+    "toolRssMb": 182.72265625,
+    "toolCpuPct": 0.9510599999999999,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.256383,
+    "ts": "2026-10-13T13:23:35.102Z"
+   },
+   {
+    "toolRssMb": 183.625,
+    "toolCpuPct": 0.79822,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.330111,
+    "ts": "2026-10-13T13:24:05.110Z"
+   },
+   {
+    "toolRssMb": 183.640625,
+    "toolCpuPct": 0.2791,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.223615,
+    "ts": "2026-10-13T13:24:35.114Z"
+   },
+   {
+    "toolRssMb": 183.640625,
+    "toolCpuPct": 0.31049790041991604,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.239999,
+    "ts": "2026-10-13T13:25:05.121Z"
+   },
+   {
+    "toolRssMb": 183.81640625,
+    "toolCpuPct": 0.2842063174730108,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.133503,
+    "ts": "2026-10-13T13:25:35.129Z"
+   },
+   {
+    "toolRssMb": 183.81640625,
+    "toolCpuPct": 0.32975404919016194,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.158079,
+    "ts": "2026-10-13T13:26:05.137Z"
+   },
+   {
+    "toolRssMb": 183.8203125,
+    "toolCpuPct": 2.8666466706658666,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.231807,
+    "ts": "2026-10-13T13:26:35.143Z"
+   },
+   {
+    "toolRssMb": 183.8203125,
+    "toolCpuPct": 0.3095961615353858,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.182655,
+    "ts": "2026-10-13T13:27:05.151Z"
+   },
+   {
+    "toolRssMb": 183.8203125,
+    "toolCpuPct": 0.28852,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.207231,
+    "ts": "2026-10-13T13:27:35.161Z"
+   },
+   {
+    "toolRssMb": 183.8203125,
+    "toolCpuPct": 0.2641471705658868,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.223615,
+    "ts": "2026-10-13T13:28:05.172Z"
+   },
+   {
+    "toolRssMb": 183.8203125,
+    "toolCpuPct": 0.3174565086982603,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.108927,
+    "ts": "2026-10-13T13:28:35.182Z"
+   },
+   {
+    "toolRssMb": 183.8203125,
+    "toolCpuPct": 0.3197960407918416,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.182655,
+    "ts": "2026-10-13T13:29:05.194Z"
+   },
+   {
+    "toolRssMb": 183.82421875,
+    "toolCpuPct": 0.3264894042383047,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.199039,
+    "ts": "2026-10-13T13:29:35.203Z"
+   },
+   {
+    "toolRssMb": 183.82421875,
+    "toolCpuPct": 0.294,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.231807,
+    "ts": "2026-10-13T13:30:05.212Z"
+   },
+   {
+    "toolRssMb": 183.83203125,
+    "toolCpuPct": 0.27404,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.215423,
+    "ts": "2026-10-13T13:30:35.221Z"
+   },
+   {
+    "toolRssMb": 183.83203125,
+    "toolCpuPct": 0.37442000000000003,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.239999,
+    "ts": "2026-10-13T13:31:05.225Z"
+   },
+   {
+    "toolRssMb": 183.83984375,
+    "toolCpuPct": 0.31627023785728564,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.108927,
+    "ts": "2026-10-13T13:31:35.233Z"
+   },
+   {
+    "toolRssMb": 183.84375,
+    "toolCpuPct": 0.2980807676929228,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.190847,
+    "ts": "2026-10-13T13:32:05.240Z"
+   },
+   {
+    "toolRssMb": 183.98046875,
+    "toolCpuPct": 0.3086165533786485,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.199039,
+    "ts": "2026-10-13T13:32:35.247Z"
+   },
+   {
+    "toolRssMb": 183.99609375,
+    "toolCpuPct": 0.2964614154338265,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.174463,
+    "ts": "2026-10-13T13:33:05.255Z"
+   },
+   {
+    "toolRssMb": 183.99609375,
+    "toolCpuPct": 0.31482,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.231807,
+    "ts": "2026-10-13T13:33:35.265Z"
+   },
+   {
+    "toolRssMb": 183.99609375,
+    "toolCpuPct": 0.3356728654269146,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.297343,
+    "ts": "2026-10-13T13:34:05.272Z"
+   },
+   {
+    "toolRssMb": 183.99609375,
+    "toolCpuPct": 0.35500899820035997,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.231807,
+    "ts": "2026-10-13T13:34:35.284Z"
+   },
+   {
+    "toolRssMb": 184.1875,
+    "toolCpuPct": 0.971671331467413,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.305535,
+    "ts": "2026-10-13T13:35:05.291Z"
+   },
+   {
+    "toolRssMb": 184.7265625,
+    "toolCpuPct": 0.6924030387844863,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.444799,
+    "ts": "2026-10-13T13:35:35.303Z"
+   },
+   {
+    "toolRssMb": 183.48828125,
+    "toolCpuPct": 0.29798040391921615,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.215423,
+    "ts": "2026-10-13T13:36:05.311Z"
+   },
+   {
+    "toolRssMb": 183.48828125,
+    "toolCpuPct": 0.32497500499900017,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.231807,
+    "ts": "2026-10-13T13:36:35.319Z"
+   },
+   {
+    "toolRssMb": 183.48828125,
+    "toolCpuPct": 0.30541783286685326,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.207231,
+    "ts": "2026-10-13T13:37:05.328Z"
+   },
+   {
+    "toolRssMb": 183.48828125,
+    "toolCpuPct": 0.3063387322535493,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.207231,
+    "ts": "2026-10-13T13:37:35.336Z"
+   },
+   {
+    "toolRssMb": 183.48828125,
+    "toolCpuPct": 0.3319,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.239999,
+    "ts": "2026-10-13T13:38:05.343Z"
+   },
+   {
+    "toolRssMb": 183.48828125,
+    "toolCpuPct": 0.2930227908836465,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.223615,
+    "ts": "2026-10-13T13:38:35.355Z"
+   },
+   {
+    "toolRssMb": 183.48828125,
+    "toolCpuPct": 0.2727854429114177,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.231807,
+    "ts": "2026-10-13T13:39:05.364Z"
+   },
+   {
+    "toolRssMb": 183.48828125,
+    "toolCpuPct": 0.29354258296681324,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.158079,
+    "ts": "2026-10-13T13:39:35.376Z"
+   },
+   {
+    "toolRssMb": 183.48828125,
+    "toolCpuPct": 0.3099780043991202,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.231807,
+    "ts": "2026-10-13T13:40:05.386Z"
+   },
+   {
+    "toolRssMb": 183.48828125,
+    "toolCpuPct": 0.35223910435825667,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.199039,
+    "ts": "2026-10-13T13:40:35.396Z"
+   },
+   {
+    "toolRssMb": 183.5,
+    "toolCpuPct": 0.280187924830068,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.239999,
+    "ts": "2026-10-13T13:41:05.408Z"
+   },
+   {
+    "toolRssMb": 183.5,
+    "toolCpuPct": 0.3226954609078185,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.174463,
+    "ts": "2026-10-13T13:41:35.419Z"
+   },
+   {
+    "toolRssMb": 183.50390625,
+    "toolCpuPct": 0.25693722510995604,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.174463,
+    "ts": "2026-10-13T13:42:05.431Z"
+   },
+   {
+    "toolRssMb": 183.50390625,
+    "toolCpuPct": 0.33239352129574085,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.182655,
+    "ts": "2026-10-13T13:42:35.439Z"
+   },
+   {
+    "toolRssMb": 183.50390625,
+    "toolCpuPct": 0.28264347130573886,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.141695,
+    "ts": "2026-10-13T13:43:05.447Z"
+   },
+   {
+    "toolRssMb": 183.50390625,
+    "toolCpuPct": 0.33155368926214757,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.182655,
+    "ts": "2026-10-13T13:43:35.453Z"
+   },
+   {
+    "toolRssMb": 183.50390625,
+    "toolCpuPct": 0.3207275634619228,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.207231,
+    "ts": "2026-10-13T13:44:05.461Z"
+   },
+   {
+    "toolRssMb": 183.50390625,
+    "toolCpuPct": 0.2614031581051369,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.108927,
+    "ts": "2026-10-13T13:44:35.471Z"
+   },
+   {
+    "toolRssMb": 183.50390625,
+    "toolCpuPct": 0.34003597841295224,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.215423,
+    "ts": "2026-10-13T13:45:05.481Z"
+   },
+   {
+    "toolRssMb": 183.50390625,
+    "toolCpuPct": 0.2726654669066187,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.117119,
+    "ts": "2026-10-13T13:45:35.488Z"
+   },
+   {
+    "toolRssMb": 183.50390625,
+    "toolCpuPct": 0.3017796440711858,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.223615,
+    "ts": "2026-10-13T13:46:05.496Z"
+   },
+   {
+    "toolRssMb": 183.56640625,
+    "toolCpuPct": 4.073190723710516,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.199039,
+    "ts": "2026-10-13T13:46:35.507Z"
+   },
+   {
+    "toolRssMb": 183.56640625,
+    "toolCpuPct": 0.3332800319808115,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.117119,
+    "ts": "2026-10-13T13:47:05.514Z"
+   },
+   {
+    "toolRssMb": 183.56640625,
+    "toolCpuPct": 0.3271291483406637,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.108927,
+    "ts": "2026-10-13T13:47:35.527Z"
+   },
+   {
+    "toolRssMb": 183.578125,
+    "toolCpuPct": 0.33792,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.223615,
+    "ts": "2026-10-13T13:48:05.535Z"
+   },
+   {
+    "toolRssMb": 183.578125,
+    "toolCpuPct": 0.32633473305338934,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.215423,
+    "ts": "2026-10-13T13:48:35.541Z"
+   },
+   {
+    "toolRssMb": 183.578125,
+    "toolCpuPct": 0.30573770491803276,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.174463,
+    "ts": "2026-10-13T13:49:05.552Z"
+   },
+   {
+    "toolRssMb": 183.578125,
+    "toolCpuPct": 0.30085965613754495,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.231807,
+    "ts": "2026-10-13T13:49:35.560Z"
+   },
+   {
+    "toolRssMb": 183.578125,
+    "toolCpuPct": 0.31093562574970013,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.149887,
+    "ts": "2026-10-13T13:50:05.567Z"
+   },
+   {
+    "toolRssMb": 183.578125,
+    "toolCpuPct": 0.3112777444511098,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.117119,
+    "ts": "2026-10-13T13:50:35.572Z"
+   },
+   {
+    "toolRssMb": 183.578125,
+    "toolCpuPct": 0.2949010197960408,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.166271,
+    "ts": "2026-10-13T13:51:05.580Z"
+   },
+   {
+    "toolRssMb": 183.578125,
+    "toolCpuPct": 0.31295740851829634,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.215423,
+    "ts": "2026-10-13T13:51:35.586Z"
+   },
+   {
+    "toolRssMb": 183.6171875,
+    "toolCpuPct": 0.28816473410635746,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.158079,
+    "ts": "2026-10-13T13:52:05.595Z"
+   },
+   {
+    "toolRssMb": 183.625,
+    "toolCpuPct": 0.30019999999999997,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.182655,
+    "ts": "2026-10-13T13:52:35.600Z"
+   },
+   {
+    "toolRssMb": 183.625,
+    "toolCpuPct": 0.3104379124175165,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.117119,
+    "ts": "2026-10-13T13:53:05.607Z"
+   },
+   {
+    "toolRssMb": 183.625,
+    "toolCpuPct": 0.3227754449110178,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.166271,
+    "ts": "2026-10-13T13:53:35.615Z"
+   },
+   {
+    "toolRssMb": 183.625,
+    "toolCpuPct": 0.294501099780044,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.174463,
+    "ts": "2026-10-13T13:54:05.622Z"
+   },
+   {
+    "toolRssMb": 183.625,
+    "toolCpuPct": 0.29164,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.207231,
+    "ts": "2026-10-13T13:54:35.628Z"
+   },
+   {
+    "toolRssMb": 185.6484375,
+    "toolCpuPct": 0.29252,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.207231,
+    "ts": "2026-10-13T13:55:05.634Z"
+   },
+   {
+    "toolRssMb": 185.671875,
+    "toolCpuPct": 0.3717056588682263,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.223615,
+    "ts": "2026-10-13T13:55:35.642Z"
+   },
+   {
+    "toolRssMb": 185.671875,
+    "toolCpuPct": 0.3463107378524295,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.256383,
+    "ts": "2026-10-13T13:56:05.651Z"
+   },
+   {
+    "toolRssMb": 185.671875,
+    "toolCpuPct": 0.32407037185125953,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.223615,
+    "ts": "2026-10-13T13:56:35.660Z"
+   },
+   {
+    "toolRssMb": 185.72265625,
+    "toolCpuPct": 0.32277089164334266,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.141695,
+    "ts": "2026-10-13T13:57:05.670Z"
+   },
+   {
+    "toolRssMb": 185.72265625,
+    "toolCpuPct": 0.369518289026584,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.117119,
+    "ts": "2026-10-13T13:57:35.682Z"
+   },
+   {
+    "toolRssMb": 185.72265625,
+    "toolCpuPct": 0.38280343931213756,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.256383,
+    "ts": "2026-10-13T13:58:05.693Z"
+   },
+   {
+    "toolRssMb": 185.72265625,
+    "toolCpuPct": 0.2884823035392921,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.215423,
+    "ts": "2026-10-13T13:58:35.701Z"
+   },
+   {
+    "toolRssMb": 185.72265625,
+    "toolCpuPct": 0.3076784643071386,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.199039,
+    "ts": "2026-10-13T13:59:05.709Z"
+   },
+   {
+    "toolRssMb": 185.72265625,
+    "toolCpuPct": 0.3100379924015197,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.174463,
+    "ts": "2026-10-13T13:59:35.719Z"
+   },
+   {
+    "toolRssMb": 185.72265625,
+    "toolCpuPct": 0.37636472705458907,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.182655,
+    "ts": "2026-10-13T14:00:05.729Z"
+   },
+   {
+    "toolRssMb": 185.72265625,
+    "toolCpuPct": 0.29838064774090367,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.166271,
+    "ts": "2026-10-13T14:00:35.741Z"
+   },
+   {
+    "toolRssMb": 185.72265625,
+    "toolCpuPct": 0.29822035592881424,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.182655,
+    "ts": "2026-10-13T14:01:05.749Z"
+   },
+   {
+    "toolRssMb": 185.72265625,
+    "toolCpuPct": 0.3194244604316547,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.108927,
+    "ts": "2026-10-13T14:01:35.762Z"
+   },
+   {
+    "toolRssMb": 185.72265625,
+    "toolCpuPct": 0.29352129574085184,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.248191,
+    "ts": "2026-10-13T14:02:05.769Z"
+   },
+   {
+    "toolRssMb": 185.72265625,
+    "toolCpuPct": 0.29266293482606953,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.248191,
+    "ts": "2026-10-13T14:02:35.778Z"
+   },
+   {
+    "toolRssMb": 185.72265625,
+    "toolCpuPct": 0.33133373325334936,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.182655,
+    "ts": "2026-10-13T14:03:05.785Z"
+   },
+   {
+    "toolRssMb": 185.72265625,
+    "toolCpuPct": 0.30313874450219913,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.158079,
+    "ts": "2026-10-13T14:03:35.798Z"
+   },
+   {
+    "toolRssMb": 185.72265625,
+    "toolCpuPct": 0.26721966819908055,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.141695,
+    "ts": "2026-10-13T14:04:05.809Z"
+   },
+   {
+    "toolRssMb": 185.72265625,
+    "toolCpuPct": 0.3280143971205759,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.207231,
+    "ts": "2026-10-13T14:04:35.815Z"
+   },
+   {
+    "toolRssMb": 185.72265625,
+    "toolCpuPct": 0.27880847660935626,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.215423,
+    "ts": "2026-10-13T14:05:05.824Z"
+   },
+   {
+    "toolRssMb": 185.72265625,
+    "toolCpuPct": 0.2756546072356586,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.149887,
+    "ts": "2026-10-13T14:05:35.837Z"
+   },
+   {
+    "toolRssMb": 185.72265625,
+    "toolCpuPct": 0.289124350259896,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.223615,
+    "ts": "2026-10-13T14:06:05.849Z"
+   },
+   {
+    "toolRssMb": 185.72265625,
+    "toolCpuPct": 0.2778844231153769,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.231807,
+    "ts": "2026-10-13T14:06:35.859Z"
+   },
+   {
+    "toolRssMb": 185.72265625,
+    "toolCpuPct": 0.3046990601879624,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.158079,
+    "ts": "2026-10-13T14:07:05.867Z"
+   },
+   {
+    "toolRssMb": 185.72265625,
+    "toolCpuPct": 0.2953009398120376,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.190847,
+    "ts": "2026-10-13T14:07:35.876Z"
+   },
+   {
+    "toolRssMb": 185.74609375,
+    "toolCpuPct": 0.32293541291741645,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.231807,
+    "ts": "2026-10-13T14:08:05.886Z"
+   },
+   {
+    "toolRssMb": 185.74609375,
+    "toolCpuPct": 0.30831667333066776,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.223615,
+    "ts": "2026-10-13T14:08:35.893Z"
+   },
+   {
+    "toolRssMb": 185.74609375,
+    "toolCpuPct": 0.31567373050779685,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.174463,
+    "ts": "2026-10-13T14:09:05.905Z"
+   },
+   {
+    "toolRssMb": 185.74609375,
+    "toolCpuPct": 0.3051379448220712,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.231807,
+    "ts": "2026-10-13T14:09:35.917Z"
+   },
+   {
+    "toolRssMb": 185.74609375,
+    "toolCpuPct": 0.31685325869652137,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.166271,
+    "ts": "2026-10-13T14:10:05.929Z"
+   },
+   {
+    "toolRssMb": 185.74609375,
+    "toolCpuPct": 0.35124975004999,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.256383,
+    "ts": "2026-10-13T14:10:35.938Z"
+   },
+   {
+    "toolRssMb": 185.74609375,
+    "toolCpuPct": 0.2911235505797681,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.100735,
+    "ts": "2026-10-13T14:11:05.949Z"
+   },
+   {
+    "toolRssMb": 185.74609375,
+    "toolCpuPct": 0.29750099960015997,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.158079,
+    "ts": "2026-10-13T14:11:35.959Z"
+   },
+   {
+    "toolRssMb": 185.74609375,
+    "toolCpuPct": 0.3014991005396762,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.174463,
+    "ts": "2026-10-13T14:12:05.967Z"
+   },
+   {
+    "toolRssMb": 185.74609375,
+    "toolCpuPct": 0.2751499400239904,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.215423,
+    "ts": "2026-10-13T14:12:35.980Z"
+   },
+   {
+    "toolRssMb": 185.76171875,
+    "toolCpuPct": 0.3344524380495604,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.231807,
+    "ts": "2026-10-13T14:13:05.993Z"
+   },
+   {
+    "toolRssMb": 185.80078125,
+    "toolCpuPct": 0.33585282943411315,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.231807,
+    "ts": "2026-10-13T14:13:36.003Z"
+   },
+   {
+    "toolRssMb": 185.81640625,
+    "toolCpuPct": 0.33146741303478605,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.182655,
+    "ts": "2026-10-13T14:14:06.016Z"
+   },
+   {
+    "toolRssMb": 185.81640625,
+    "toolCpuPct": 0.2860627874425115,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.223615,
+    "ts": "2026-10-13T14:14:36.022Z"
+   },
+   {
+    "toolRssMb": 185.81640625,
+    "toolCpuPct": 0.3051979208316673,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.182655,
+    "ts": "2026-10-13T14:15:06.034Z"
+   },
+   {
+    "toolRssMb": 185.81640625,
+    "toolCpuPct": 0.3709258148370326,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.199039,
+    "ts": "2026-10-13T14:15:36.040Z"
+   },
+   {
+    "toolRssMb": 185.81640625,
+    "toolCpuPct": 0.33477304539092184,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.231807,
+    "ts": "2026-10-13T14:16:06.050Z"
+   },
+   {
+    "toolRssMb": 185.8203125,
+    "toolCpuPct": 0.3138972205558888,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.215423,
+    "ts": "2026-10-13T14:16:36.057Z"
+   },
+   {
+    "toolRssMb": 185.828125,
+    "toolCpuPct": 0.3929428228708517,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.223615,
+    "ts": "2026-10-13T14:17:06.070Z"
+   },
+   {
+    "toolRssMb": 185.828125,
+    "toolCpuPct": 0.32398560863481907,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.174463,
+    "ts": "2026-10-13T14:17:36.082Z"
+   },
+   {
+    "toolRssMb": 185.8359375,
+    "toolCpuPct": 0.30629748100759696,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.158079,
+    "ts": "2026-10-13T14:18:06.094Z"
+   },
+   {
+    "toolRssMb": 185.8359375,
+    "toolCpuPct": 0.3272291083566573,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.207231,
+    "ts": "2026-10-13T14:18:36.109Z"
+   },
+   {
+    "toolRssMb": 185.8359375,
+    "toolCpuPct": 0.312377524495101,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.231807,
+    "ts": "2026-10-13T14:19:06.118Z"
+   },
+   {
+    "toolRssMb": 185.8359375,
+    "toolCpuPct": 0.3091781643671266,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.149887,
+    "ts": "2026-10-13T14:19:36.128Z"
+   },
+   {
+    "toolRssMb": 185.8359375,
+    "toolCpuPct": 0.2639144342263095,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.141695,
+    "ts": "2026-10-13T14:20:06.136Z"
+   },
+   {
+    "toolRssMb": 185.8359375,
+    "toolCpuPct": 0.30885822835432913,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.190847,
+    "ts": "2026-10-13T14:20:36.142Z"
+   },
+   {
+    "toolRssMb": 185.8359375,
+    "toolCpuPct": 0.3246501399440224,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.158079,
+    "ts": "2026-10-13T14:21:06.151Z"
+   },
+   {
+    "toolRssMb": 185.8359375,
+    "toolCpuPct": 0.2778444311137772,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.207231,
+    "ts": "2026-10-13T14:21:36.164Z"
+   },
+   {
+    "toolRssMb": 185.8359375,
+    "toolCpuPct": 0.32141571685662873,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.223615,
+    "ts": "2026-10-13T14:22:06.172Z"
+   },
+   {
+    "toolRssMb": 185.84375,
+    "toolCpuPct": 0.27903258045172896,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.166271,
+    "ts": "2026-10-13T14:22:36.182Z"
+   },
+   {
+    "toolRssMb": 185.86328125,
+    "toolCpuPct": 0.27666466706658666,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.207231,
+    "ts": "2026-10-13T14:23:06.190Z"
+   },
+   {
+    "toolRssMb": 185.86328125,
+    "toolCpuPct": 0.32327534493101384,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.231807,
+    "ts": "2026-10-13T14:23:36.200Z"
+   },
+   {
+    "toolRssMb": 185.86328125,
+    "toolCpuPct": 0.2788169464428457,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.182655,
+    "ts": "2026-10-13T14:24:06.209Z"
+   },
+   {
+    "toolRssMb": 185.86328125,
+    "toolCpuPct": 0.2825669732107157,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.207231,
+    "ts": "2026-10-13T14:24:36.218Z"
+   },
+   {
+    "toolRssMb": 185.86328125,
+    "toolCpuPct": 0.37281087564974014,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.215423,
+    "ts": "2026-10-13T14:25:06.228Z"
+   },
+   {
+    "toolRssMb": 185.86328125,
+    "toolCpuPct": 0.32139572085582885,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.158079,
+    "ts": "2026-10-13T14:25:36.237Z"
+   },
+   {
+    "toolRssMb": 185.86328125,
+    "toolCpuPct": 0.3194561087782444,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.223615,
+    "ts": "2026-10-13T14:26:06.248Z"
+   },
+   {
+    "toolRssMb": 185.86328125,
+    "toolCpuPct": 0.31335732853429316,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.231807,
+    "ts": "2026-10-13T14:26:36.261Z"
+   },
+   {
+    "toolRssMb": 185.86328125,
+    "toolCpuPct": 0.30213957208558284,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.174463,
+    "ts": "2026-10-13T14:27:06.269Z"
+   },
+   {
+    "toolRssMb": 185.86328125,
+    "toolCpuPct": 0.2671065786842632,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.166271,
+    "ts": "2026-10-13T14:27:36.279Z"
+   },
+   {
+    "toolRssMb": 185.86328125,
+    "toolCpuPct": 0.2846061575369852,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.149887,
+    "ts": "2026-10-13T14:28:06.292Z"
+   },
+   {
+    "toolRssMb": 185.86328125,
+    "toolCpuPct": 0.28091145312812316,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.149887,
+    "ts": "2026-10-13T14:28:36.302Z"
+   },
+   {
+    "toolRssMb": 185.86328125,
+    "toolCpuPct": 0.261655337864854,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.174463,
+    "ts": "2026-10-13T14:29:06.312Z"
+   },
+   {
+    "toolRssMb": 185.86328125,
+    "toolCpuPct": 0.31281743651269744,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.174463,
+    "ts": "2026-10-13T14:29:36.325Z"
+   },
+   {
+    "toolRssMb": 185.86328125,
+    "toolCpuPct": 0.3100759696121551,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.174463,
+    "ts": "2026-10-13T14:30:06.336Z"
+   },
+   {
+    "toolRssMb": 185.86328125,
+    "toolCpuPct": 2.6785571542765787,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.190847,
+    "ts": "2026-10-13T14:30:36.345Z"
+   },
+   {
+    "toolRssMb": 185.86328125,
+    "toolCpuPct": 0.3213357328534293,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.174463,
+    "ts": "2026-10-13T14:31:06.353Z"
+   },
+   {
+    "toolRssMb": 185.86328125,
+    "toolCpuPct": 0.2822235552889422,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.231807,
+    "ts": "2026-10-13T14:31:36.364Z"
+   },
+   {
+    "toolRssMb": 185.8828125,
+    "toolCpuPct": 0.2813037392521496,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.215423,
+    "ts": "2026-10-13T14:32:06.375Z"
+   },
+   {
+    "toolRssMb": 185.8828125,
+    "toolCpuPct": 0.27756897241103556,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.190847,
+    "ts": "2026-10-13T14:32:36.384Z"
+   },
+   {
+    "toolRssMb": 185.8828125,
+    "toolCpuPct": 0.3090781843631274,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.190847,
+    "ts": "2026-10-13T14:33:06.394Z"
+   },
+   {
+    "toolRssMb": 185.890625,
+    "toolCpuPct": 0.2781087564974011,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.215423,
+    "ts": "2026-10-13T14:33:36.403Z"
+   },
+   {
+    "toolRssMb": 185.890625,
+    "toolCpuPct": 0.33339328537170265,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.190847,
+    "ts": "2026-10-13T14:34:06.413Z"
+   },
+   {
+    "toolRssMb": 185.890625,
+    "toolCpuPct": 0.27040591881623677,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.158079,
+    "ts": "2026-10-13T14:34:36.423Z"
+   },
+   {
+    "toolRssMb": 185.91796875,
+    "toolCpuPct": 0.3158968206358728,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.223615,
+    "ts": "2026-10-13T14:35:06.429Z"
+   },
+   {
+    "toolRssMb": 185.91796875,
+    "toolCpuPct": 0.2896020795840832,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.158079,
+    "ts": "2026-10-13T14:35:36.439Z"
+   },
+   {
+    "toolRssMb": 185.91796875,
+    "toolCpuPct": 0.5595202398800599,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.174463,
+    "ts": "2026-10-13T14:36:03.448Z"
+   }
+  ]
+ }
+}
