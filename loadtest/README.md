@@ -30,9 +30,6 @@ that shaped the current defaults live in:
 - [`VALIDATION-1.md`](./VALIDATION-1.md) — analysis of the first at-scale run: what
   was a tool bug, what was devnet capacity, what was a genuine aggkit/agglayer
   finding, and the fix list that became the current behaviour.
-- `plans/bridge-loadtest-plan.md` (in the sibling `agglayer/plans` checkout, not part
-  of this repo) — the step-by-step build plan and every measurement this README
-  cites, not linked here since it lives outside this repository.
 
 ## Quick start (devnet)
 
@@ -170,12 +167,12 @@ devnet example with provenance, §2.4 this testnet example with provenance).
   spend real funder money on a config whose `env` is `mainnet` — a deliberate,
   unmissable flag rather than an env-based gate. `run` refuses **unconditionally**
   as its first action (before wallet derivation, funding, or preflight) whenever
-  `env` is `"mainnet"`, regardless of whether `--fund` is also passed — fixed in
-  S21 (R0, loadtest/REVIEW.md): the gate previously lived only inside `fund`'s
-  own code path, so `run` against an already-funded mainnet config needed no
+  `env` is `"mainnet"`, regardless of whether `--fund` is also passed — fixed
+  (R0, loadtest/REVIEW.md): the gate previously lived only inside `fund`'s own
+  code path, so `run` against an already-funded mainnet config needed no
   confirmation at all.
 - **`maxTotalSpend` caps native currency; `maxTotalErc20Spend` caps ERC20
-  top-ups (fixed in S21, R19).** `users.funder.gasPerChain`/native top-ups are
+  top-ups (fixed, R19).** `users.funder.gasPerChain`/native top-ups are
   checked against `maxTotalSpend`; ERC20 transfers on the ring's origin chain
   are checked against the separate `maxTotalErc20Spend` (`validate` now
   requires it whenever a non-devnet-anvil fund uses an erc20 asset —
@@ -205,7 +202,7 @@ own value would exceed it, so `USERS_BROWSER_EXCEEDS_TOTAL` can never fire as a 
 effect of the override. `--assets` is comma-separated and case-insensitive
 (`--assets eth,erc20`); omitting it runs every asset configured.
 
-**Fixed in S21 (was: known bug) — `run` used to hang past `run: complete`.**
+**Fixed (was: known bug) — `run` used to hang past `run: complete`.**
 Root-caused (loadtest/REVIEW.md R1): `raceOrTimeout` abandons rather than cancels a
 driver call, so an abandoned browser-mode call could still be inside
 `pool.acquireContext()` -> `launchSlot()` when teardown started; `dispose()` didn't
@@ -786,7 +783,7 @@ window has ended a single `Ctrl-C` aborts the run immediately** (the drain is al
 
 From the target-scale validation runs (500 users/150 browser/30min and 1000
 users/150 browser/15min, this host: 64 cores / 62 GiB RAM) — see `VALIDATION-1.md`
-and the plan's S17 outcome for the full numbers.
+for the analysis behind them.
 
 - **150 browser users is confirmed safe** on a host this size: 19 Chromium
   processes, peak host RAM 66% at 500 total users (40% at 1000). The **true ceiling
@@ -814,7 +811,7 @@ tool bug.
 1. **`.env.local` overrides exported env vars and can hold stale Kurtosis values.**
    Next.js's config loading reads `.env.local` and it takes precedence over your
    shell's exported vars. This repo's own `.env.local` (once moved aside as
-   `.env.local.bak`, per S01) has been deleted (R21/R12, loadtest/REVIEW.md — the
+   `.env.local.bak`) has been deleted (R21/R12, loadtest/REVIEW.md — the
    `.bak` copy held a plaintext devnet key and was not gitignored); regenerate it
    with `node scripts/kurtosisDevnetEnv.mjs` against a running Kurtosis enclave if
    you need it, and if you do restore a `.env.local`, expect it to silently
@@ -827,7 +824,7 @@ tool bug.
    the local exit root, retries every 5 minutes, and never recovers
    (`RetryCertAfterInError=false`). This repo's `tests/devnet/docker-compose.yml`
    now sets `shm_size: '4gb'` on the `agglayer` service, which eliminates this
-   crash entirely (root-caused and fixed at plan step S34, confirmed via
+   crash entirely (root-caused and fixed, confirmed via
    `docker exec <agglayer> df -h /dev/shm`: 64M → 4.0G, zero `signal: 7` across a
    run that reliably crashed before). **If you are on an older checkout without
    that setting, add it** rather than treating this as expected behaviour. While
@@ -882,7 +879,7 @@ tool bug.
    both aggkit containers' metrics ports). Only **agglayer's** `:9092` is
    reachable — use it for the certificate-health check in item 2.
 8. **`run` used to hang past `run: complete` without releasing its browser
-   pool — fixed in S21 (R1)**, see the CLI reference note above. Still prefer
+   pool — fixed (R1)**, see the CLI reference note above. Still prefer
    waiting for the report files over the `run` PID as good practice.
 9. **Gas-token chain codes.** `GAS_TOKEN_NOT_ETHER` now means only "this ring
    chain's `gasTokenAddress()` is non-zero but its WETH could not be resolved"

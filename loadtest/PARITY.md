@@ -1,4 +1,4 @@
-# PARITY.md — headless vs browser trace diff (S23)
+# PARITY.md — headless vs browser trace diff
 
 > **Historical (aggkit rc8).** The traces compared here were captured on the rc8 devnet, where the
 > `L1->L2A` and `L2A->L2B` hops were autoclaimed ("auto / auto / manual" and "16 auto + 8 manual"
@@ -20,7 +20,7 @@ explicit verdict.
   (506 lines, all parse) + `results.json`'s `http` aggregate. 2 users
   (`u0`, `u1`), each 1 ETH lap + 1 ERC20 lap = **4 laps total**, 4/4
   `LAP_DONE`.
-- **Browser**: `loadtest-results/s10-2026-09-11T11-06-30-206Z/browser-lap.har`
+- **Browser**: the 2026-09-11 acceptance run's `browser-lap.har`
   (749 entries, user `u0` only, re-classed here with a Python port of the
   exact same classifier logic for cross-check) +
   `accept-collector-snapshot.json` (pre-classified, covers **all 4 users**:
@@ -39,22 +39,21 @@ explicit verdict.
    means "per (1 ETH lap + 1 ERC20 lap)" and is the fair unit.
 2. **Different times, different devnet timing.** The headless run
    (2026-09-10T20:38Z) predates the timeout raise described in DESIGN
-   §3.3/S10 (`readyToClaimMs`/`claimedMs` 600 000→900 000,
+   §3.3 (`readyToClaimMs`/`claimedMs` 600 000→900 000,
    `hopMs`→1 200 000, `lapMs`→3 600 000); the browser run
    (2026-09-11T11:06Z) is the retried acceptance run under the raised
    timeouts. Per-hop wall-clock durations are therefore **not** directly
    comparable in absolute terms. Cadence is compared **per poll interval**
    (does the sequence contain 500/1000/2000/3000/5000/10000 ms steps in the
    right order), not by matching total elapsed time.
-3. **Not the final runner.** S11 (the `run` orchestrator that will own the
-   real poll-driving loop) is still `pending`. Both traces were produced by
-   the S08/S10 acceptance harnesses driving the workers directly (each now
-   deleted per the repo-hygiene rule: no `__s08_*`/`__s10_harness.ts` file
-   exists). Counts reflect how each *worker* behaves when driven, not
-   necessarily the exact polling cadence S11 will eventually choose for its
-   own control-flow ticks (see C16 below, which is about a structural
-   asymmetry that will persist regardless of S11's tick rate, not about the
-   specific numbers here).
+3. **Not the final runner.** The `run` orchestrator that owns the real
+   poll-driving loop was not yet in place. Both traces were produced by the
+   earlier acceptance harnesses driving the workers directly (each since
+   deleted per the repo-hygiene rule). Counts reflect how each *worker*
+   behaves when driven, not necessarily the exact polling cadence the final
+   orchestrator will choose for its own control-flow ticks (see C16 below,
+   which is about a structural asymmetry that will persist regardless of the
+   orchestrator's tick rate, not about the specific numbers here).
 
 ## 2. Per-endpoint-class table (counts normalized per user)
 
@@ -63,7 +62,7 @@ cadence is DESIGN §9.1's column, abbreviated.
 
 | Endpoint class | headless n (/user) | browser n (/user) | UI-expected cadence | Note |
 |---|---|---|---|---|
-| `tracker/activity` | 214 (107.0) | 802 (200.5) | burst 500/1000/2000/3000ms, then 5000ms while non-terminal else 10000ms, badge 15000ms, deduped, `staleTime 30s` | **C16** — browser volume inflated by the driver's own `readState()`/`observeActivity()` poll running concurrently with, and undeduped against, the UI's own poll. Interval *family* matches on both sides (§3). **S24 update (measured, mitigated — not eliminated):** these 802/200.5 counts are the pre-S24 combined total from this document's original S08/S10 harness trace. `results.json`/`summary.md` now split the stream by `origin: 'ui' \| 'harness'`, and the driver's own poll is single-flight + ~5s TTL cached (`fetchActivitySingleFlight()` in `browserUser.ts`), with a bounded retry (`fetchActivityTextWithRetry()`) so one shared fetch's transient failure doesn't fail every joined caller. Two independent real 4-browser-user runs (`--rate 2 --minutes 6`, actual duration ≈16.2 min each) measured **`ui` n=453/546 (7.00–8.47/user/min, headline)** vs **`harness` n=195/192 (~3.0/user/min both runs)** — the harness share is consistently now *below* the UI's own rate, down from 4.5x *above* it in the S24 attempt #1 defect (a check-then-act throttle race that made harness volume worse, not better), and comfortably under the ≤~12/user/min target. See DESIGN §9.3 C16 for the full diagnosis, the retry correction, and both runs' numbers. |
+| `tracker/activity` | 214 (107.0) | 802 (200.5) | burst 500/1000/2000/3000ms, then 5000ms while non-terminal else 10000ms, badge 15000ms, deduped, `staleTime 30s` | **C16** — browser volume inflated by the driver's own `readState()`/`observeActivity()` poll running concurrently with, and undeduped against, the UI's own poll. Interval *family* matches on both sides (§3). **Later update (measured, mitigated — not eliminated):** these 802/200.5 counts are the combined total from this document's original harness trace, before the follow-up mitigation. `results.json`/`summary.md` now split the stream by `origin: 'ui' \| 'harness'`, and the driver's own poll is single-flight + ~5s TTL cached (`fetchActivitySingleFlight()` in `browserUser.ts`), with a bounded retry (`fetchActivityTextWithRetry()`) so one shared fetch's transient failure doesn't fail every joined caller. Two independent real 4-browser-user runs (`--rate 2 --minutes 6`, actual duration ≈16.2 min each) measured **`ui` n=453/546 (7.00–8.47/user/min, headline)** vs **`harness` n=195/192 (~3.0/user/min both runs)** — the harness share is consistently now *below* the UI's own rate, down from 4.5x *above* it in the mitigation's first, defective attempt (a check-then-act throttle race that made harness volume worse, not better), and comfortably under the ≤~12/user/min target. See DESIGN §9.3 C16 for the full diagnosis, the retry correction, and both runs' numbers. |
 | `bridge/l1-info-tree-index[2]` | 4 (2.0) | 8 (2.0) | once per manual claim attempt | Matched exactly. `[2]` = recording network L2B, per P3's `sourceNetwork` rule on both sides. |
 | `bridge/claim-proof[2]` | 4 (2.0) | 8 (2.0) | once per manual claim attempt | Matched exactly. |
 | `bridge/injected-l1-info-leaf[*]` | 0 | 0 | skipped when destination networkId===0 | Matched — the ring's only manual hop (`L2B->L1`) always has destination L1 (networkId 0), so the skip fires on both sides every time; the non-skip branch is not exercised by this ring shape (see P4 verdict). |
@@ -158,11 +157,11 @@ an undeclared gap.**
 | P9 | `allowance` (`eth_call`) | **Matched** — present both sides; cannot be isolated from the generic `rpc/*/eth_call` bucket without call-body argument classing (out of scope, the classifier keys only on JSON-RPC *method*, per its documented design). Magnitudes consistent with the already-declared C6/C7 residuals. |
 | P10 | SDK builder's first `getNonce`+`estimateGas` pair | **Matched** — present on every build on both sides (§4). |
 | P11 | viem `prepareTransactionRequest`'s second pair | **Matched, with the pre-declared C5 exception on headless's bridge-submit build** (§4) — confirmed via raw-trace pairing walk, not just aggregate counts. |
-| P12 | Fee derivation (`eth_fillTransaction` → fallback) | **Matched** (SETTLED at S08, RECONFIRMED at S10 retry #1 — both sides take the identical fallback branch, `eth_gasPrice` never reached as a fallback). This diff adds **C15** (new, declared): the "cached per client uid" cache has a **different lifetime** per mode (per-chain-for-the-run on headless vs per-chain-switch-visit on browser) — same branch, different wasted-round-trip frequency, structural and expected given a real wallet must switch networks per hop. |
+| P12 | Fee derivation (`eth_fillTransaction` → fallback) | **Matched** (settled during the initial harness acceptance and reconfirmed in the retried acceptance run — both sides take the identical fallback branch, `eth_gasPrice` never reached as a fallback). This diff adds **C15** (new, declared): the "cached per client uid" cache has a **different lifetime** per mode (per-chain-for-the-run on headless vs per-chain-switch-visit on browser) — same branch, different wasted-round-trip frequency, structural and expected given a real wallet must switch networks per hop. |
 | P13 | `eth_sendRawTransaction` + receipt polling | **Matched** — tracks 1:1 with builds on both sides. |
 | P14 | `isClaimed` + post-throw `[0,400,1000]ms` retry loop (C3) | **Matched at the code level on both sides** (same retry contract implemented); **not empirically exercised beyond attempt 0** in either acceptance run — both runs report **zero** claim failures (`accept-outcomes.json`: 0 failures; headless: `LAP_FAILED: 0`), so the retry branch never had to fire. Not a gap — there is nothing in either trace to contradict the retry contract, there simply was no failure to retry. |
 
-## 6. New findings and declarations (this step)
+## 6. New findings and declarations
 
 Added to `loadtest/DESIGN.md`:
 
@@ -206,7 +205,7 @@ refinement, C15, C16). **No undeclared difference remains.**
    (C4 confirmed present and mechanically verified on both sides, with the
    one exception being the pre-existing, pre-declared C5 divergence).
 4. **No undeclared difference remains** — every difference found is either
-   already declared (C4–C6, C12–C14) or newly declared in this step (C6
+   already declared (C4–C6, C12–C14) or newly declared here (C6
    refinement, C15, C16), all written into `DESIGN.md` §9.3/§9.4 with
    justification. No headless bug was found, so nothing needed fixing.
 5. **`pnpm run check` passes** — confirmed: `validate:config` OK, lint 0

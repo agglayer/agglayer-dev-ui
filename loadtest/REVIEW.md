@@ -1,4 +1,4 @@
-# `loadtest/` — adversarial review and audit (plan step S20)
+# `loadtest/` — adversarial review and audit
 
 Reviewer: independent audit of the whole `feat/bridge-loadtest` change set.
 Date: 2026-09-11.
@@ -17,7 +17,7 @@ files against `git diff HEAD` plus the untracked trees. ~19 800 lines reviewed.
 **Baseline re-verified:** `pnpm run check` = **550 passed / 550**, 43 files;
 `eslint` 0 errors / 3 pre-existing warnings; `tsc --noEmit` clean.
 
-**No fixes were made.** This document is input to S21.
+**No fixes were made.** The resolutions are recorded in §9.
 
 ---
 
@@ -33,7 +33,7 @@ files against `git diff HEAD` plus the untracked trees. ~19 800 lines reviewed.
 | **R2** | **High** | Report honesty | Phase-latency percentiles are survivor-biased — timed-out phases contribute no sample, and the report does not say so | `core/ring.ts:502-520` |
 | **R3** | **High** | Correctness | No nonce serialization on the **user** send path; `ChainNonceManager` is funder-only, while `maxInflightLapsPerUser: 3` puts 3 concurrent sends on one EOA | `headlessUser.ts:791`, `chainClients.ts:77`, `fund.ts:357/503/570` |
 | **R4** | **High** | Report honesty / leak | Timed-out driver operations are never cancelled, so their traffic keeps being recorded against a hop already declared failed | `runner.ts:319-345`, `headlessUser.ts:813` |
-| **R5** | Medium | Safety | The E2E override **symbol** ships in every production bundle (the gate itself holds); the plan's "nothing leaks" expectation is not literally true | `app/context/e2eAccount.ts:22-38` |
+| **R5** | Medium | Safety | The E2E override **symbol** ships in every production bundle (the gate itself holds); the design's "nothing leaks" expectation is not literally true | `app/context/e2eAccount.ts:22-38` |
 | **R6** | Medium | Report honesty | Gate-stall p90/p99 are right-censored at the timeout and presented as plain percentiles | `metrics/report.ts:404-418` |
 | **R7** | Medium | Report honesty | Suppressed error classes (`not_ready`, benign external-asset `console_error`) are counted nowhere — `summary.md` can read "No errors recorded." while `activity.ndjson` holds them | `metrics/collector.ts:688`, `:710` |
 | **R8** | Medium | Report honesty | Achieved rate divides by **requested** minutes, not elapsed — a SIGINT-aborted run understates its own throughput proportionally | `metrics/report.ts:133-145` |
@@ -41,17 +41,17 @@ files against `git diff HEAD` plus the untracked trees. ~19 800 lines reviewed.
 | **R10** | Medium | Correctness | No runtime assertion that a browser context's connected wallet is the intended per-user wallet — a silent `addInitScript` regression collapses all browser users onto one key | `browserUser.ts:305/371`, `pool.ts:330-336` |
 | **R11** | Medium | Report honesty | HTTP samples made outside a `runWithFetchContext` scope are silently dropped, so endpoint counts are an undisclosed lower bound | `uiCallset.ts:346-378` |
 | **R12** | Medium | Hygiene | `.env.local.bak` is **not** gitignored and contains a (devnet) private key | `.gitignore:59-61` |
-| **R13** | Low | Hygiene | 20 `loadtest/**` files fail `prettier --check` (already an S21 task) | — |
+| **R13** | Low | Hygiene | 20 `loadtest/**` files fail `prettier --check` (already tracked for the fix pass) | — |
 | **R14** | Low | Resource leak | `installTimingFetch`'s uninstall handle is discarded; `globalThis.fetch` is never restored | `runner.ts:579`, `uiCallset.ts:380-386` |
 | **R15** | Low | Resource | Collector retains every HTTP/phase sample in memory for the whole run, unbounded | `metrics/collector.ts:757-790` |
 | **R16** | Low | Robustness | `runner.ts`'s `logger` defaults to a silent no-op, so a caller that omits it loses every diagnostic including redacted fatal errors | `runner.ts:514` |
 | **R17** | Info | Process | The branch carries **zero commits**; the whole deliverable is an uncommitted working tree | — |
-| **R18** | Info | Deferred | A5 multi-process sharding and A7–A10 remain open (already S21 tasks, not re-discovered here) | `VALIDATION-1.md` §2 |
+| **R18** | Info | Deferred | A5 multi-process sharding and A7–A10 remain open (already tracked as follow-up tasks, not re-discovered here) | `VALIDATION-1.md` §2 |
 | **R20** | Medium | Parity gap | Undeclared cadence divergence: headless treats an `ERROR` row as terminal, the real UI does not, so headless under-polls | `uiCallset.ts:423-424` vs `app/hooks/useTransactions.ts:24-25` |
 | **R21** | Medium | Safety | `redactSecrets` cannot redact a BIP-39 mnemonic at all, nor an un-prefixed 64-hex key — and `LOADTEST_MNEMONIC` is a first-class supported secret | `wallets/redact.ts:17` |
 | **R22** | Medium | Safety | `ui/build.ts` forwards the **entire** parent environment to `next build` with `stdio: 'inherit'`, so child output bypasses redaction | `ui/build.ts:265-276`, `:288-292` |
 | **R23** | Medium | Safety | Nothing cross-checks the `env` label against the actual `chainId`/`rpcUrl` — `env` is a trusted free-standing string | `config/schema.ts:300` |
-| **R24** | Low | Safety | `wallets/preflight.ts` never redacts at source; safety rests entirely on `cli.ts`'s single catch (known, S12) | `preflight.ts:91/119/169/197/260` |
+| **R24** | Low | Safety | `wallets/preflight.ts` never redacts at source; safety rests entirely on `cli.ts`'s single catch (known) | `preflight.ts:91/119/169/197/260` |
 | **R25** | Low | Safety | HAR recording and `browser.trace` are present-but-unwired; a Playwright trace would capture the raw key passed to `addInitScript` | `pool.ts:83/164/193/325-328`, `config/schema.ts:239/243` |
 | **R26** | Info | Docs | P2 is not implemented at all; DESIGN §9.1 / PARITY §5 describe it as "probability 0", implying a knob that does not exist | `DESIGN.md:961`, `PARITY.md:146` |
 | **R27** | Info | Safety | `fund.ts`'s Pass-2 incremental cap check is confirmed dead code (Pass 1 already guarantees it); cap values themselves are unbounded | `fund.ts:493-496`, `:515-519`, `schema.ts:181` |
@@ -72,43 +72,42 @@ Stated plainly, per the acceptance criteria:
 
 1. **No live run was performed.** The compose devnet was not brought up and no
    `run`/`fund`/`preflight` was executed. Every runtime claim below is either
-   (a) traced statically to file:line, or (b) taken from the plan's recorded
-   S08/S10/S11/S13/S14/S17 runs. Where a finding needs a live repro I say so
+   (a) traced statically to file:line, or (b) taken from the recorded acceptance, e2e and validation runs. Where a finding needs a live repro I say so
    and give the exact command.
 2. **R1's hang is root-caused statically, not reproduced.** Reproducing it
-   needs a multi-slot browser run with real crashes (S17's shape: 150 browser
+   needs a multi-slot browser run with real crashes (the scaled run's shape: 150 browser
    users, 19 slots). The code path is proven by reading; the *frequency* is not.
-3. **The testnet/mainnet path is unexercised** — S18 is blocked for want of a
+3. **The testnet/mainnet path is unexercised** — the testnet smoke run is blocked for want of a
    funded Sepolia key and a real aggkit-proxy URL (`config.json` carries only
    `https://PLACEHOLDER-testnet-aggkit-proxy`). Confirmed as described. So
    every prod-path safety claim (funder transfers, ERC20 spend, real gas
    pricing) rests on unit tests with a mocked viem client, not on a real chain.
-4. **Latency numbers from S14/S17 are unusable by the tool's own admission**
+4. **Latency numbers from the validation runs are unusable by the tool's own admission**
    (A5 self-disqualification fired: `eventLoopDelayP99Ms` peaked at 35 433 ms
    against a 100 ms threshold). I therefore could not audit whether the
    *latency* figures are correct — only whether the disqualification machinery
    that refuses to present them is correct. It is.
 5. **`aggkit`'s own `/metrics` is unreachable** (port not published by the
    vendored compose file; `:11577/metrics` → 404), so nothing in the report can
-   be cross-checked against aggkit-side counters. Recorded honestly by S14/S17.
+   be cross-checked against aggkit-side counters. Recorded honestly in the validation write-ups.
 6. **The devnet is wedged** (`agglayer_node_network_latest_certificate_in_error{network_id="1"} = 1`,
    SIGBUS in the SP1 native executor, deterministic across three runs). Any
    fresh end-to-end validation would measure a broken backend, so I did not
-   attempt one. **[Update, S34/S35, 2026-09-16]: this was our own devnet's
+   attempt one. **[Update, 2026-09-16]: this was our own devnet's
    undersized default `/dev/shm` (Docker's 64 MB default), not an agglayer/aggkit
    defect — `shm_size: '4gb'` on the `agglayer` service (commit `4947855`)
    eliminates it. This limitation no longer applies to a checkout with that
    setting; see `VALIDATION-1.md`'s C1 retraction note.**
-7. **Prettier could not be made clean** without a formatting pass, which S20's
+7. **Prettier could not be made clean** without a formatting pass, which this review's
    non-goals forbid. Reported as R13 only.
 8. **R29's tick loss is shown reachable, not shown to have fired.** The
    precondition (a pump gap exceeding `periodMs`) is demonstrably reachable on
-   this host at the plan's own `--rate 2`, given S17's measured 35 433 ms
-   event-loop p99 — but S14 predates event-loop sampling and S17 ran at
+   this host at the scaled run's `--rate 2`, given the measured 35 433 ms
+   event-loop p99 — but the first validation run predates event-loop sampling and the scaled run ran at
    `--rate 1`, where `periodMs` stayed above the measured delay. I could not
    confirm ticks were actually lost in any recorded run.
-9. **The `_ltPollOrigin=harness` marker's inertness on the wire** rests on
-   S24's orchestrator-verified live comparison; I confirmed from code only that
+9. **The `_ltPollOrigin=harness` marker's inertness on the wire** rests on an
+   orchestrator-verified live comparison; I confirmed from code only that
    it cannot affect endpoint classification. Re-verifying the proxy's
    indifference to the extra query parameter needs a live devnet.
 10. **The single-flight dedup path under real lap concurrency** is proven by
@@ -148,7 +147,7 @@ against a config with `env: "mainnet"` will, with **no confirmation prompt, no
 flag, and no dry-run mode**, proceed to sign and broadcast up to
 `users.total × bridgesPerMinutePerUser × durationMinutes` real bridge
 transactions from real funded wallets on mainnet, plus the corresponding
-approves and claims. At the plan's target scale that is 300–1000 wallets at
+approves and claims. At the target scale that is 300–1000 wallets at
 1–2 bridges/user/min for tens of minutes.
 
 The gate is on the step that *moves* money into the wallets, not on the step
@@ -171,9 +170,9 @@ Aggravating factors:
 so `PROXY_URL_PLACEHOLDER` passes) and pre-funded wallets, then
 `pnpm loadtest run --config <that file>` with no `--fund`. Nothing asks for
 confirmation. (Not executed here — see §1: no funded mainnet key exists in this
-environment, which is also why S18 is blocked.)
+environment, which is also why the testnet run is blocked.)
 
-**Fix shape for S21** (not applied): move the `env === 'mainnet'` confirmation
+**Fix shape** (not applied): move the `env === 'mainnet'` confirmation
 check into `runLoadTest`'s entry (or `cli.ts`'s `run` handler) so it gates the
 load test unconditionally, independent of `--fund`; and add a `--dry-run` that
 walks preflight + the scheduler with the drivers stubbed. Consider also
@@ -205,8 +204,7 @@ succeeded. On a mainnet or testnet config naming a real, valuable ERC20 (real
 USDC, say), a fat-fingered `assetTopUp` or a large `users.total` has no
 preventive limit whatsoever.
 
-This is **already known**: S05 recorded it and S18's blocked note carries it
-forward as "remaining prod-path risk to call out in the PR". I am re-raising the
+This is **already known**: it was recorded during the initial build and carried forward in the blocked-testnet note as "remaining prod-path risk to call out in the PR". I am re-raising the
 severity because R0 removes the one gate that made it tolerable — with no
 mainnet confirmation on `run` and no ERC20 cap on `fund`, there are two
 independent missing guards on the same money path.
@@ -245,7 +243,7 @@ so the next sample's duration is merely the poll interval since re-entry — not
 "ready to claim" latency at all.
 
 **Effect on the numbers.** A hop that cycles through `not_yet_claimable` N times
-(the `l1-info-tree-index` / syncer-inconsistency gate stall, which S14 recorded
+(the `l1-info-tree-index` / syncer-inconsistency gate stall, which the first validation run recorded
 as the dominant backpressure cause — 1583/1790 skips had their oldest hop on the
 `claim-proof` gate) emits **N+1** `ready_to_claim` samples, N of them
 near-zero. The §5.1 `ready_to_claim` histogram is therefore diluted toward zero
@@ -306,12 +304,12 @@ required minimum pump cadence, and nothing guards against violating it.
 **This is not merely latent.** `PUMP_INTERVAL_MS` is 1 000 ms, so a naive
 reading says the cap only bites above 60 bridges/user/min. But the pump loop is
 `await sleep(PUMP_INTERVAL_MS)` on the **same event loop** that A5 documents as
-saturated: S17 measured `eventLoopDelayP99Ms` peaking at **35 433 ms**. A
-nominal 1 s sleep can therefore take ~35 s, and at the plan's own target
+saturated: the scaled run measured `eventLoopDelayP99Ms` peaking at **35 433 ms**. A
+nominal 1 s sleep can therefore take ~35 s, and at the target
 `--rate 2` (`periodMs = 30 000`) that gap **exceeds** `periodMs`. So on this
-host, at the rate S14 actually used, the precondition for silent tick loss is
-demonstrably reachable. (I did not observe lost ticks directly — S14 predates
-event-loop sampling, and S17 ran at `--rate 1` where `periodMs = 60 000` stayed
+host, at the rate the first validation run actually used, the precondition for silent tick loss is
+demonstrably reachable. (I did not observe lost ticks directly — that run predates
+event-loop sampling, and the scaled run ran at `--rate 1` where `periodMs = 60 000` stayed
 above the measured 35 s. Reachable and evidenced, not confirmed fired.)
 
 **What is wrong — part 2, and this is the sharper half.** `ticksOffered` is not
@@ -332,7 +330,7 @@ and an identity check that says OK. A reader concludes "the tool offered the
 requested load and the system under test could only absorb X". But if the pump
 was starved, the tool never offered the requested load in the first place, and
 the identity — designed to catch exactly this class of error, and which
-genuinely caught S11's unit mismatch — is structurally blind to it. S14's
+genuinely caught the earlier unit mismatch — is structurally blind to it. The first validation run's
 headline "achieved 0.87/user/min = 43 % of target" and its 51 %-backpressure
 narrative both rest on a demand figure that can silently shrink.
 
@@ -354,7 +352,7 @@ Drive the scheduler with `bridgesPerMinutePerUser: 2` (`periodMs = 30 000`) and
 
 ### R1 — `run` never exits: an abandoned driver call can relaunch the browser pool after teardown
 
-**Severity: High** (resource leak; this is S17's reported hang, root-caused).
+**Severity: High** (resource leak; this is the scaled run's reported hang, root-caused).
 
 **Files:**
 - `loadtest/runner.ts:319-345` — `raceOrTimeout`
@@ -390,11 +388,11 @@ nothing will ever close. Both are libuv handles, so Node's event loop never
 drains. Because `cli.ts` ends by setting `process.exitCode` rather than calling
 `process.exit()`, the process hangs indefinitely — **after** `run: complete` has
 already printed (cli.ts prints it only once `runLoadTest` has resolved, i.e.
-after `disposeEverything`). That is exactly S17's signature: "hangs well past
+after `disposeEverything`). That is exactly the scaled run's signature: "hangs well past
 printing `run: complete`… holding hundreds of Chromium processes", and the
 orphaned 2 h 45 m run with 127 Chromium processes.
 
-With 19 slots and 516 `browser_crash` events in S17 run 1, a relaunch being
+With 19 slots and 516 `browser_crash` events in the first scaled run, a relaunch being
 in flight at drain time is not a rare race — it is likely.
 
 **Repro (needs a live devnet).**
@@ -410,8 +408,8 @@ call `dispose()` before it resolves, then assert the slot's `server`/`browser`
 are null. They are not.
 
 **Why it matters beyond tidiness.** Any script waiting on the `run` PID hangs
-(S13's e2e and the nightly CI job need a bounded wait), and an orphaned run
-contaminates the next run's host-resource baseline — which S17 caught happening.
+(the e2e suite and the nightly CI job need a bounded wait), and an orphaned run
+contaminates the next run's host-resource baseline — which the scaled run caught happening.
 
 ---
 
@@ -441,7 +439,7 @@ and `finish` records a phase sample only for `hop_total`, only when
 `isSuccessOutcome(outcome)` (`ring.ts:511`). So a phase that **times out
 contributes no latency sample at all** — its elapsed time is discarded.
 
-Consequence, using S14's real numbers: of 667 `L2A→L2B` hops, 534 timed out at
+Consequence, using the first validation run's real numbers: of 667 `L2A→L2B` hops, 534 timed out at
 `readyToClaimMs`. The `ready_to_claim` row in `summary.md`'s **Phase latencies**
 table is therefore the distribution over the ~133 hops that *did* become
 claimable. The reported p50/p90/p99 are systematically **better than reality**,
@@ -466,7 +464,7 @@ through one hop that succeeds `ready_to_claim` in 10 s and one that times out at
 900 000 ms; snapshot the collector. `phases.global.ready_to_claim` has `n=1`,
 `p99=10000`. The 900 s wait is absent from the table and from `results.json`.
 
-**Fix shape for S21** (not applied): either emit a phase sample on the timeout
+**Fix shape** (not applied): either emit a phase sample on the timeout
 path with the censored duration and a `censored: true` marker, or — cheaper and
 sufficient for honesty — have `renderPhaseLatencies` print each phase's sample
 count against the number of hops that entered that phase, and a one-line note
@@ -506,7 +504,7 @@ one shared `runtime.wallet` per (user, chain). Three sends that interleave
 between their `eth_getTransactionCount` and their `eth_sendRawTransaction` all
 receive the same pending nonce.
 
-This is not hypothetical: S14 logged **19** `Nonce provided for the transaction
+This is not hypothetical: the first validation run logged **19** `Nonce provided for the transaction
 is lower than the current nonce` plus **70** `Transaction creation failed.`
 (viem `TransactionRejectedRpcError`, JSON-RPC `-32003`), and `VALIDATION-1.md:526-528`
 already names the cause — "same-wallet concurrency from `maxInflightLapsPerUser: 3`
@@ -515,7 +513,7 @@ there.
 
 **Why this is a report-honesty defect, not just a bug.** After A4, these land in
 the `rpc_error` class — a name that reads as "the chain or the proxy rejected
-us". `summary.md` presents `rpc_error 2037` (S17 run 1) / `4344` (run 2) with no
+us". `summary.md` presents `rpc_error 2037` (first scaled run) / `4344` (second) with no
 indication that an unknown share of it is the harness colliding with itself. The
 tool exists to measure the proxy honestly; here it makes the system under test
 look **worse** than it is, which is the same failure mode as flattering itself,
@@ -542,7 +540,7 @@ neither is declared.
 
 ---
 
-#### R3 — REVERSED by S29 (2026-09-14, user-directed): serialize after all
+#### R3 — REVERSED (2026-09-14, user-directed): serialize after all
 
 **The decision above ("keep parity, attribute honestly") is superseded.** It
 was made on a rate — "89/1985 hop attempts" — that was diluted across every
@@ -552,11 +550,10 @@ hop in the ring. Measured concentrated on the one hop that actually matters
 **44/114 = 38.6%**. That is not "a tolerable rate if left alone"; it is a
 worker that fails more than a third of the time on its hardest hop.
 
-**S29 re-ran the diagnosis before touching anything** (per its own
-instruction: confirm, don't re-derive). `messageOf()` in `headlessUser.ts`
+**The diagnosis was re-run before touching anything** (confirm, don't re-derive). `messageOf()` in `headlessUser.ts`
 only ever read `error.shortMessage`, which for viem's
 `TransactionRejectedRpcError` is always the generic "Transaction creation
-failed." — R3's own analysis, and S14's before it, never saw past that
+failed." — R3's own analysis, and the initial run analysis before it, never saw past that
 string. Walking viem's `.cause` chain (`RpcError` -> `RpcRequestError` ->
 the raw JSON-RPC error) on real failures from a live headless-only run
 against the compose devnet surfaced the actual rejection underneath:
@@ -583,16 +580,16 @@ was applied backwards — **a real user does not submit up to six concurrent
 bridges from one wallet.** Real usage is inherently serial (one person, one
 wallet, one pending intent at a time), so a tool that fires several
 concurrent sends from one EOA is the thing that diverges from a real user,
-not the fix. This is the exact reasoning S25 already used to justify
+not the fix. This is the exact reasoning already used to justify
 serializing the browser driver's UI flow per page — R3 simply hadn't been
-revisited in that light until directed to.
+revisited in that light.
 
 **Resolution: serialize nonce-consuming sends per (user, chain).**
 `workers/headless/headlessUser.ts`'s `sendAndWait` (the only send site in
 the user path — still true, still the right, minimal scope) is now wrapped
 in `workers/headless/uiCallset.ts`'s new `KeyedSerialQueue`, keyed by
 `chainKey`: the exact FIFO-queue shape `browserUser.ts`'s `runExclusive`
-proved for S25 (a queue, not the single-flight/dedup shape used elsewhere
+already proved (a queue, not the single-flight/dedup shape used elsewhere
 in this codebase — see that class's doc for why dedup is wrong here and
 for the failure-non-amplification guarantee), generalized to be keyed so
 unrelated chains for the same user still proceed concurrently.
@@ -608,10 +605,10 @@ place (finding C4, `app/utils/transaction.ts:26-38`) — would likely be the
 more complete fix (it would also halve the double `eth_estimateGas` +
 `eth_getTransactionCount` C4 already documents), but that file is in
 `app/` and changing it needs explicit user approval; the worker-side queue
-was chosen as directed, and this is recorded here as a standing
-recommendation for a future step.
+was chosen, and this is recorded here as a standing
+recommendation.
 
-The `nonce_conflict` error class (S21, `metrics/errors.ts`) is unaffected
+The `nonce_conflict` error class (`metrics/errors.ts`) is unaffected
 and stays wired — a genuine node-side nonce issue unrelated to this tool's
 own concurrency is still theoretically possible and should still be
 attributed honestly if it recurs — but with sends serialized per (user,
@@ -620,12 +617,11 @@ chain) it should no longer fire from self-inflicted collisions.
 **Required consequence, verified in a real run:** a serialized headless
 user will not always keep up with `--rate` when sends are slow to confirm.
 Those unserved ticks land in `skipped_backpressure` (the same,
-already-tested scheduler mechanism S25 relied on for browser mode — no
+already-tested scheduler mechanism browser mode relies on — no
 `core/` change was needed here either), never as failures.
 
-See `DESIGN.md` §5.3's `nonce_conflict` row for the parallel update, and
-the S29 feedback pack (plan `bridge-loadtest-plan.md` §8) for the measured
-before/after `L2B->L1` rate.
+See `DESIGN.md` §5.3's `nonce_conflict` row for the parallel update; the
+measured before/after `L2B->L1` rates quoted above are the evidence.
 
 ---
 
@@ -691,7 +687,7 @@ The override is validated (`isHexPrivateKey`) before reaching
 `privateKeyToAccount`, and the throw message does **not** echo the bad value, so
 a malformed key cannot leak through the error. All verified and accepted.
 
-**But the plan's expectation — "nothing leaks into production bundles, verify by
+**But the design's expectation — "nothing leaks into production bundles, verify by
 building without E2E and grepping `out/` for the override symbol" — is not
 literally satisfied.** The guard is a *runtime* early return inside an IIFE, so
 Turbopack's minifier cannot dead-code-eliminate the block; the whole closure,
@@ -733,7 +729,7 @@ falsy). Both builds were run in a scratch pass and `out/`/`.next/` removed
 afterwards; `git status --short` verified byte-identical before and after, and
 `out/` is gitignored.
 
-**Action for S21:** none required for safety. **Required for S22:** the PR must
+**Action:** none required for safety. The PR description must
 say "the override is gated and inert in production builds" rather than "does not
 appear in production builds", because the latter is false and is one grep away
 from being contradicted by a reviewer.
@@ -762,7 +758,7 @@ The table already carries `hopsEntered` and `blockedTicks`; it does not carry
 "how many of these visits ended at the timeout", which is the one number that
 makes the percentiles interpretable.
 
-**Repro.** Any run where a gate times out (e.g. S14's
+**Repro.** Any run where a gate times out (e.g. the first validation run's
 `loadtest-results/20260911T175302Z/summary.md`): the `claim-proof` row's p99 sits
 at the configured `readyToClaimMs` with no annotation.
 
@@ -784,8 +780,8 @@ if (input.errorClass === 'not_ready') return;                                   
 if (input.errorClass === 'console_error' && isBenignExternalAssetHost(input.endpointClass)) return;  // :710
 ```
 
-Both suppressions are *correct policy* (DESIGN §5.3 for `not_ready`; S11 defect
-(3) for the `icon.invalid` favicon noise that hit 46/46 in one run). The defect
+Both suppressions are *correct policy* (DESIGN §5.3 for `not_ready`; an earlier defect
+fix for the `icon.invalid` favicon noise that hit 46/46 in one run). The defect
 is that **no counter records how many were suppressed**. `not_ready` is at least
 represented indirectly as a gate stall; benign `console_error` has **no
 representation in `results.json` at all**.
@@ -841,7 +837,7 @@ Both terms of the denominator are **requested**, never observed:
 - **Users.** Dividing by `config.users.total` folds in users that were never
   active — including browser users permanently retired via
   `browser_crash_permanent`. This is A9/A10 territory and is already a deferred
-  S21 task; I note it here only because it compounds with the minutes term in
+  fix-pass task; I note it here only because it compounds with the minutes term in
   the same expression.
 
 **Repro.** Start any run with `--minutes 20`, SIGINT at t=4 min, read
@@ -868,9 +864,9 @@ for a run that submitted real laps. There is no `n/a`, no warning, and the
 identity check still says **OK** (it does not involve the rate), so nothing in
 the report signals that the figure is undefined rather than measured. Anything
 `rampUpSeconds >= durationMinutes × 60` hits this; `--minutes 1` is a perfectly
-plausible smoke invocation, and S13's own spec uses `--minutes 2`, one step away.
+plausible smoke invocation, and the e2e spec itself uses `--minutes 2`, one step away.
 
-S12 already added the `readyToClaimMs < hopMs < lapMs` ordering invariant to
+The `readyToClaimMs < hopMs < lapMs` ordering invariant is already in
 `schema.ts`; this is the same class of guard and belongs beside it.
 
 **Repro.** `pnpm loadtest validate` a config with `durationMinutes: 1`,
@@ -899,9 +895,9 @@ The failure would be catastrophic and *invisible*: all N browser users collapse
 onto one EOA, producing massive nonce collisions (see R3), a meaningless
 per-user load profile, and an error pattern that reads as chain/proxy trouble.
 
-The project already knows this — S09's outcome note states "**if a browser user
-ever transacts from that address, the override failed to apply**" — and S10
-proved four distinct addresses. But that proof was a one-off acceptance check
+The project already knows this — the build notes state "**if a browser user
+ever transacts from that address, the override failed to apply**" — and an
+acceptance run proved four distinct addresses. But that proof was a one-off acceptance check
 run by a harness. `connectedAddressBadge()` is explicitly **not** on the
 `UserDriver` interface, so `run` never calls it. There is no assertion in the
 production path.
@@ -952,9 +948,9 @@ of the output.
 **Files:** `.gitignore:59-61` (`.env`, `.env.local` — exact names, no `*.bak`);
 untracked `.env.local.bak` at the repo root.
 
-**What is wrong.** S01 deliberately moved the stale Kurtosis `.env.local` aside
+**What is wrong.** The stale Kurtosis `.env.local` was deliberately moved aside
 to `.env.local.bak` (it holds stale values that would otherwise override
-exports) and the plan says to leave it there. Correct as a procedure — but the
+exports) and the working notes said to leave it there. Correct as a procedure — but the
 `.gitignore` patterns are exact names, so the `.bak` suffix escapes them
 entirely:
 
@@ -970,9 +966,9 @@ secret**. The defect is the pattern gap: the repo's staging area is currently
 willing to track a file whose whole purpose is holding environment secrets, and
 the branch that created it did not close the hole.
 
-**Action for S21:** either delete `.env.local.bak` (its contents are recoverable
+**Action:** either delete `.env.local.bak` (its contents are recoverable
 from `scripts/kurtosisDevnetEnv.mjs`) or widen `.gitignore` to `.env.local*` /
-`.env*.bak`. Note S22 must not `git add -A`.
+`.env*.bak`.
 
 ---
 
@@ -1011,7 +1007,7 @@ untested: `anyRowNonTerminal` has no test in `uiCallset.test.ts`.
 The trigger is narrow (needs an `ERROR` row with nothing else pending for that
 address) but `ERROR` rows are exactly what a wedged devnet produces, which is
 the condition every validation run so far has hit — so this is likely to have
-been live during S14/S17 and to have depressed their headless activity volume
+been live during the validation runs and to have depressed their headless activity volume
 slightly.
 
 **Repro.** Unit-level, no devnet: feed `mapActivityResponseText` a response whose
@@ -1057,7 +1053,7 @@ redaction call site uses `error.message` / `String(error)`. A stack trace is
 never fed to `redactSecrets` — so the redactor's inability to handle one is
 currently moot, by accident rather than by design.
 
-**Fix shape for S21** (not applied): add a word-list-free mnemonic heuristic
+**Fix shape** (not applied): add a word-list-free mnemonic heuristic
 (e.g. ≥12 whitespace-separated lowercase alpha tokens) and an un-prefixed
 64-hex branch, plus a test per case. Cheap, and it removes the reliance on
 "nothing currently interpolates it".
@@ -1196,7 +1192,7 @@ here.
   (`app/utils/address.ts`, `app/constants/routes.ts`, `next.config.ts`,
   `tsconfig.json`, `postcss.config.mjs`, `tests/e2e/globalSetup.ts`, …) —
   including `app/context/e2eAccount.ts`, which already failed at `HEAD`. Already
-  an S21 task; recorded for completeness, ranked Low, and the scope stands:
+  a fix-pass task; recorded for completeness, ranked Low, and the scope stands:
   format `loadtest/**` only.
 
 - **R14 — `installTimingFetch`'s handle is discarded.** `uiCallset.ts:380-386`
@@ -1210,7 +1206,7 @@ here.
 
 - **R15 — Unbounded in-memory sample retention.** `collector.ts:757-790` pushes
   every phase duration and every HTTP sample into arrays held for the whole run
-  (S14 recorded 96 927 `tracker/activity` samples alone; S17 peaked at 4.26 GB
+  (the first validation run recorded 96 927 `tracker/activity` samples alone; the scaled run peaked at 4.26 GB
   tool RSS). Percentiles genuinely need the samples, so this is a design
   trade-off rather than a bug — but there is no cap and no reservoir sampling, so
   a longer or larger run can OOM and lose the report entirely.
@@ -1227,7 +1223,7 @@ here.
   is empty and both refs are `d5529b3`; the whole deliverable is an uncommitted
   working tree. Consequence for reviewers: `git diff base...branch` shows
   nothing, and the untracked trees must be reviewed as new files (which is how
-  this audit was done). S22 must stage deliberately — **not** `git add -A`, see
+  this audit was done). the PR must stage deliberately — **not** `git add -A`, see
   R12 — and the PR diff will be the first time this change set exists as commits.
 
 - **R24 — `wallets/preflight.ts` never redacts at source.** Raw `error.message`
@@ -1237,7 +1233,7 @@ here.
   every current caller (`cli.ts:213`, `runner.ts:547-549`) wraps the text in a
   thrown `PreflightError` that reaches `cli.ts:413`'s
   `main().catch(redactError(...))`, so **nothing escapes unredacted today**.
-  Confirmed as S12 reported it. The residual issue is that the whole guarantee
+  Confirmed as reported earlier. The residual issue is that the whole guarantee
   rests on one choke point with no test, and the choke point *is* genuinely the
   only exit (verified independently: zero `process.on('unhandledRejection')` /
   `'uncaughtException')` handlers and no `process.exit()` anywhere in
@@ -1276,14 +1272,14 @@ here.
   which this tool never does" rather than implying a defaulted-off probability.
 
 - **R27 — `fund.ts`'s Pass-2 incremental cap check is dead code, and caps are
-  unbounded.** Two small confirmations, both already flagged by S12 and neither a
+  unbounded.** Two small confirmations, both already flagged and neither a
   vulnerability:
   (a) Pass 1 (`fund.ts:467-491`) sums `needed` across wallets and throws
   `FUNDING_CAP_EXCEEDED` at `:486-490` **before Pass 2 starts**, genuinely
   implementing DESIGN §4.3's "refuse the whole fund, sending nothing". Pass 2's
   per-wallet `spent + needed > cap` check (`:515-519`) re-reads the *same*
   `neededPerChain` map over the *same* wallets in the *same* order, so it is
-  mathematically unreachable. S12's "looks like dead code" is confirmed: it **is**
+  mathematically unreachable. The earlier "looks like dead code" observation is confirmed: it **is**
   dead. The only defect is that its comment (`:493-496`) claims it protects
   against a stale plan, which it does not — Pass 1 is what protects you.
   (b) `maxTotalSpend`/`gasPerChain` are validated only as non-negative decimal
@@ -1292,7 +1288,7 @@ here.
   defensible design, but it means the cap is a typo-catcher, not a limit.
 
 - **R32 — Dead code in `core/`, catalogued.** All four confirmed by reading, all
-  harmless, listed so S21 can delete deliberately rather than rediscover:
+  harmless, listed so a future pass can delete deliberately rather than rediscover:
   (a) **T27's `AWAITING_CLAIMED` half is unreachable.** The only entry to
   `AWAITING_CLAIMED` is `goTo(…, 'T23', …)` at `ring.ts:976`, reachable only
   from `CLAIM_PENDING`, reachable only after the `claim_sent` handler sets
@@ -1320,9 +1316,9 @@ here.
   (prose) says `lapMs` default (devnet) = `2 700 000` (45 min) = 3 × `hopMs`;
   `DESIGN.md:427` (the §3.3 table) says `3 600 000` (60 m). With
   `hopMs = 1 200 000`, `3 × hopMs = 3 600 000`, so **the table is right and the
-  prose is stale** — it was not updated when S10 raised the timeouts.
+  prose is stale** — it was not updated when the timeouts were raised.
   `deriveDevnet.ts:220-223` emits `3 600 000`, matching the table, so no code is
-  affected; only the document misleads. Worth fixing while S21 is in these
+  affected; only the document misleads. Worth fixing while working in these
   files.
 
 - **R34 — `maxInflightLapsPerUser` is per (user, asset), and the prose blurs it.**
@@ -1343,13 +1339,13 @@ here.
   `retries`, so `describeHttpStats`'s `retries=` field is not a retry count),
   A8 (`browserUser.ts`'s bare `catch {}` manufacturing `bridge_event_missing`),
   A9 (req/user should normalise per active user-minute), A10 (achieved rate
-  should be per mode, not blended). All already listed as S21 tasks.
+  should be per mode, not blended). All already listed as follow-up tasks.
 
 ---
 
 ## 5. Verified correct — do not re-audit
 
-Recorded so S21 does not spend time here.
+Recorded so the fix pass does not spend time here.
 
 **Correctness**
 
@@ -1439,7 +1435,7 @@ Recorded so S21 does not spend time here.
   (`uiCallset.ts:250`) and never reads query params; only the `bridge/*` branch
   reads `network_id` (`:243-248`). So the marker is invisible to classing. It
   *is* a real extra query parameter on the wire — asserted inert by
-  orchestrator-verified live comparison in S24 (structurally identical
+  orchestrator-verified live comparison (structurally identical
   responses, 51 bridges, HTTP 200 both ways); I could not re-verify that without
   a live devnet.
 - **`report --dir` re-renders from `results.json`'s own embedded config**
@@ -1477,7 +1473,7 @@ Recorded so S21 does not spend time here.
 - **The asset round-robin is genuinely round-robin, not biased.** `pickAsset`
   (`scheduler.ts:166-178`) starts at `bucket.nextAssetIndex`, cycles all
   `assetCount` candidates, and advances the index on every successful pick
-  (`:173`). **Correction to the plan's S13 note:** the observed "`--rate 1
+  (`:173`). **Correction to an earlier note:** the observed "`--rate 1
   --minutes 2` always lands on index 0" is *not* a round-robin defect. It is an
   artefact of `pump()`'s strict stop check (`scheduler.ts:199`:
   `if (drainStartedAt !== null || now >= stopAt) return [];`) — with
@@ -1485,7 +1481,7 @@ Recorded so S21 does not spend time here.
   and tick 2's due instant is exactly `now === stopAt === 120 000`, which the
   `>=` excludes, so the second tick never fires at all. `--rate 1 --minutes 3`
   (or any higher rate) exercises erc20 correctly. Worth recording because the
-  plan carries the weaker diagnosis forward into S14/S17 guidance.
+  weaker diagnosis was carried forward into later validation guidance.
 - **Ramp-up math is correct.** `admissibleAt` (`scheduler.ts:139-140`) matches
   DESIGN's `t = rampUpSeconds × 1000 × k / total` exactly, and
   `ticksLostToRamp`'s closed form (`:155-158`) correctly represents the tokens a
@@ -1508,7 +1504,7 @@ Recorded so S21 does not spend time here.
   (`pool.ts:342`), `browser.on('disconnected')` (`pool.ts:258`) and
   `runSlotCrashRecovery` (`pool.ts:413`) all check `this.disposing`, and both
   signals coalesce through one `crashInFlight` promise per slot
-  (`pool.ts:398-409`) with a stale-incarnation guard (`pool.ts:269`). S10's real
+  (`pool.ts:398-409`) with a stale-incarnation guard (`pool.ts:269`). The earlier acceptance-run
   bug is genuinely fixed. (R1 is about the *direct* launch paths, which are a
   different set.)
 
@@ -1520,7 +1516,7 @@ Recorded so S21 does not spend time here.
   independent** count of the same event (`collector.ts:346-353`, incremented by
   `tick()` once per `start_lap` decision). Comparing the two can therefore
   genuinely fail — and it is printed either way (`report.ts:266-268`), which is
-  how S11's unit mismatch was caught. That much is right and I confirm it.
+  how the earlier unit mismatch was caught. That much is right and I confirm it.
   **Scope limit, recorded so nobody over-trusts it:** within the scheduler
   `ticksOffered` is *defined* as the sum of the other three
   (`scheduler.ts:258`), so the identity verifies "the runner recorded every tick
@@ -1530,7 +1526,7 @@ Recorded so S21 does not spend time here.
   identity term and the input to `steadyStateRatePerUserPerMin`) is cleanly
   separated from `hopBridgesSubmitted`, which is labelled "informational only —
   per-HOP bridge sends, not part of the identity" in both `results.json` and the
-  rendered table (`report.ts:50-53`, `:260`). S11's wrong-unit defect does not
+  rendered table (`report.ts:50-53`, `:260`). The earlier wrong-unit defect does not
   recur.
 - **`aborted` is reserved for abnormal termination.** `runner.ts:1007-1012`:
   `abnormalAbort = drainCause === 'sigint' || 'fatal'`; `duration_elapsed`
@@ -1541,8 +1537,8 @@ Recorded so S21 does not spend time here.
 - **The A5 self-disqualification works and is conservative.**
   `report.ts:304-332` disqualifies Phase **and** Endpoint latency sections once
   any sample's `eventLoopDelayP99Ms` ≥ 100 ms, using `max` across samples (one
-  spike disqualifies the run — the honest direction). It fired for real in S16's
-  e2e run and in both S17 runs. Missing `eventLoopDelayP99Ms` is filtered out
+  spike disqualifies the run — the honest direction). It fired for real in the post-fix
+  e2e run and in both scaled runs. Missing `eventLoopDelayP99Ms` is filtered out
   rather than folded in as a false zero (`report.ts:459-461`, `:306-311`).
 - **Zero-sample keys are omitted, not zero-filled** (note N5, with an explicit
   test at `collector.test.ts:48`).
@@ -1580,7 +1576,7 @@ Recorded so S21 does not spend time here.
 - **The native spend cap is genuinely enforced before anything is sent.** Pass 1
   (`fund.ts:467-491`) sums `needed` across all wallets and throws
   `FUNDING_CAP_EXCEEDED` at `:486-490` **before Pass 2 begins**, implementing
-  DESIGN §4.3's "refuse the whole fund, sending nothing". S12's spend-cap
+  DESIGN §4.3's "refuse the whole fund, sending nothing". The spend-cap
   boundary test (`total == cap` must pass, the guard being `>` not `>=`) covers
   the edge.
 - **Funder nonce discipline is correct and race-free.** `ChainNonceManager`
@@ -1600,14 +1596,14 @@ Recorded so S21 does not spend time here.
   `INLINE_PRIVATE_KEY_FORBIDDEN` (`schema.ts:318-343`, `:570-576`), which walks
   the **whole** parsed document for a bare 64-hex literal — a strong control,
   since it stops a key being committed in the config at all;
-  `RING_MUST_START_AT_ASSET_ORIGIN` (`schema.ts:630-644`); and the S12
+  `RING_MUST_START_AT_ASSET_ORIGIN` (`schema.ts:630-644`); and the
   `readyToClaimMs < hopMs < lapMs` ordering invariant.
 - **`cli.ts:413`'s `main().catch(redactError(...))` is genuinely the only
   top-level exit.** Verified independently: **zero**
   `process.on('unhandledRejection')` / `process.on('uncaughtException')`
   handlers anywhere in `loadtest/`, and the only `process.exit*` usages are
   `process.exitCode = 1` assignments (`cli.ts:408`, `:418`), which do not
-  bypass a pending catch. (The absence of a test on this choke point is S12's
+  bypass a pending catch. (The absence of a test on this choke point is a
   noted gap; see R24.)
 - **`ui/build.ts` never touches real key material** — the only key it injects is
   the fixed, hardcoded, publicly-known throwaway
@@ -1615,7 +1611,7 @@ Recorded so S21 does not spend time here.
   by construction. (R22 is about the *inherited* environment, not this.)
 - **`ui/serve.ts` has no request logging at all** (full read) — a pure static
   server, path-traversal guarded segment-by-segment (`serve.ts:90-94`, the
-  S09 fix that checks `..` as a whole segment rather than a substring). Nothing
+  fix that checks `..` as a whole segment rather than a substring). Nothing
   to redact.
 - **Browser console events are redacted before reaching the collector** —
   `timing.ts:152` → `classifyConsoleError` → `redactSecrets`
@@ -1642,8 +1638,8 @@ Recorded so S21 does not spend time here.
   intended.
 - **No scratch files or markers.** `grep -rn 'TODO\|FIXME\|XXX\|HACK\|console\.log'`
   over `loadtest/`, `tests/loadtest-e2e/`, `playwright.loadtest.config.ts`,
-  `app/context/e2eAccount.ts` → **zero matches**. The S08/S10 `__s08_*` /
-  `__s10_harness.ts` leaks are confirmed gone.
+  `app/context/e2eAccount.ts` → **zero matches**. The early acceptance-harness
+  scratch-file leaks are confirmed gone.
 - **No stray edits.** `git diff --stat HEAD` is exactly 11 files / +423 / −14,
   matching the intended set (`.env.example`, `.gitignore`, `CLAUDE.md`,
   `README.md`, `app/context/e2eAccount.ts`, `docs/config.md`,
@@ -1656,18 +1652,18 @@ Recorded so S21 does not spend time here.
   `include`. Both minimal and appropriate.
 - The `loadtest-e2e` workflow is opt-in only: `workflow_dispatch` + nightly
   cron, **no** `pull_request` trigger, and actionlint reported 0 findings
-  (S13, independently verified by the orchestrator).
+  (independently verified).
 
 ---
 
 ## 6. Explicitly acknowledged as verified-and-accepted (not defects)
 
-Each item from the audit brief's "not defects" list was checked to be true as
-described. S21 should not spend time on any of them.
+Each item from the review brief's "not defects" list was checked to be true as
+described. The fix pass need not spend time on any of them.
 
 1. **Branch stacked on `fix/pr24-review-followup`; PR targets that branch, not
    `main`.** ✅ Verified: `feat/bridge-loadtest`, `fix/pr24-review-followup` and
-   the plan's reference commit are all `d5529b3`; `origin/main` is
+   the review's reference commit are all `d5529b3`; `origin/main` is
    `76c59ed1`. The devnet context pack exists only on the base branch.
    User-approved 2026-09-10. Accepted. (See R17 for the separate, procedural
    observation that the branch carries no commits yet.)
@@ -1678,7 +1674,7 @@ described. S21 should not spend time on any of them.
    (`app/constants/e2e.ts:6`). The compiled no-E2E bundle retains the guard as
    `if(!_)return;` with `_` false — inert, and with no key material. The value is
    validated before `privateKeyToAccount` and the throw does not echo it.
-   Accepted. See **R5** for the one thing that is *not* as the plan assumed: the
+   Accepted. See **R5** for the one thing that is *not* as assumed: the
    symbol name still ships.
 3. **dev-ui change 2 — `next.config.ts`'s Turbopack build cache.** ✅ Verified
    strictly gated and a literal no-op otherwise:
@@ -1691,22 +1687,22 @@ described. S21 should not spend time on any of them.
    the document, with the closing rule "Anything else that differs between the
    two modes is a defect": **C5** (`bridgeGasOffset` headless-only ⇒ browser
    mode can OutOfGas-revert under concurrency, surfacing as `ui_assertion` —
-   observed live in S10's third run, 2 of 4 users), **C6/C14** (browser seeds the
+   observed live in the third acceptance run, 2 of 4 users), **C6/C14** (browser seeds the
    ERC20 so makes no `token-mappings` calls, plus the small per-hop seeding
    residual; headless does three-tier per-chain resolution), **C15**
    (`eth_fillTransaction` wasted-round-trip *frequency* differs, same branch),
-   **C16** (`tracker/activity` volume, attributed and rate-bounded since S24).
+   **C16** (`tracker/activity` volume, attributed and rate-bounded).
    Accepted as declared, not as defects.
 5. **`autoclaim_overdue` / `unexpected_autoclaim` are counters that do not fail
    a hop** (DESIGN §3.4), a deliberate divergence from aggkit's Go tool. ✅
    Verified: both are `HopCounter` emissions routed to
    `collector.recordHopCounter` and surfaced in the Autoclaim-policy table
    (`report.ts:420-428`); neither appears in any `finish`/`failWithTimeout`
-   outcome path. S14's 457 `autoclaimOverdue` against 392
+   outcome path. The first validation run's 457 `autoclaimOverdue` against 392
    `hop_completed_escalated` is the escalation design working as intended.
    Accepted.
 6. **`ring.ts` notes N1–N7** — seven documented readings where DESIGN §3.2 was
-   silent. ✅ Present and each tied to behaviour and, where S12 added one, to a
+   silent. ✅ Present and each tied to behaviour and, where one was added, to a
    test (e.g. N1's T13 grace-window guard at `ring.ts:615`, locked by
    *"does not re-enter the grace window after escalating (note N1: T13 guard)"*;
    N5's success-only `hop_total` at `ring.ts:511`, locked by
@@ -1725,23 +1721,23 @@ described. S21 should not spend time on any of them.
    `prettier --check .` and fails on 40 files, including
    `app/context/e2eAccount.ts` **at `HEAD`** and untouched files such as
    `app/utils/address.ts` and `app/constants/routes.ts`. Pre-existing, not
-   introduced here. **20 of the 40 are ours** and are an existing S21 task —
+   introduced here. **20 of the 40 are ours** and are an existing fix-pass task —
    recorded as **R13**, ranked Low.
 9. **A5's multi-process sharding and VALIDATION-1's A7–A10 are knowingly
-   deferred.** ✅ Verified still open and already S21 tasks — recorded as
+   deferred.** ✅ Verified still open and already tracked as follow-up tasks — recorded as
    **R18**, not re-discovered as new findings.
-10. **S18 is blocked** for want of a funded Sepolia key and a real proxy URL. ✅
+10. **The testnet smoke run is blocked** for want of a funded Sepolia key and a real proxy URL. ✅
     Verified: `config.json`'s testnet **and** mainnet `aggkitProxy` are both the
     literal `https://PLACEHOLDER-testnet-aggkit-proxy`, and `validate` rejects
     placeholder hosts (`PROXY_URL_PLACEHOLDER`). Accepted as the expected
     outcome. Carried forward: **`maxTotalSpend` caps native currency only** —
-    ERC20 transfers are not counted (recorded by S05/S18 and re-confirmed in §4
+    ERC20 transfers are not counted (recorded in the earlier build and smoke-run notes and re-confirmed in §4
     of the safety sub-audit below). **R19 raises this from "call it out in the
     PR" to High**, because R0 removes the other guard on the same money path.
 
 ---
 
-## 7. S20 acceptance criteria
+## 7. Acceptance criteria
 
 1. **Findings carry file:line, severity and a repro; nothing is left
    unclassified.** ✅ 35 findings (R0–R34), every one with a severity, at least
@@ -1761,16 +1757,16 @@ described. S21 should not spend time on any of them.
    items 1–10, each checked against the code rather than taken on trust, with
    the two places where verification turned up something adjacent flagged
    separately (R5 for the bundle symbol, R12 for the untracked `.bak`, R19 for
-   the ERC20 cap severity) so S21 can tell the accepted decision from the new
+   the ERC20 cap severity) so the fix pass can tell the accepted decision from the new
    finding.
 4. **What I could not audit is stated plainly.** ✅ §1, seven numbered items —
    chiefly: no live run was performed, R0/R1 are statically root-caused rather
-   than reproduced, the testnet/mainnet path is entirely unexercised (S18
-   blocked), the S14/S17 latency figures are unusable by the tool's own
+   than reproduced, the testnet/mainnet path is entirely unexercised (the
+   smoke run blocked), the validation-run latency figures are unusable by the tool's own
    self-disqualification, aggkit's `/metrics` is unreachable, the devnet is
-   wedged (root-caused since to our own devnet's `/dev/shm` misconfiguration,
-   fixed S34/S35 — see §1 item 6 above), and prettier could not be made clean
-   within S20's non-goals.
+   wedged (root-caused since to our own devnet's `/dev/shm` misconfiguration —
+   see §1 item 6 above), and prettier could not be made clean
+   within this review's non-goals.
 
 ---
 
@@ -1815,7 +1811,7 @@ should be fixed together, and they are small: a confirmation check moved to
 `runLoadTest`'s entry, an ERC20 cap field beside `maxTotalSpend`, and a chain-id
 assertion.
 
-**Suggested S21 order:** R0 + R19 + R23 first (safety, small, blocking); then
+**Suggested fix order:** R0 + R19 + R23 first (safety, small, blocking); then
 R28 + R2 + R29 + R7 (report honesty — cheap, and they are what the tool exists
 for); then R1 + R4 (the teardown hang, which is also blocking CI's ability to
 wait on `run`); then R3's attribution decision, which needs a deliberate
@@ -1823,7 +1819,7 @@ parity-versus-cleanliness call rather than a patch; then the mediums. R13's
 formatting pass and the R32 dead-code deletions are best done last, in one
 sweep, so they do not obscure the substantive diffs.
 
-**Two closing notes for S22's PR description.** Both approved dev-ui changes are
+**Two closing notes for the PR description.** Both approved dev-ui changes are
 verified correctly gated and must be called out (§6 items 2 and 3) — but the
 E2E-override bullet must say "gated and inert in production builds", not "absent
 from production builds", because **R5** shows the latter is one `grep` away from
@@ -1832,9 +1828,9 @@ being contradicted. And `git add -A` must not be used: **R12**'s
 
 ---
 
-## 9. S21 resolutions
+## 9. Resolutions
 
-Every finding below was addressed in step S21. "Fixed" gives the file(s)
+Every finding below was addressed in the follow-up fix pass. "Fixed" gives the file(s)
 changed and the test that locks the fix; "Documented" gives where the
 decision/caveat now lives; nothing is silently dropped.
 
@@ -1846,12 +1842,12 @@ decision/caveat now lives; nothing is silently dropped.
   the new `MainnetConfirmationRequiredError`. This is a **duplicate** of
   `wallets/fund.ts:441`'s existing gate, not a move — `fund` standalone still
   refuses independently. Test: `loadtest/runner.test.ts` (3 tests). Live CLI
-  evidence (see the feedback pack) shows `pnpm loadtest run --config
+  evidence shows `pnpm loadtest run --config
   <mainnet config>` (no `--fund`) refusing with
   `MAINNET_CONFIRMATION_REQUIRED: run refuses to execute against env
   "mainnet" without --i-know-this-is-mainnet...`. **Not added:** a
   `--dry-run` mode — REVIEW.md's fix shape suggested one, but it is a new
-  feature (S21 non-goal) rather than a fix to the missing gate; the gate
+  feature rather than a fix to the missing gate; the gate
   itself is what made R0 a release blocker and is now closed.
 
 ### High
@@ -1924,7 +1920,7 @@ decision/caveat now lives; nothing is silently dropped.
   error-class table gains the distinction. Documented in
   `loadtest/DESIGN.md` §5.3's error taxonomy table (new `nonce_conflict` row
   with the full reasoning) and in `metrics/errors.test.ts` (2 tests updated
-  to assert the new class on the exact S14 messages: "nonce too low" and
+  to assert the new class on the exact messages from the first validation run: "nonce too low" and
   "Nonce provided for the transaction is lower than the current nonce...").
 - **R4 — FIXED.** `workers/headless/headlessUser.ts`'s `sendAndWait` now
   passes `timeout: this.receiptTimeoutMs` (wired from
@@ -1934,12 +1930,12 @@ decision/caveat now lives; nothing is silently dropped.
   devnet budget). Not independently unit-tested — `headlessUser.ts` has no
   existing unit-test harness (its I/O-heavy methods require a live/mocked
   viem client stack no test in this file currently builds); verified by code
-  inspection and exercised live in the S13 e2e run and the worktree quick
+  inspection and exercised live in the e2e run and the quick
   start (see below).
 
 ### Medium
 
-- **R5 — no action required (verified-and-accepted by S20, re-confirmed).**
+- **R5 — no action required (verified-and-accepted, re-confirmed).**
 - **R6 — FIXED.** `core/ring.ts`'s `exitGate`/`finish` now tag a gate-exit
   emission `timedOut: true` when the hop finished via a `TimeoutOutcome`;
   `metrics/collector.ts`'s `GateStats` gained `timedOutVisits`;
@@ -1972,8 +1968,8 @@ decision/caveat now lives; nothing is silently dropped.
   addInitScript-ordering regression into an immediate, classified init
   failure. Not independently unit-tested — `init()` requires a real
   Playwright browser (this file's own tests intentionally never call it);
-  exercised live in the S13 e2e run (4/4 users connected correctly, 0
-  mismatches) and the worktree quick start.
+  exercised live in the e2e run (4/4 users connected correctly, 0
+  mismatches) and the quick start.
 - **R11 — FIXED.** `workers/headless/uiCallset.ts`'s `installTimingFetch`
   now calls a new `collector.recordUncontextedRequest()` on both the success
   and failure branch of the un-contexted case (previously a silent no-op);
@@ -2024,7 +2020,7 @@ decision/caveat now lives; nothing is silently dropped.
   `loadtest/PARITY.md`'s P2 row both corrected: "not implemented" (no code
   path anywhere replays it), not "default probability 0" (which implied a
   configurable, defaulted-off knob that does not exist).
-- **R27 — no action required (verified-and-accepted by S20; part (a)'s dead
+- **R27 — no action required (verified-and-accepted; part (a)'s dead
   code is deleted under R32 below, not because R27 demanded it).**
 - **R30 — FIXED.** `core/ring.ts`'s standalone per-phase-timeout branch now
   labels its transition with the actual DESIGN §3.2 row (`timeoutTransitionId`,
@@ -2060,7 +2056,7 @@ decision/caveat now lives; nothing is silently dropped.
   `uninstall` handle and calls it in `disposeEverything()`, restoring
   `globalThis.fetch` at teardown. Test: `workers/headless/uiCallset.test.ts`
   (1 new).
-- **R15 — accepted design trade-off (S20's own characterization); no action.**
+- **R15 — accepted design trade-off; no action.**
 - **R16 — FIXED.** `runner.ts`'s default `logger` now writes to
   `process.stderr` instead of silently discarding every line. Existing
   `runner.test.ts` unaffected (both tests pass an explicit assertion path
@@ -2071,11 +2067,11 @@ decision/caveat now lives; nothing is silently dropped.
 - **R33 — FIXED (docs).** `DESIGN.md`'s `lapMs` prose corrected from
   `2 700 000` (45 min) to `3 600 000` (60 min), matching its own §3.3 table
   and what `deriveDevnet.ts` actually emits.
-- **R34 — no action required (verified-and-accepted by S20; the code is
+- **R34 — no action required (verified-and-accepted; the code is
   correct, only the looser prose sentence misled — already flagged, not
   re-fixed here).**
 
-### VALIDATION-1.md A7-A10 (deferred items named explicitly in the S21 brief)
+### VALIDATION-1.md A7-A10 (deferred items)
 
 - **A7 — FIXED.** `uiCallset.ts`'s attempt-window heuristic now excludes
   `tracker/activity` entirely (`attempt` is always `0` for that endpoint

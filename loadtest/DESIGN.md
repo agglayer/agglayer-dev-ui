@@ -1,15 +1,15 @@
 # Bridge load test — design
 
-Status: normative for steps S03–S22 of `plans/bridge-loadtest-plan.md`.
-Written at S02 against branch `feat/bridge-loadtest` @ `d5529b3`.
+Status: normative.
+Written during the initial design phase against branch `feat/bridge-loadtest` @ `d5529b3`.
 
-This document fixes the contracts that later steps implement and that S20
-audits. Every claim here is written to be **falsifiable**: each one either
-cites a file (`path:line`) that can be re-read, a measured number with its
-measurement, or names the step and the test that must verify it. Where a fact
-could not be established at S02, it is marked **[VERIFY@Sxx]** with the exact
-check that settles it — an unmarked claim is asserted as true today and S20
-may treat a contradiction as a finding.
+This document fixes the contracts the implementation follows and that audits
+check it against. Every claim here is written to be **falsifiable**: each one
+either cites a file (`path:line`) that can be re-read, a measured number with
+its measurement, or names the test that must verify it. Where a fact could not
+be established when this document was written, it is marked **[VERIFY]** with
+the exact check that settles it — an unmarked claim is asserted as true today,
+and an audit may treat a contradiction as a finding.
 
 Terminology: **hop** = one bridge from one ring chain to the next, including
 its claim. **lap** = one full traversal of the ring (all hops), returning the
@@ -23,13 +23,13 @@ implement.
 
 | Subject | Authoritative source | Notes |
 |---|---|---|
-| UI call set and cadences | `app/services/activity.ts`, `app/hooks/*.ts` (read in full at S02, see §9) | §9 is a line-cited table |
+| UI call set and cadences | `app/services/activity.ts`, `app/hooks/*.ts` (read in full during the initial design phase, see §9) | §9 is a line-cited table |
 | Devnet topology (ports, ids, addresses, keys) | `tests/devnet/summary.json` + `tests/devnet/docker-compose.yml` port env vars | never hardcode; derive |
 | Devnet autoclaim expectations | `config/config.ci.devnet.json` → `autoclaim` | maps 1:1 onto `RouteType`; all `expected: false` on the rc17 devnet |
 | Autoclaim defaults when config omits a route | `app/config.ts:22-27` (`DEFAULT_AUTOCLAIM_CONFIG`) | l1→l2 60 s, l2→l1 disabled, l2→l2 120 s |
 | Testnet topology | repo `config.json` → `chains.SEPOLIA`, `chains.BOKUTO`, `appModes.configs.testnet` | **its `aggkitProxy` is a placeholder** — see §2.4 |
 | Route classification | `app/utils/autoclaim.ts:11-17` (`getRouteType`) | keyed on **recording** network, not token origin |
-| Devnet phase timings | plan §2 measured ranges + `app/constants/e2e.ts:88-161` | **not** `BASELINE.md`'s "<30 s" (see §0.1) |
+| Devnet phase timings | the measured devnet ranges (§3.3) + `app/constants/e2e.ts:88-161` | **not** `BASELINE.md`'s "<30 s" (see §0.1) |
 | SDK wire behaviour | `node_modules/@agglayer/sdk` @ `1.0.0-snapshot-ca6df75e` | the pinned snapshot, never `../sdk` HEAD |
 | Hop-ring shape, gas offset, gate-stall accounting | aggkit `origin/feat/bridge-loop-tester:tools/bridge_loop_tester/{DESIGN,README}.md` | **reference only**, no code dependency |
 | `BridgeEvent` → `depositCount` decode | `sdk/scripts/aggkit-smoke.ts:539-563` | scan all receipt logs; ERC20 also emits `Transfer` |
@@ -41,13 +41,13 @@ implement.
    figure, now historical). That is
    the **whole `claim-autoclaim.spec.ts` (since renamed `claim-l1-to-l2.spec.ts`) wall clock** (page load + connect +
    deposit + autoclaim), not an isolated autoclaim measurement. Every timeout
-   in §3.3 is sized from plan §2's measured ranges and from
+   in §3.3 is sized from the measured devnet ranges and from
    `app/constants/e2e.ts`, never from that figure.
 2. `loadtest/BASELINE.md:52` embeds the devnet E2E private key in plaintext.
    That key is the committed devnet fixture already present in
    `tests/devnet/summary.json:accounts.e2e_wallet.private_key`, so it is not
    a secret — but **this document does not repeat it and the config schema
-   forbids inline private keys entirely** (§2.2, `secretRef` rule). S20 should
+   forbids inline private keys entirely** (§2.2, `secretRef` rule). An audit should
    classify the `BASELINE.md` occurrence as *accepted, devnet-fixture-only*.
 
 ---
@@ -84,11 +84,11 @@ interface UserDriver {
 
 Both implementations MUST emit the same `Phase` timers (§5.1) and the same
 `endpointClass` HTTP samples (§5.2). `gas.bridgeGasOffset` used to be the one
-permitted behavioural divergence, because the UI could not apply it; **S36
-closed that** — the UI's bridge send now adds the same `+300_000` as
+permitted behavioural divergence, because the UI could not apply it; **that
+was closed** — the UI's bridge send now adds the same `+300_000` as
 `BRIDGE_GAS_BUFFER` (§9.3 finding **C5**), so the two modes send identical gas
-headroom and §9.4 lists no gas divergence. Any divergence is a bug S20 should
-flag.
+headroom and §9.4 lists no gas divergence. Any divergence is a bug an audit
+should flag.
 
 ---
 
@@ -96,10 +96,10 @@ flag.
 
 One schema, two producers: `loadtest derive-devnet` (generated) and a
 hand-written file for testnet/mainnet. Implemented as zod in
-`loadtest/config/schema.ts` (S04), style-matched to
+`loadtest/config/schema.ts`, style-matched to
 `config/configSchema.mjs`.
 
-**Round-trip definition** (the S04 acceptance test, `config/schema.test.ts`):
+**Round-trip definition** (`config/schema.test.ts`):
 for each example file `X` in §2.3/§2.4,
 `schema.parse(JSON.parse(serialize(schema.parse(JSON.parse(read(X))))))` deep-equals
 `schema.parse(JSON.parse(read(X)))`, where `serialize` is
@@ -122,7 +122,7 @@ the schema may not have defaults that are lost on write-back.
 | `chains[].explorerUrl` | string | no | `''` | — |
 | `chains[].nativeSymbol` | string | no | `'ETH'` | report labelling only |
 | `ring[]` | array of `chains[].key`, ≥3 entries | yes | — | closed: `ring[0] === ring[at(-1)]`; ≥2 hops; every consecutive pair distinct; every key present in `chains` |
-| `autoclaim` | record keyed `"<FROM>-><TO>"` | yes | — | **exactly** one entry per ring hop, no extras (S04 rejects both directions of mismatch) |
+| `autoclaim` | record keyed `"<FROM>-><TO>"` | yes | — | **exactly** one entry per ring hop, no extras (the schema rejects both directions of mismatch) |
 | `autoclaim[hop].expected` | bool | yes | — | `false` = manual claim (the default everywhere); `true` = optionally wait for a service-side autoclaim |
 | `autoclaim[hop].waitMs` | int >0 | required iff `expected` | — | grace window before escalation (§3.4) |
 | `assets[]` | array, ≥1 | yes | — | at most one `kind:'eth'`; `address` unique per `kind:'erc20'` |
@@ -136,14 +136,14 @@ the schema may not have defaults that are lost on write-back.
 | `users.wallets` | `{mnemonicRef, startIndex}` \| `{privateKeysRef}` | yes | — | exactly one variant (§2.2) |
 | `users.funder.privateKeyRef` | secret ref | required unless `env==='devnet' && users.devnetFunding==='anvil_setBalance'` | — | §2.2 |
 | `users.funder.gasPerChain` | record `chainKey → decimal string` | yes if funder present | — | one entry per **ring** chain |
-| `users.funder.assetTopUp` | decimal string | no | `assets[i].amount × (ceil(load.bridgesPerMinutePerUser × load.durationMinutes) + load.maxInflightLapsPerUser)` (S16/A1; was a flat `× 4` — see VALIDATION-1.md A1) | per asset, applied to the ring's start chain |
+| `users.funder.assetTopUp` | decimal string | no | `assets[i].amount × (ceil(load.bridgesPerMinutePerUser × load.durationMinutes) + load.maxInflightLapsPerUser)` (see VALIDATION-1.md A1; was a flat `× 4`) | per asset, applied to the ring's start chain |
 | `users.funder.maxTotalSpend` | record `chainKey → decimal string` | yes if funder present | — | hard cap, §4.3 |
 | `users.devnetFunding` | `'anvil_setBalance' \| 'transfer'` | iff `env==='devnet'` | `'anvil_setBalance'` | **rejected when `env !== 'devnet'`** |
 | `load.bridgesPerMinutePerUser` | number >0 | yes | — | — |
 | `load.durationMinutes` | number >0 | yes | — | — |
 | `load.rampUpSeconds` | int ≥0 | no | `60` | — |
 | `load.maxInflightLapsPerUser` | int ≥1 | no | `3` | §3.5 |
-| `browser.contextsPerBrowser` | int 1–8 | no | `8` | cap is a hard schema max — lowered from 25 to 8 at S16 (VALIDATION-1.md A3: 25 let `slotCount` collapse to 1 Chromium for a 20-browser-user run, so one crash took out every browser user) |
+| `browser.contextsPerBrowser` | int 1–8 | no | `8` | cap is a hard schema max — lowered from 25 to 8 (VALIDATION-1.md A3: 25 let `slotCount` collapse to 1 Chromium for a 20-browser-user run, so one crash took out every browser user) |
 | `browser.headless` | bool | no | `true` | — |
 | `browser.trace` | bool | no | `false` | **Not yet wired up (R25, loadtest/REVIEW.md)** — accepted by the schema but no call site reads it (no `context.tracing.start()`/`stop()` anywhere in `loadtest/`). Whoever wires it up must route the Playwright trace file through redaction first: a trace at higher verbosity records the literal arguments passed to `context.addInitScript(fn, key)` — i.e. the raw per-user private key. |
 | `browser.recycleContextAfterLaps` | int ≥1 | no | `10` | §7.4 |
@@ -151,7 +151,7 @@ the schema may not have defaults that are lost on write-back.
 | `gas.bridgeGasOffset` | int ≥0 | no | `300000` | headless only (§9.4) |
 | `gas.claimGasOffset` | int ≥0 | no | `60000` | headless only, claim send only (§9.4); additive margin on the SDK claim `gas` (or one `eth_estimateGas`); `0` = viem's own estimate, as the UI does |
 | `measurement` | object (optional) | no | absent = off | strict; at least one field when present (`MEASUREMENT_EMPTY`). Every field below is optional; an absent field takes no measurement and writes nothing |
-| `measurement.stageProbeIntervalMs` | int ≥1000 | no | — | harness-origin stage probe, headless users only (S45) |
+| `measurement.stageProbeIntervalMs` | int ≥1000 | no | — | harness-origin stage probe, headless users only |
 | `measurement.walletBalanceIntervalMs` | int ≥60000 | no | — | periodic `eth_getBalance` of every user wallet on every non-L1 ring chain (heavy-load M1; feeds SC9) |
 | `measurement.l1InfoTree` | `{pollIntervalMs, gerManagerAddress?}` | no | — | `pollIntervalMs` ≥15000; polls the L1 GER manager's `UpdateL1InfoTreeV2` logs; `gerManagerAddress` (non-zero) skips discovery through the L1 bridge (M3) |
 | `measurement.httpWindowMs` | int ≥10000 | no | — | per-window HTTP status/latency records, ndjson only (M4) |
@@ -165,10 +165,10 @@ the schema may not have defaults that are lost on write-back.
 | `pump.intervalSeconds` | int >0 | iff `pump` | — | ≥60 (`PUMP_INTERVAL_TOO_SHORT`) |
 | `pump.maxTotalSpend` | decimal string >0 | iff `pump` | — | ETH; hard spend cap for the run. Preflight needs the pump wallet to hold at least this much (`PUMP_UNDERFUNDED`) |
 | `pump.maxGasPriceGwei` | number >0 | iff `pump` | — | pause threshold and `maxFeePerGas` of every pump tx |
-| `output.dir` | path | no | `loadtest-results/<ISO-8601 basic timestamp>` | `validate` **warns** (does not fail) when `output.dir` is inside the repo and not matched by `.gitignore`. `.gitignore` has no `loadtest` entry today — S04 adds `loadtest.config.json` and `loadtest-results/` |
+| `output.dir` | path | no | `loadtest-results/<ISO-8601 basic timestamp>` | `validate` **warns** (does not fail) when `output.dir` is inside the repo and not matched by `.gitignore`. `.gitignore` covers `loadtest.config.json` and `loadtest-results/` |
 | `output.activityLog` | bool | no | `true` | writes `activity.ndjson` |
 
-Cross-field validations S04 must reject with a readable message (each gets a
+Cross-field validations the schema must reject with a readable message (each gets a
 named negative test):
 
 - `ring` not closed → `RING_NOT_CLOSED`
@@ -199,8 +199,7 @@ The schema rejects any 32-byte hex literal anywhere in the document
   copy the key into the generated file.
 - `metrics/errors.ts` redacts any `0x[0-9a-fA-F]{40,}` run to
   `0x…<last4>` before a message reaches a log, `results.json`,
-  `activity.ndjson` or `summary.md` (S05 asserts redaction; S12 re-asserts on
-  every log path).
+  `activity.ndjson` or `summary.md` (asserted by tests on every log path).
 
 ### 2.3 Worked example — devnet (generated by `derive-devnet`)
 
@@ -273,11 +272,11 @@ Field provenance — every value above has a named source:
 | `assets[1].amount` | `app/constants/e2e.ts:145` `E2E_ERC20_BRIDGE_AMOUNT = '0.01'` |
 | `assets[1].originNetworkId` | 0 — the token is deployed on L1 (`.accounts.e2e_wallet.description`: holder of `erc20_address`; L1 is the only chain it exists natively on) |
 | `users.funder.privateKeyRef` | env indirection; the value to export is `.accounts.e2e_wallet.private_key` (address `0xE34aaF64b29273B7D567FCFc40544c014EEe9970`) — **not written into the file** (§2.2) |
-| `users.funder.assetTopUp` | omitted — `wallets/fund.ts`'s `defaultAssetTopUp` derives it from this file's own `load.bridgesPerMinutePerUser`/`durationMinutes`/`maxInflightLapsPerUser` (S16/A1); for the `load` values above that is `0.01 × (60 + 3) = 0.63` |
-| `timeouts.readyToClaimMs`, `timeouts.claimedMs` | originally `app/constants/e2e.ts:103,106` (`DEFAULT_L2_TO_L2_CLAIM_TIMEOUT_MS`, `DEFAULT_PROOF_READY_TIMEOUT_MS`, both 600 000); **raised to 900 000 by S10 attempt #1's live measurement** — see §3.3 |
+| `users.funder.assetTopUp` | omitted — `wallets/fund.ts`'s `defaultAssetTopUp` derives it from this file's own `load.bridgesPerMinutePerUser`/`durationMinutes`/`maxInflightLapsPerUser` (VALIDATION-1.md A1); for the `load` values above that is `0.01 × (60 + 3) = 0.63` |
+| `timeouts.readyToClaimMs`, `timeouts.claimedMs` | originally `app/constants/e2e.ts:103,106` (`DEFAULT_L2_TO_L2_CLAIM_TIMEOUT_MS`, `DEFAULT_PROOF_READY_TIMEOUT_MS`, both 600 000); **raised to 900 000 by a live acceptance-run measurement** — see §3.3 |
 | `timeouts.txReceiptMs` | `app/constants/e2e.ts:151` devnet `DEFAULT_BRIDGE_SUCCESS_TIMEOUT_MS = 60_000` |
 | `gas.bridgeGasOffset` | aggkit `bridge_loop_tester` README `GasLimitOffset` row: "300000 is a good starting point … `forceUpdateGlobalExitRoot = true`, so two bridges in the same block make the second one cost more than its own estimate predicted and revert `OutOfGas` inside `updateExitRoot`" |
-| `uiBaseUrl`, `output.dir`, `users.total/browser`, `load.*`, `browser.*` | loadtest-owned; no upstream source. `browser.contextsPerBrowser ≤ 8` from plan §6, lowered by S16/A3 |
+| `uiBaseUrl`, `output.dir`, `users.total/browser`, `load.*`, `browser.*` | loadtest-owned; no upstream source. `browser.contextsPerBrowser ≤ 8` bounds crash blast radius and Playwright memory creep, lowered per VALIDATION-1.md A3 |
 
 ### 2.4 Worked example — testnet (hand-written)
 
@@ -337,7 +336,7 @@ Field provenance:
 | `chains[].bridgeAddress` | `config.json` → `appModes.configs.testnet.bridgeAddress` = `0x528e26b25a34a4A5d0dbDa1d57D318153d2ED582`. Neither `SEPOLIA` nor `BOKUTO` declares a per-chain override, so `buildModeConfig` (`app/config.ts:157-165`) resolves both to the mode default — the loadtest config flattens that resolution |
 | `autoclaim.*` | manual claim by default: both routes `expected: false` (the app's `config.json` → `autoclaim` has `l1_to_l2` true/120000, but the Bali ring A run of 2026-10-06 showed autoclaim taking ~16 min then ~45 min, see §3.4), mapped through `getRouteType`: Sepolia is `networkId 0` so `SEPOLIA->BOKUTO` is `l1_to_l2` and `BOKUTO->SEPOLIA` is `l2_to_l1` |
 | `assets[0].amount` | `app/constants/e2e.ts:140` testnet `DEFAULT_NATIVE_BRIDGE_AMOUNT = '0.00001'` |
-| `timeouts.*` | scaled from `app/constants/e2e.ts:151-152` testnet defaults (`120_000` bridge success, `300_000` claim) plus real-testnet settlement headroom; `readyToClaimMs`/`claimedMs` are deliberately 3× the devnet value and are **[VERIFY@S18]** — the S18 smoke run records the observed values in its report and this table is updated from them |
+| `timeouts.*` | scaled from `app/constants/e2e.ts:151-152` testnet defaults (`120_000` bridge success, `300_000` claim) plus real-testnet settlement headroom; `readyToClaimMs`/`claimedMs` are deliberately 3× the devnet value and are **[VERIFY]** — the testnet smoke run records the observed values in its report and this table is updated from them |
 | `aggkitProxyUrl` | **NOT available from the repo.** `config.json` → `appModes.configs.testnet.aggkitProxy` is the literal string `https://PLACEHOLDER-testnet-aggkit-proxy`. It must be supplied by the operator (or via the app's `NEXT_PUBLIC_AGGKIT_PROXY` override, read at `app/config.ts:65` and applied at `:108`). `config/examples/testnet.loadtest.json` therefore ships the value `https://REPLACE-ME-testnet-aggkit-proxy`, and `loadtest validate` **fails** on any host containing `PLACEHOLDER` or `REPLACE-ME` (`PROXY_URL_PLACEHOLDER`) |
 
 Two structural notes on testnet, both consequences of `config.json` and not
@@ -353,7 +352,7 @@ choices:
 
 ## 3. Hop and lap state machine
 
-Pure, I/O-free, injected clock; lives in `loadtest/core/ring.ts` (S06). Every
+Pure, I/O-free, injected clock; lives in `loadtest/core/ring.ts`. Every
 state is re-derivable from `(bridgeTxHash, sourceNetworkId)` plus idempotent
 reads, following aggkit `bridge_loop_tester` DESIGN.md §4's resumability rule.
 
@@ -430,31 +429,31 @@ Lap-level:
 `lapMs` default (devnet) = `3 600 000` (60 min) = 3 × `hopMs`; it is a
 separate umbrella so a lap whose individual hops each stay inside `hopMs` but
 whose total drags is still reported. The tool **never** starts hop `i+1`
-before hop `i` is `DONE` (plan §1 requirement 3: nothing is burned except
+before hop `i` is `DONE` (requirement: nothing is burned except
 gas; the value must actually be at the next chain).
 
 <!-- R33 (loadtest/REVIEW.md): this paragraph used to say `2 700 000`
 (45 min), contradicting §3.3's table (`3 600 000`/60 min) below, which is
 the value `deriveDevnet.ts` actually emits and the one no code disagrees
-with — this paragraph was stale (not updated when S10 raised `hopMs` from
-its earlier value). The table is authoritative; this prose now matches it. -->
+with — this paragraph was stale (not updated when the timeouts were raised
+past their earlier value). The table is authoritative; this prose now matches it. -->
 
 ### 3.3 Timeout defaults and their justification
 
 | Key | Devnet default | Justification |
 |---|---|---|
-| `pageLoadMs` | 30 000 | measured load+connect at 50 contexts = 21.6 s (plan §1 feasibility table) |
-| `walletConnectMs` | 15 000 | E2E `connectWallet` is a local `setState(true)` (plan §2), so this only covers render |
+| `pageLoadMs` | 30 000 | measured load+connect at 50 contexts = 21.6 s (initial feasibility measurement) |
+| `walletConnectMs` | 15 000 | E2E `connectWallet` is a local `setState(true)` in the app, so this only covers render |
 | `txReceiptMs` | 60 000 | `app/constants/e2e.ts:151` devnet `DEFAULT_BRIDGE_SUCCESS_TIMEOUT_MS` |
-| `appearsInActivityMs` | 60 000 | tracker indexing after a ~1 s-block-time anvil; conservative. **[VERIFY@S14]** — record the observed p99 and re-tune |
-| `readyToClaimMs` | 900 000 (15 m) | **Superseded 2026-09-11 (S10 attempt #1 measurement).** The 600 000 default (worst measured L2→L1 ready-to-claim 8 m 34 s, `app/constants/e2e.ts:104-106`; L2→L2 source-side settlement 87–330 s, `e2e.ts:90-102`) was too tight: a real S10 acceptance run against the compose devnet timed out on `L2A->L2B` at ~607 s for both surviving users, and the orchestrator measured the bridge actually reaching `claimed=true` **31 s after** the harness gave up — true latency ≈ 638 s (10 m 38 s). Root cause: aggsender `MinimumNewCertificateInterval: 5m0s`, and an L2→L2 hop needs network 1 to certify *and settle* before network 2 imports; a bridge landing just after a certificate window waits for the next one, across **two** hops (source-certify, dest-import). The earlier 87–330 s figure was measured just after a certificate window and understates the tail — the real spread is ~95 s to ~640 s+. 900 000 gives ~40% headroom over the measured 638 s |
+| `appearsInActivityMs` | 60 000 | tracker indexing after a ~1 s-block-time anvil; conservative. **[VERIFY]** — record the observed p99 and re-tune |
+| `readyToClaimMs` | 900 000 (15 m) | **Superseded 2026-09-11 by a live acceptance-run measurement.** The 600 000 default (worst measured L2→L1 ready-to-claim 8 m 34 s, `app/constants/e2e.ts:104-106`; L2→L2 source-side settlement 87–330 s, `e2e.ts:90-102`) was too tight: a real acceptance run against the compose devnet timed out on `L2A->L2B` at ~607 s for both surviving users, and the orchestrator measured the bridge actually reaching `claimed=true` **31 s after** the harness gave up — true latency ≈ 638 s (10 m 38 s). Root cause: aggsender `MinimumNewCertificateInterval: 5m0s`, and an L2→L2 hop needs network 1 to certify *and settle* before network 2 imports; a bridge landing just after a certificate window waits for the next one, across **two** hops (source-certify, dest-import). The earlier 87–330 s figure was measured just after a certificate window and understates the tail — the real spread is ~95 s to ~640 s+. 900 000 gives ~40% headroom over the measured 638 s |
 | `claimedMs` | 900 000 (15 m) | same gate on the far side of the hop, same measured-latency justification as `readyToClaimMs` above |
 | `hopMs` | 1 200 000 (20 m) | must strictly bound `readyToClaim` + claim submit + receipt now that either sub-timeout alone can be 900 000; 20 min is the deliberate cap so a stuck hop is reported rather than absorbed. A hop that legitimately needs more must raise `hopMs` explicitly |
 | `lapMs` | 3 600 000 (60 m) | 3 × `hopMs`, per the rule below |
 
-**Invariant:** `readyToClaimMs < hopMs < lapMs` must always hold — S12 adds
-a unit test asserting this on the derived devnet config so a future edit
-cannot reintroduce the S10 attempt #1 defect (a `hopMs` too close to
+**Invariant:** `readyToClaimMs < hopMs < lapMs` must always hold — a unit test asserts
+this on the derived devnet config so a future edit
+cannot reintroduce the earlier defect (a `hopMs` too close to
 `readyToClaimMs` silently truncates the claim-build/submit/receipt budget
 that has to fit after `readyToClaimMs` elapses).
 
@@ -497,19 +496,19 @@ generation with honest reporting, not a policy assertion suite:
   else claimed it. The hop succeeds; the counter is surfaced in `summary.md`'s
   policy section.
 
-Both are surfaced prominently in the report so S15 can attribute them to
+Both are surfaced prominently in the report so a post-run analysis can attribute them to
 (a) tool, (b) devnet capacity or (c) a genuine aggkit finding.
 
 ### 3.5 Scheduler semantics
 
-`loadtest/core/scheduler.ts` (S06). One token bucket per **user**, plus a
+`loadtest/core/scheduler.ts`. One token bucket per **user**, plus a
 global admission gate.
 
 - **Bucket**: capacity 1 token (no bursting — bursting would defeat the "Y
   bridges per minute" contract); refill rate `bridgesPerMinutePerUser / 60000`
   tokens per ms, continuous. A tick consumes 1 token and starts one **hop**.
   Over `Z` minutes at steady state each user therefore emits
-  `Y·Z ± 1` bridge submissions — the S06 unit test asserts exactly this bound
+  `Y·Z ± 1` bridge submissions — a unit test asserts exactly this bound
   with a fake clock.
 - **Ramp-up**: user `k` (0-based, of `users.total`) becomes admissible at
   `t = rampUpSeconds × 1000 × k / users.total`. Its bucket starts empty and
@@ -543,7 +542,7 @@ On `durationMinutes` elapsing or SIGINT:
    `FAILED` with outcome `aborted_drain`; its lap becomes `LAP_ABORTED`.
 4. The report is written with `"aborted": true` and the abort cause
    (`duration_elapsed` | `sigint` | `fatal`). A SIGINT run **always** writes a
-   report (S11 acceptance).
+   report.
 5. A second SIGINT during drain skips step 2 and writes immediately.
 
 ### 3.7 LocalBalanceTree ordering constraint
@@ -558,11 +557,11 @@ Bridging an L1-origin asset **out of** an L2 requires that L2's
   `networkId === 0`** whenever any asset's `originNetworkId === 0`. `validate`
   enforces this (`RING_MUST_START_AT_ASSET_ORIGIN`) rather than relying on a
   separate seeding step — the L1→L2A hop *is* the seeding.
-- No separate LBT-seeding code exists (plan S05 non-goal). Both worked
+- No separate LBT-seeding code exists (deliberate non-goal). Both worked
   examples satisfy the rule (`ring[0]` is `L1` / `SEPOLIA`, both
   `networkId 0`).
 - A `LocalBalanceTreeUnderflow` observed at runtime is classified as its own
-  outcome `lbt_underflow` (T8), never as a generic `tx_revert`, so S15 can
+  outcome `lbt_underflow` (T8), never as a generic `tx_revert`, so the post-run analysis can
   tell an ordering bug apart from a chain problem.
 
 ---
@@ -584,9 +583,9 @@ Bridging an L1-origin asset **out of** an L2 requires that L2's
 
 Gas, per ring chain, via that chain's `rpcUrl` (the haproxy routes work — the
 RPC is a plain JSON-RPC pass-through, `tests/devnet/summary.json`
-`.proxy.routes[].kind === 'json-rpc'`). **[VERIFY@S05 — SETTLED]**:
+`.proxy.routes[].kind === 'json-rpc'`). **[VERIFIED]**:
 `anvil_setBalance` DOES reach anvil through haproxy unmodified — verified
-live at S05 with a raw JSON-RPC POST to each of
+live with a raw JSON-RPC POST to each of
 `http://127.0.0.1:8555/{l1rpc,l2rpc-001,l2rpc-002}` (`method:
 "anvil_setBalance"`), each returning `{"result":null}` and a subsequent
 `eth_getBalance` confirming the balance actually changed. `wallets/fund.ts`
@@ -603,11 +602,11 @@ reduce any balance.
 ERC20: `anvil_setBalance` cannot mint. The asset is transferred from the
 funder (`.accounts.e2e_wallet`, the declared holder of `erc20_address`) with
 **one serialized sender per chain** (§4.4). If `erc20_address` turns out
-unusable (no bytecode / zero funder balance), S05 falls back to the existing
-dockerized-forge deploy path in `tests/e2e/globalSetup.ts` and records the new
+unusable (no bytecode / zero funder balance), fall back to the existing
+dockerized-forge deploy path in `tests/e2e/globalSetup.ts` and record the new
 address in the generated config.
 
-Devnet target: `fund --users 20` completes in **< 60 s** (S05 acceptance).
+Devnet target: `fund --users 20` completes in **< 60 s**.
 
 ### 4.3 Testnet / mainnet: funder wallet, capped
 
@@ -617,7 +616,7 @@ No `anvil_*`. `users.funder` sends:
 - `assetTopUp` of each ERC20 asset to each user on the ring's **start** chain
   (`ring[0]`), which is also the asset's origin chain by §3.7.
 
-Rules, each with a named S05 test:
+Rules, each with a named test:
 
 1. **Spend cap**: before any send, the total planned outlay per chain is
    compared against `maxTotalSpend[chainKey]`. Over cap ⇒ refuse the whole
@@ -635,7 +634,7 @@ Rules, each with a named S05 test:
 
 ### 4.4 Funder nonce discipline
 
-Plan §6 risk "shared funder nonce contention": the funder maintains one
+**Risk — shared funder nonce contention**: the funder maintains one
 in-memory nonce counter **per chain**, seeded from
 `eth_getTransactionCount(pending)`, and all its sends on a chain go through a
 single-slot queue. Different chains proceed concurrently. On any send error
@@ -661,9 +660,9 @@ named:
 `PREFLIGHT_SYNC_STATUS` are exactly the three checks
 `scripts/devnetReady.mjs` performs (9 checks = 3 chains × 3 assertions);
 `PREFLIGHT_TRACKER_HEALTH` is **not** in `devnetReady.mjs` and comes from
-plan §2's tracker route list — **[VERIFY@S05 — SETTLED]**:
+the tracker's own route list — **[VERIFIED]**:
 `GET {proxy}/tracker/v1/health` DOES exist and returns 2xx on this devnet —
-verified live at S05 via `curl http://127.0.0.1:8555/aggkitapi/tracker/v1/health`
+verified live via `curl http://127.0.0.1:8555/aggkitapi/tracker/v1/health`
 → `HTTP 200`, body
 `{"status":"ok","instance_id":"…","config_sha1":"…","version":{"version":"v0.11.0-rc8",...}}`
 (confirmed identical through the direct port `http://127.0.0.1:8556/tracker/v1/health`
@@ -676,7 +675,7 @@ never calls them.
 
 ---
 
-### 4.6 The L1 deposit pump (S53)
+### 4.6 The L1 deposit pump
 
 Optional (`pump` block, §2.1), off by default. A harness-side loop (`workers/pump/l1Pump.ts`,
 schedule in `core/pumpSchedule.ts`) sending one `bridgeAsset(destinationNetworkId, self,
@@ -722,7 +721,7 @@ Keyed `(phase, mode, hopRoute, assetKind)`; `hopRoute` is the ring hop label
 `null`/absent for headless users rather than as 0 — a zero would corrupt the
 combined percentile.
 
-**Censored samples (R2, loadtest/REVIEW.md, added S21).** A phase that TIMES
+**Censored samples (loadtest/REVIEW.md R2).** A phase that TIMES
 OUT (rather than completing) contributes a sample tagged `censored: true`
 (`core/ring.ts`'s `recordCensoredTimeoutPhase`), NOT no sample at all —
 previously the timed-out tail was silently discarded, which biased every
@@ -742,7 +741,7 @@ One record per request: `{ts, userId, mode, endpointClass, method, status, durat
 - browser: `page.on('request')` / `page.on('response')` / `page.on('requestfailed')`
 - headless: a `fetch` wrapper (aggkit REST) and a viem transport wrapper (RPC)
 
-`endpointClass` normalization (S07):
+`endpointClass` normalization:
 
 | Real URL | `endpointClass` |
 |---|---|
@@ -768,12 +767,12 @@ is the only signal available — and those cases are listed here explicitly.
 | Class | Trigger | Notes |
 |---|---|---|
 | `not_ready` | `/bridge/v1/l1-info-tree-index` 404/500 with the documented "not been included on the L1 Info Tree yet" body; `/bridge/v1/injected-l1-info-leaf` 404 "GER not yet injected"; `/bridge/v1/claim-proof` 404 "has not indexed" | **Not an error.** Same allowlist `tests/bridge/console-hygiene.spec.ts:66-77` already applies. Counted as a gate stall (§5.4), excluded from the error report |
-| `tracker_not_ready` | **S53 (heavy-load F3/F4).** `/tracker/v1/activity` answers **503** with a body containing "not ready yet" (an address the tracker has not registered yet) | **Not a failure and not `proxy_5xx`.** Never fails a hop, excluded from SC4, own row in the errors table. The headless activity poller does not retry it after 300 ms; the runner backs off to the UI cadence (5 s). Keyed on the body text, so a differently worded 503 fails safe into `proxy_5xx` |
-| `proxy_4xx` | any other 4xx from `{proxy}/…` | 400 = missing `network_id`; 404 = unknown network (aggkit-proxy contract, plan §2) |
+| `tracker_not_ready` | **Heavy-load addition.** `/tracker/v1/activity` answers **503** with a body containing "not ready yet" (an address the tracker has not registered yet) | **Not a failure and not `proxy_5xx`.** Never fails a hop, excluded from SC4, own row in the errors table. The headless activity poller does not retry it after 300 ms; the runner backs off to the UI cadence (5 s). Keyed on the body text, so a differently worded 503 fails safe into `proxy_5xx` |
+| `proxy_4xx` | any other 4xx from `{proxy}/…` | 400 = missing `network_id`; 404 = unknown network (aggkit-proxy contract) |
 | `proxy_5xx` | any other 5xx from `{proxy}/…` | 502 = backend down |
-| `activity_warning` | **S40 (finding C13).** A per-network `warnings[]` entry on a *successful* (200) `tracker/activity` response, e.g. "bridge service for network N is not fully synchronized, some bridges may still be missing" | Recorded as `activity_warning[network_id=N]: …`; **not** `proxy_5xx` (no 5xx occurred) and never fails a hop. Appears in the error-by-class table |
+| `activity_warning` | **Finding C13.** A per-network `warnings[]` entry on a *successful* (200) `tracker/activity` response, e.g. "bridge service for network N is not fully synchronized, some bridges may still be missing" | Recorded as `activity_warning[network_id=N]: …`; **not** `proxy_5xx` (no 5xx occurred) and never fails a hop. Appears in the error-by-class table |
 | `rpc_error` | JSON-RPC error response or transport failure on a `chains[].rpcUrl` | subdivided by JSON-RPC error code in the report |
-| `nonce_conflict` | **R3 (loadtest/REVIEW.md), added S21.** An `rpc_error`/submit-throw whose message mentions "nonce" | **Originally a deliberate decision, REVERSED by S29 (2026-09-14) — kept below for the history, not as current policy.** ~~There is no per-(user, chain) nonce serialization on the user send path (`wallets/chainClients.ts`'s `ChainNonceManager` is funder-only) — `load.maxInflightLapsPerUser` (default 3, up to 6 per user with two assets per §3.5's asset-interleaving clause) puts multiple concurrent sends on one EOA by design, matching a real user's wallet (`app/utils/transaction.ts`'s dropped-nonce parity, finding C4). A live run logged 19 nonce-too-low + 70 viem `-32003` rejections from exactly this. Chosen resolution: **keep parity** (do not serialize sends — that would diverge from the UI) and instead **attribute honestly**: a nonce-shaped message is classified separately from plain `rpc_error` (a class that reads as "the chain/proxy rejected us") rather than serializing sends.~~ **S29 finding: concentrated on the `L2B->L1` claim hop alone (not diluted across all hops as R3's "89/1985" framing implied) this was ~39% of attempts failing (33/85 and 11/29 across two full 3-hop runs) — not tolerable.** S29 walked viem's `.cause` chain on real failures and captured the actual anvil rejection text underneath the generic `-32003` shortMessage: **`"replacement transaction underpriced"`** — direct confirmation of same-EOA nonce contention, not a genuine chain/proxy rejection. **The parity argument is now judged backwards: a real user does not submit several concurrent bridges from one wallet, so serializing sends per (user, chain) is MORE faithful to real usage, not less** — the identical reasoning S25 already used to justify browser mode's per-page `runExclusive`. `workers/headless/headlessUser.ts`'s `sendAndWait` is now wrapped in a per-(user, chain) FIFO queue (`workers/headless/uiCallset.ts`'s `KeyedSerialQueue`, the same shape as `runExclusive`), so concurrent sends on one EOA/chain no longer race the nonce at all. This class is left wired in `metrics/errors.ts` (a nonce-shaped message is still theoretically possible from a genuine node-side nonce issue) but should now fire rarely to never on this hop; see `loadtest/REVIEW.md`'s updated R3 entry for the full decision record. |
+| `nonce_conflict` | **R3 (loadtest/REVIEW.md).** An `rpc_error`/submit-throw whose message mentions "nonce" | **Originally a deliberate decision, REVERSED (2026-09-14) — kept below for the history, not as current policy.** ~~There is no per-(user, chain) nonce serialization on the user send path (`wallets/chainClients.ts`'s `ChainNonceManager` is funder-only) — `load.maxInflightLapsPerUser` (default 3, up to 6 per user with two assets per §3.5's asset-interleaving clause) puts multiple concurrent sends on one EOA by design, matching a real user's wallet (`app/utils/transaction.ts`'s dropped-nonce parity, finding C4). A live run logged 19 nonce-too-low + 70 viem `-32003` rejections from exactly this. Chosen resolution: **keep parity** (do not serialize sends — that would diverge from the UI) and instead **attribute honestly**: a nonce-shaped message is classified separately from plain `rpc_error` (a class that reads as "the chain/proxy rejected us") rather than serializing sends.~~ **Later finding: concentrated on the `L2B->L1` claim hop alone (not diluted across all hops as R3's "89/1985" framing implied) this was ~39% of attempts failing (33/85 and 11/29 across two full 3-hop runs) — not tolerable.** The re-diagnosis walked viem's `.cause` chain on real failures and captured the actual anvil rejection text underneath the generic `-32003` shortMessage: **`"replacement transaction underpriced"`** — direct confirmation of same-EOA nonce contention, not a genuine chain/proxy rejection. **The parity argument is now judged backwards: a real user does not submit several concurrent bridges from one wallet, so serializing sends per (user, chain) is MORE faithful to real usage, not less** — the identical reasoning already used to justify browser mode's per-page `runExclusive`. `workers/headless/headlessUser.ts`'s `sendAndWait` is now wrapped in a per-(user, chain) FIFO queue (`workers/headless/uiCallset.ts`'s `KeyedSerialQueue`, the same shape as `runExclusive`), so concurrent sends on one EOA/chain no longer race the nonce at all. This class is left wired in `metrics/errors.ts` (a nonce-shaped message is still theoretically possible from a genuine node-side nonce issue) but should now fire rarely to never on this hop; see `loadtest/REVIEW.md`'s updated R3 entry for the full decision record. |
 | `tx_revert` | receipt `status === 'reverted'` not otherwise classified | see the two specialisations below |
 | `lbt_underflow` | revert whose decoded reason is `LocalBalanceTreeUnderflow`, or an `eth_estimateGas` failure carrying it | §3.7 |
 | `already_claimed` | revert selector `0x646cf558` (`AlreadyClaimed()`), the one selector match this taxonomy permits (aggkit DESIGN §4 S5submit; `app/hooks/useClaimExecution.ts:228-229`) | resolves to `claim_race_lost` + hop success, not a failure |
@@ -787,7 +786,7 @@ is the only signal available — and those cases are listed here explicitly.
 | `console_error` | a page `console.error` / `pageerror` not on the console-hygiene allowlist | recorded, does not fail a hop |
 | `funding` | anything from `wallets/fund.ts` | `FUNDING_CAP_EXCEEDED` is its own sub-code |
 | `config` | schema/validate failure | run never starts |
-| `internal` | anything unclassified | S20 should treat a non-trivial `internal` count as a finding — the classifier is meant to be exhaustive |
+| `internal` | anything unclassified | An audit should treat a non-trivial `internal` count as a finding — the classifier is meant to be exhaustive |
 
 ### 5.4 Gate-stall accounting
 
@@ -806,9 +805,9 @@ names, and the observable that assigns them:
 Each gate records: hops that entered it, total time spent, p50/p90/p99, and
 how many hops were sitting on it when a `skipped_backpressure` tick fired.
 That last number is the one that answers "was the devnet or the tool the
-bottleneck", which is S15's central question.
+bottleneck"
 
-### 5.5 Honesty invariants (S20 audit targets)
+### 5.5 Honesty invariants (audit targets)
 
 1. `bridges_submitted = Σ hop bridge_submit successes`, and
    `ticks_offered = bridges_submitted + skipped_backpressure + ticks_lost_to_ramp`.
@@ -821,7 +820,7 @@ bottleneck", which is S15's central question.
 4. An aborted run sets `"aborted": true` at the top level of `results.json`
    **and** in `summary.md`'s first line.
 5. No histogram is emitted with `n = 0`; percentiles for `n = 1` are all equal
-   to the single sample (S07 edge-case test).
+   to the single sample (edge-case test).
 
 ---
 
@@ -867,7 +866,7 @@ Written to `output.dir` (default `loadtest-results/<timestamp>/`, gitignored).
 }
 ```
 
-**Heavy-load additions (S53/S54).** All are optional and absent when the feature is off, so a
+**Heavy-load additions.** All are optional and absent when the feature is off, so a
 run without a `pump` or `measurement` block keeps the shape above (flag-off golden test):
 
 - `pump` (only when the pump ran): `enabled`, `sender`, `destinationNetworkId`, `amountWei`,
@@ -890,8 +889,8 @@ run without a `pump` or `measurement` block keeps the shape above (flag-off gold
 reference re-shaped to `{"ref": "env:NAME"}`, (b) every `chains[].rpcUrl` that has a path, query,
 fragment or userinfo cut to `scheme://host[:port]/<redacted>` (a bare origin is kept), and (c)
 `explorerUrl`, `aggkitProxyUrl` and `uiBaseUrl` masked the same way only when they look
-secret-shaped (userinfo, query, fragment or a token-like path segment). A run directory written
-before S54 may still hold the unmasked URL; it is not rewritten, and every human-facing report
+secret-shaped (userinfo, query, fragment or a token-like path segment). A run directory written by an older tool version
+may still hold the unmasked URL; it is not rewritten, and every human-facing report
 (`summary.md`, `report.html`) redacts at render time (`metrics/redactReport.ts`).
 
 ### 6.2 `activity.ndjson`
@@ -906,9 +905,9 @@ plus kind-specific fields. Kinds:
 `error`, `hop_end` (outcome), `lap_end` (outcome), `resource_sample`,
 `run_end`.
 
-**Written vs still not written (as of S53).** The kinds actually written are: `run_start`,
+**Written vs still not written ** The kinds actually written are: `run_start`,
 `user_ready`, `tick`, `tick_skipped`, `hop_state`, `error`, `hop_end`, `lap_end`,
-`resource_sample`, `run_end`, `hop_measurement` (one per hop, S45), plus the S53 kinds
+`resource_sample`, `run_end`, `hop_measurement` (one per hop), plus the heavy-load kinds
 `tx_sent` and `tx_receipt` (**only when a `measurement` block is configured**, one per approve,
 bridge and claim tx, so SC5 has a denominator), `pump_state`, `pump_deposit`, `pump_skipped`
 (pump on), `wallet_balance` (`walletBalanceIntervalMs`), `l1_info_leaf` and
@@ -917,14 +916,13 @@ though the kinds list above names them: **`activity_row`** and **`claim_attempt`
 collector methods have no caller). They are a known DESIGN/code mismatch, deferred; nothing in
 the reports reads them.
 
-Carrying the T-number is what makes the run auditable against §3.2: S20 can
+Carrying the T-number is what makes the run auditable against §3.2: an audit can
 assert every `hop_state` line names a transition that exists in this document.
 
 ### 6.3 `summary.md`
 
-Fixed section order (S07 asserts each heading is present; `report --dir`
-regenerates it **byte-identical** from `results.json`, which is S11's
-acceptance):
+Fixed section order (a test asserts each heading is present; `report --dir`
+regenerates it **byte-identical** from `results.json`):
 
 1. `# Bridge load test — <startedAt>` — one line stating the verdict
    (`ABORTED` > `NO LAPS STARTED` > `FAIL` on any `LAP_FAILED` > `INCOMPLETE` on any
@@ -944,7 +942,7 @@ acceptance):
 10. `## Resources` — peak/mean tool RSS and CPU, per-browser-process RSS.
 11. `## Environment` — tool version, SDK version, image tags, host facts.
 
-### 6.4 `report.html` (S54)
+### 6.4 `report.html`
 
 The human entrypoint of a run; `results.json`, `activity.ndjson` and `summary.md` are for
 debugging and scripting. Written to `<out>/report.html` by `run` in a `finally` (aborted and
@@ -983,7 +981,7 @@ are pooled, e.g. the I and J rings of a stage) with verdict, failure rates, pump
 criteria fired, per-route ready-wait, L1 leaves per hour and comparison charts, linking to each
 run's `report.html` by relative path.
 
-### 6.5 Stop criteria SC1-SC13 (S54)
+### 6.5 Stop criteria SC1-SC13
 
 `metrics/stopCriteria.ts` evaluates the campaign's stop criteria **read-only** over a digest of
 `activity.ndjson` plus `results.json` where present. It sends no signal and stops nothing; the
@@ -1009,13 +1007,13 @@ The `check-stop` command prints them (`pnpm loadtest check-stop --dir <out> [--d
 
 `browsers = ceil(users.browser / browser.contextsPerBrowser)`; contexts are
 distributed round-robin so a crash loses at most
-`contextsPerBrowser` users. Rationale from plan §1's measured feasibility
-table: marginal RSS is ~150 MB/user with **one browser and N contexts** vs
+`contextsPerBrowser` users. Rationale from the initial measured feasibility
+study: marginal RSS is ~150 MB/user with **one browser and N contexts** vs
 ~470 MB/user with **N browsers**, so contexts-per-browser is the right axis;
-`contextsPerBrowser` is capped at 8 (schema max, lowered from 25 at S16/A3
+`contextsPerBrowser` is capped at 8 (schema max, lowered from 25
 after a 20-browser-user run with `contextsPerBrowser: 25` collapsed to a
 single Chromium — VALIDATION-1.md A3) to bound crash blast radius and
-Playwright memory creep (plan §6).
+Playwright memory creep.
 
 Launch flags: `--disable-dev-shm-usage` (mandatory — the default `/dev/shm`
 is too small for tens of contexts in a container), plus
@@ -1023,17 +1021,17 @@ is too small for tens of contexts in a container), plus
 
 Each context: its own storage state, and
 `context.addInitScript` setting `window.__AGGLAYER_E2E_PRIVATE_KEY__`
-(S03) **before any app script runs**, which is what gives each context a
-distinct wallet. S10's acceptance proves distinct addresses per context.
+**before any app script runs**, which is what gives each context a
+distinct wallet. The acceptance run proved distinct addresses per context.
 
 ### 7.2 Sizing guidance (to be replaced by measurement)
 
-From plan §1: ~150 MB marginal RSS and 0.005 core idle per browser user
+From the initial feasibility study: ~150 MB marginal RSS and 0.005 core idle per browser user
 against a dead backend; budget **0.05–0.1 core** per browser user against a
 live backend. Practical ceiling on this host ~**150–200** browser users
-(memory-bound near 300). These are the numbers S17 must confirm or replace;
+(memory-bound near 300). These are the numbers the scaled validation runs must confirm or replace;
 until then they are the documented planning figures, not measurements of a
-live run. **[VERIFY@S17]**
+live run. **[VERIFY]**
 
 ### 7.3 Crash detection and recovery
 
@@ -1050,7 +1048,7 @@ with the same `addInitScript` key, so the user's wallet and therefore its ring
 position are recovered from chain state on the next tick.
 
 **All three detection signals drive the SAME relaunch path, deduped
-(S10 attempt #1 retry fix).** A real process kill fires more than one of
+(the acceptance-run retry fix).** A real process kill fires more than one of
 the three signals for the same incident — empirically, every `context.on
 ('close')` for the slot's users, then (measurably later — not
 simultaneously) the browser's own `disconnected` event. Attempt #1's
@@ -1072,8 +1070,8 @@ incarnation, so a late-arriving `disconnected` for an already-recovered
 slot cannot spuriously tear down the fresh contexts. With this fix, by the
 time ANY crash event is observed by a caller, `slot.browser` is already
 null and a relaunch is already in flight, so `acquireContext` always waits
-on the live relaunch rather than a stale reference — verified live (S10
-retry #1's crash-recovery phase: both affected users' next lap completed
+on the live relaunch rather than a stale reference — verified live (the acceptance run's crash-recovery
+phase: both affected users' next lap completed
 after recovery).
 
 The pool never reuses a wallet across two live contexts — that would produce
@@ -1082,7 +1080,7 @@ nonce collisions on the same account.
 ### 7.4 Context recycling
 
 After `browser.recycleContextAfterLaps` completed laps, a context is closed
-and re-created between laps (never mid-hop). This is plan §6's Playwright
+and re-created between laps (never mid-hop). This is the Playwright
 memory-creep mitigation. Recycles are counted and reported so a run where
 recycling dominates is visible.
 
@@ -1091,24 +1089,24 @@ recycling dominates is visible.
 ## 8. UI build and serve (browser mode)
 
 Recorded here because §9's parity claim depends on it: the baked
-`agglayer-dev-ui-002` compose container is **not** E2E-enabled (plan §2), so
+`agglayer-dev-ui-002` compose container is **not** E2E-enabled, so
 browser mode builds and serves its own static export with
 `NEXT_PUBLIC_E2E_ENABLED=true`, a throwaway default key, and
 `NEXT_PUBLIC_AGGKIT_PROXY=<config.aggkitProxyUrl>`, writing a generated
 `config.json` into `out/` (served `Cache-Control: no-store`) without touching
-the repo's committed `config.json` (S09).
+the repo's committed `config.json`.
 
 The generated `config.json` must set the `autoclaim` block to the same values
 as the loadtest config's `autoclaim` map — otherwise the browser users' gate
 (`useAutoclaimGate`) and the headless users' gate (§3.4) would use different
-`waitMs` values and the two modes would not be comparable. S09 asserts this.
+`waitMs` values and the two modes would not be comparable. A test asserts this.
 
 ---
 
 ## 9. UI call-set parity
 
 **Verification statement.** The table below was built by reading the
-following files in full at S02, not from the plan's summary:
+following files in full, not from a summary:
 `app/services/activity.ts`, `app/services/tokenMetadata.ts`,
 `app/services/claimProof.ts`, `app/hooks/useTransactions.ts`,
 `app/hooks/useReadyToClaimCount.ts`, `app/hooks/useBridgeTracking.ts`,
@@ -1126,8 +1124,8 @@ plus the pinned SDK's `dist/index.js` (the call bodies of `getClaimInputs`,
 `ERC20.bridgeTo`, `ERC20.getBalance/getAllowance/getMetadata`,
 `BaseContract.getNonce/estimateGas`, `fetchRawText`) and
 `node_modules/viem/_cjs/actions/wallet/prepareTransactionRequest.js`.
-The plan §2 table is reproduced faithfully in rows P1–P9 and the additional
-rows P10–P14 are calls plan §2 does **not** list — each is a §9.3 finding, not
+The expected-call inventory is reproduced faithfully in rows P1–P9 and the additional
+rows P10–P14 are calls that inventory does **not** list — each is a §9.3 finding, not
 a silent addition.
 
 ### 9.1 The call set the headless worker must replay
@@ -1144,8 +1142,8 @@ a silent addition.
 | P8 | `eth_gasPrice` | bridge form mounted | `staleTime 15_000`, same no-refetch flags (`useGasEstimate.ts:28-32`) | `useGasEstimate.ts:33-37` | One per chain per 15 s. Note the UI's *displayed* fee uses hardcoded gas units (`app/constants/gasValues.ts`), not an estimate — no extra call |
 | P9 | `allowance` (ERC20 `eth_call`) | ERC20 selected **and** `amount > 0` (`useCheckAllowance.ts:26`) | no `staleTime`; `refetchOnMount/WindowFocus/Reconnect: false`; keyed including `amount.toString()` (`:29`) — so **each distinct amount is a fresh cache entry and a fresh call** | `useCheckAllowance.ts:35-45` | One per (chain, token, owner, spender, **amount**) |
 | P10 | `eth_getTransactionCount` + `eth_estimateGas` — **first pair**, from the SDK's tx builder | every `approve` / `bridgeAsset` / `claimAsset` build | once per build, issued in parallel (`Promise.all`) | SDK `buildApprove` / `buildBridgeAsset` / `buildClaimAsset` → `BaseContract.getNonce` + `BaseContract.estimateGas` | Replay |
-| P11 | `eth_getTransactionCount` — **second call, from viem's `prepareTransactionRequest`** re-deriving the nonce `mapTransactionRequest` still doesn't forward (deliberate, see C4/C5 below); **`eth_estimateGas` no longer duplicates here as of S32** (see C4 — `mapTransactionRequest` now forwards the SDK's `gas`, so viem's own default-parameter estimate is skipped) **in the real UI**, where `useBridgeExecution.ts`/`useClaimExecution.ts` spread `mapTransactionRequest`'s full return value into `sendTransaction`. **Not observed in the headless loadtest harness**: `headlessUser.ts`'s `sendAndWait` builds its own `sendTransaction` argument object field-by-field and never reads `mapped.gas`, so headless approve/claim sends still pay the second `eth_estimateGas`; headless bridge sends already skipped it before S32 too, via the pre-existing `opts.gasOverride` (`bridgeTxParams.gas` + `bridgeGasOffset`), unrelated to this fix | same builds | once per build (nonce only, post-S32) | `app/utils/transaction.ts:26-45` (`mapTransactionRequest`, post-S32) forwards `gas` when present, still omits `nonce`; `prepareTransactionRequest.js`'s default parameters include both, but only fills whichever the request didn't already supply | Replay the nonce re-derivation always. Replay the SDK-plus-viem doubled `eth_estimateGas` **only for headless approve/claim** (not bridge, not browser-mode's other two build kinds) — this is finding **C4**, fixed for the real UI by S32, deliberately NOT extended to `headlessUser.ts`'s own send call (out of S32's scope) |
-| P12 | Fee derivation for the send: an `eth_fillTransaction` attempt first (support cached per client uid), and on failure `eth_getBlockByNumber(latest)` + `eth_maxPriorityFeePerGas` (fallback `eth_gasPrice`) | same builds | once per send; EIP-1559-ness cached per client uid | `prepareTransactionRequest.js:80-101` (fill attempt), `:191-197,230-283` (block/fees/gas), `estimateMaxPriorityFeePerGas.js:18-40` | Replay through the same viem version so the fill/fallback decision matches. **[VERIFY@S08/S10] — SETTLED at S08, RECONFIRMED at S10 retry #1.** S08 confirmed live against the compose devnet's anvil (headless-trace.ndjson from a real run: 2 users, L1→L2A→L2B→L1, ETH + ERC20 laps). Every send takes the **fallback branch**: viem issues `eth_fillTransaction` first (HTTP 200, but a JSON-RPC-level `MethodNotFoundRpcError`/`MethodNotSupportedRpcError` — anvil does not implement `eth_fillTransaction`; the HTTP status alone does not show this, only the JSON-RPC error body does), catches it, sets `supportsFillTransaction.set(client.uid, false)`, and falls through to `eth_getBlockByNumber('latest')` + `eth_maxPriorityFeePerGas` (which succeeds — anvil is EIP-1559 — so the `eth_gasPrice` fallback is never reached). The `eth_fillTransaction` attempt is cached **per viem client uid**, i.e. per (chain, wallet-client-instance): the first send on a given chain for a given user pays for the wasted `eth_fillTransaction` round-trip, every subsequent send on that same chain+user skips straight to `eth_getBlockByNumber`+`eth_maxPriorityFeePerGas`. Confirmed identical on L1 (`l1rpc`) and L2A (`l2rpc-001`) sends. **S10 confirmed the browser build (same pinned viem version, driven through the real UI via Playwright) takes the identical branch**: the S10 acceptance run's `accept-collector-snapshot.json` (`loadtest-results/s10-2026-09-11T11-06-30-206Z/`) records `rpc/{l1rpc,l2rpc-001,l2rpc-002}/eth_fillTransaction` alongside `eth_getBlockByNumber` and `eth_maxPriorityFeePerGas` for every chain, with `eth_gasPrice` present separately only from `useGasEstimate.ts`'s own 15s-cadence UI call (P8), never as a fee-derivation fallback — i.e. `eth_gasPrice` is never reached as a fallback in either mode. As predicted, the decision is purely a function of what anvil supports, not of which caller invokes `sendTransaction`. |
+| P11 | `eth_getTransactionCount` — **second call, from viem's `prepareTransactionRequest`** re-deriving the nonce `mapTransactionRequest` still doesn't forward (deliberate, see C4/C5 below); **`eth_estimateGas` no longer duplicates here as of the C4 fix in the app** (see C4 — `mapTransactionRequest` now forwards the SDK's `gas`, so viem's own default-parameter estimate is skipped) **in the real UI**, where `useBridgeExecution.ts`/`useClaimExecution.ts` spread `mapTransactionRequest`'s full return value into `sendTransaction`. **Not observed in the headless loadtest harness**: `headlessUser.ts`'s `sendAndWait` builds its own `sendTransaction` argument object field-by-field and never reads `mapped.gas`, so headless approve/claim sends still pay the second `eth_estimateGas`; headless bridge sends already skipped it before the fix too, via the pre-existing `opts.gasOverride` (`bridgeTxParams.gas` + `bridgeGasOffset`), unrelated to this fix | same builds | once per build (nonce only, post-fix) | `app/utils/transaction.ts:26-45` (`mapTransactionRequest`, post-fix) forwards `gas` when present, still omits `nonce`; `prepareTransactionRequest.js`'s default parameters include both, but only fills whichever the request didn't already supply | Replay the nonce re-derivation always. Replay the SDK-plus-viem doubled `eth_estimateGas` **only for headless approve/claim** (not bridge, not browser-mode's other two build kinds) — this is finding **C4**, fixed for the real UI by the C4 fix, deliberately NOT extended to `headlessUser.ts`'s own send call (out of that fix's scope) |
+| P12 | Fee derivation for the send: an `eth_fillTransaction` attempt first (support cached per client uid), and on failure `eth_getBlockByNumber(latest)` + `eth_maxPriorityFeePerGas` (fallback `eth_gasPrice`) | same builds | once per send; EIP-1559-ness cached per client uid | `prepareTransactionRequest.js:80-101` (fill attempt), `:191-197,230-283` (block/fees/gas), `estimateMaxPriorityFeePerGas.js:18-40` | Replay through the same viem version so the fill/fallback decision matches. **[VERIFIED] — settled against the compose devnet and reconfirmed in the retried acceptance run.** The headless side was confirmed live against the compose devnet's anvil (headless-trace.ndjson from a real run: 2 users, L1→L2A→L2B→L1, ETH + ERC20 laps). Every send takes the **fallback branch**: viem issues `eth_fillTransaction` first (HTTP 200, but a JSON-RPC-level `MethodNotFoundRpcError`/`MethodNotSupportedRpcError` — anvil does not implement `eth_fillTransaction`; the HTTP status alone does not show this, only the JSON-RPC error body does), catches it, sets `supportsFillTransaction.set(client.uid, false)`, and falls through to `eth_getBlockByNumber('latest')` + `eth_maxPriorityFeePerGas` (which succeeds — anvil is EIP-1559 — so the `eth_gasPrice` fallback is never reached). The `eth_fillTransaction` attempt is cached **per viem client uid**, i.e. per (chain, wallet-client-instance): the first send on a given chain for a given user pays for the wasted `eth_fillTransaction` round-trip, every subsequent send on that same chain+user skips straight to `eth_getBlockByNumber`+`eth_maxPriorityFeePerGas`. Confirmed identical on L1 (`l1rpc`) and L2A (`l2rpc-001`) sends. **The browser build (same pinned viem version, driven through the real UI via Playwright) was confirmed to take the identical branch**: the acceptance run's `accept-collector-snapshot.json` records `rpc/{l1rpc,l2rpc-001,l2rpc-002}/eth_fillTransaction` alongside `eth_getBlockByNumber` and `eth_maxPriorityFeePerGas` for every chain, with `eth_gasPrice` present separately only from `useGasEstimate.ts`'s own 15s-cadence UI call (P8), never as a fee-derivation fallback — i.e. `eth_gasPrice` is never reached as a fallback in either mode. As predicted, the decision is purely a function of what anvil supports, not of which caller invokes `sendTransaction`. |
 | P13 | `eth_sendRawTransaction`, then `eth_getTransactionReceipt` polling | every approve / bridge / claim | wagmi `useSendTransaction` then viem `waitForTransactionReceipt` (`useBridgeExecution.ts:119-121,161`, `useClaimExecution.ts:166-180`) | as cited | Replay; poll interval must match viem's default for the chain |
 | P14 | `isClaimed` (`eth_call` on the destination bridge) | manual claim: **once** before building (`useClaimExecution.ts:97-100`); on **any** non-user-rejection throw, **up to 3 more times** with `0 / 400 / 1000 ms` backoff, stopping at the first `true` (`:244-258`) | as described | `useClaimExecution.ts:94-100,244-258` | Replay both — the retry loop is finding **C3** |
 
@@ -1175,11 +1173,11 @@ Two response-parsing behaviours are part of parity, not optional:
   constantly) and **not** `global_index` (precision-unsafe). The ring state
   machine keys rows on `tx_hash:deposit_count`.
 
-### 9.3 Findings — where the `app/` sources contradict or under-specify plan §2
+### 9.3 Findings — where the `app/` sources contradict or under-specify the call set in §9.1
 
 Reported, not silently corrected. Each is falsifiable at the cited line.
 
-- **C1 — activity `staleTime: 30_000` is missing from plan §2.**
+- **C1 — activity `staleTime: 30_000` is missing from the bare call list.**
   `useTransactions.ts:80` and `useReadyToClaimCount.ts:29`. A worker replaying
   only the `refetchInterval` values would issue requests the UI suppresses on
   mount/remount. Affects request-count parity, not cadence at steady state.
@@ -1187,23 +1185,23 @@ Reported, not silently corrected. Each is falsifiable at the cited line.
   share queryKey `['activity', mode, address]`; react-query runs the shortest
   interval among live observers, so a user on the transactions page polls at
   `min(5000|10000, 15000)` with **one** request, while a user on the bridge
-  page polls at `15000`. Plan §2's "badge 15 s (deduped by queryKey)" is
+  page polls at `15000`. The "badge 15 s (deduped by queryKey)" note is
   right about the dedup but does not state the min-interval consequence.
 - **C3 — the post-throw `isClaimed` re-check is a bounded retry loop, not a
   single call.** `useClaimExecution.ts:251-257` iterates `[0, 400, 1000]` ms.
-  Plan S08's "the UI's post-throw `isClaimed` re-check" (singular) undercounts
+  The original harness wording "the UI's post-throw `isClaimed` re-check" (singular) undercounts
   by up to 3 `eth_call`s per failed claim — which matters precisely under the
   concurrency a load test creates.
 - **C4 — every tx build costs *two* `eth_estimateGas` and *two*
-  `eth_getTransactionCount`, plus fee-derivation calls.** **FIXED by S32
+  `eth_getTransactionCount`, plus fee-derivation calls.** **FIXED
   (2026-09-15).** `app/utils/transaction.ts:26-38` (`mapTransactionRequest`)
   used to return only `{to, data, value}`, discarding the `gas` and `nonce`
   the SDK just computed (`buildBridgeAsset`/`buildClaimAsset`/`buildApprove`
   each do `Promise.all([getNonce, estimateGas])`); viem's
   `prepareTransactionRequest` then re-derived both because they are in its
-  default parameter set. Plan §2 lists one pair — **this was the largest
-  single correction to the plan's RPC accounting**, and S08/S10's parity diff
-  showed the doubled pair in both modes. S32 now forwards the SDK's `gas`
+  default parameter set. The original inventory lists one pair — **this was the largest
+  single correction to the RPC accounting**, and the parity diffs
+  showed the doubled pair in both modes. The fix forwards the SDK's `gas`
   (a `bigint`, conditional on presence — see the `mapTransactionRequest`
   diff) so viem's `prepareTransactionRequest` no longer needs to re-estimate
   it; `nonce` is **deliberately still not forwarded** (see C5's note below
@@ -1223,7 +1221,7 @@ Reported, not silently corrected. Each is falsifiable at the cited line.
   **every one of its 4 builds** (top-up bridge, and the manual claim) as a
   clean `eth_getTransactionCount, eth_estimateGas, eth_getTransactionCount,
   eth_sendRawTransaction` cluster: **one** `eth_estimateGas` per build, down
-  from the two documented pre-fix (S08/S10's traces, P10/P11 above), with
+  from the two documented pre-fix traces (P10/P11 above), with
   `eth_getTransactionCount` still appearing twice (nonce still re-derived,
   as expected since `nonce` is not forwarded). This is also independently
   provable from viem's own source
@@ -1237,9 +1235,9 @@ Reported, not silently corrected. Each is falsifiable at the cited line.
   headlessUser.ts`'s `sendAndWait` builds its `sendTransaction` argument by
   hand (`{ to: mapped.to, data: mapped.data, value: mapped.value,
   ...(opts.gasOverride ...) }`) rather than spreading `mapped` — so
-  `mapped.gas` (S32's new field) is never read there. Two identical
+  `mapped.gas` (the field the C4 fix added) is never read there. Two identical
   single-lap ERC20 headless runs (devnet reset between them, one on the
-  pre-S32 code, one on post-S32) confirmed this empirically: **approve**
+  pre-fix code, one on post-fix) confirmed this empirically: **approve**
   sends cost 2 `eth_estimateGas` calls in both states (unaffected — approve
   passes no `opts.gasOverride`, and `sendAndWait` doesn't read `mapped.gas`
   either), and **bridge** sends already cost only 1 in both states (already
@@ -1247,11 +1245,11 @@ Reported, not silently corrected. Each is falsifiable at the cited line.
   `bridgeTxParams.gas` + `bridgeGasOffset`, computed straight from the raw
   SDK response, independent of `mapTransactionRequest`). Extending
   `headlessUser.ts` to also spread `mapped.gas` for approve/claim was
-  considered and **rejected as out of S32's scope** (the plan's non-goals
-  restrict S32 to `app/utils/transaction.ts`, its tests, docs, and comments
-  only) — flagged here for a future step, not fixed now.
+  considered and **rejected as out of scope** (that fix was restricted to
+  `app/utils/transaction.ts`, its tests, docs, and comments
+  only) — flagged here for future work, not fixed now.
 - **C5 — the `+300000` gas offset could not be applied in browser mode.**
-  **CLOSED by S36 (2026-09-17).** Not closed by C4/S32: it was once claimed
+  **CLOSED (2026-09-17).** Not closed by the C4 fix: it was once claimed
   that forwarding the SDK's `gas` would close this, and **that claim was
   wrong** — the SDK's estimator is a bare, bufferless pass-through
   (`client.estimateGas(...)` returned as-is, no headroom — see
@@ -1277,7 +1275,7 @@ Reported, not silently corrected. Each is falsifiable at the cited line.
   (median) / 231,281 (max), so a conventional 10–25% multiplier would not have
   covered the gap; +300,000 matches the headless offset, which saw zero such
   reverts across ~40,000 bridges.
-  **Verified, not just implemented** (case `S36-verify`, browser-only, 20 users,
+  **Verified, not just implemented** (a dedicated verification run, browser-only, 20 users,
   parameters byte-identical to the run that exposed it): `bridgeAsset` reverts
   **79 → 0** across all three chains, browser lap completion **51.5% → 91.1%**,
   hop success **80.1% → 97.0%**, and the `"Transaction failed"` modal
@@ -1295,24 +1293,24 @@ Reported, not silently corrected. Each is falsifiable at the cited line.
   token present in the local/custom token list produces **zero**
   token-mappings calls. Browser mode seeds the devnet ERC20 as a custom token
   (`bridge-page.ts:104-135` `seedCustomToken`), so browser users will make
-  *fewer* token-mappings calls than plan §2 implies. The headless worker must
+  *fewer* token-mappings calls than the bare call list implies. The headless worker must
   mirror whichever choice browser mode makes, and the run config records it
   (`headless.seedTokenList: boolean`, default `true` to match browser mode).
 - **C7 — `token-mappings` is never issued alone.** SDK `getTokenMetadata`
   composes `/token-mappings` **plus** on-chain `ERC20.getMetadata()`, which is
   `Promise.all([name, symbol, decimals])` then a tolerated `totalSupply` —
-  i.e. **3–4 additional `eth_call`s** per metadata fetch. Plan §2's row lists
+  i.e. **3–4 additional `eth_call`s** per metadata fetch. The bare call list records
   only the REST call.
 - **C8 — the ERC20 bridge goes through `ERC20.bridgeTo`, not
   `Bridge.buildBridgeAsset` directly.** `useBridgeExecution.ts:148-152`.
   `bridgeTo` wraps `buildBridgeAsset` with `permitData: '0x'` and
   `forceUpdateGlobalExitRoot: true`, so the wire result is equivalent, but
-  plan S08's wording ("`buildBridgeAsset` (+ `bridgeGasOffset`)") names the
+  The original harness wording ("`buildBridgeAsset` (+ `bridgeGasOffset`)") names the
   wrong entry point for the ERC20 path. The native path passes
   `token: wethToken ?? ZERO_ADDRESS` and no `permitData` (defaults to `'0x'`),
   `useBridgeExecution.ts:137-147`.
 - **C9 — the `connect-wallet` ambiguity is already resolved in the page
-  object.** Plan §2 says to use `:visible`; `bridge-page.ts:52` instead scopes
+  object.** The initial spec said to use `:visible`; `bridge-page.ts:52` instead scopes
   the locator to `header-desktop`
   (`this.headerDesktop.getByTestId('connect-wallet')`), which is unambiguous.
   Browser mode should reuse the page object as-is and **not** add a `:visible`
@@ -1320,17 +1318,17 @@ Reported, not silently corrected. Each is falsifiable at the cited line.
 - **C10 — there is no real testnet proxy URL in the repo.** `config.json`'s
   `appModes.configs.testnet.aggkitProxy` is
   `https://PLACEHOLDER-testnet-aggkit-proxy`, and `mainnet`'s is likewise a
-  placeholder. Plan S18's "the production aggkit-proxy URL from `config.json`"
-  does not exist; S18 needs the operator to supply it alongside the funded
+  placeholder. A production aggkit-proxy URL is not something the repo carries;
+  the operator needs to supply it alongside the funded
   key. §2.4 encodes this as a `validate` failure rather than a silent
   placeholder run.
 - **C11 — testnet mode has only two chains, and Bokuto's `networkId` is
   37.** So the testnet ring is 2 hops, and no code may assume L2 network ids
-  are `1..N`. Plan §3's example ring is devnet-shaped only.
+  are `1..N`. The 3-chain example ring (§2.3) is devnet-shaped only.
 - **C12 — activity rows carry a 4th status, `ERROR`.** `deriveStatus`
   (`activity.ts:147-153`) returns `ERROR` when the endpoint's `claimed`
   tri-state is `'error'`, and callers "must not read `error` as `false`"
-  (`activity.ts:91-94`). Plan §3's phase list has no state for it; §3.2 T16
+  (`activity.ts:91-94`). There is no state for it in a plain phase list; §3.2's T16
   adds `activity_status_error`. Tracker `api_revision` 5 drops `claimed` for a
   string `claim_status`; `deriveStatus` also maps `claim_status: "claimed"` to
   `CLAIMED` (no other `claim_status` value is evidenced yet).
@@ -1342,7 +1340,7 @@ Reported, not silently corrected. Each is falsifiable at the cited line.
   ignore them — otherwise a partially-broken fan-out looks like a clean run
   with missing rows.
 - **C14 — an L1-origin ERC20's address is different on every non-origin
-  chain, and nothing in the UI call set resolves it (S08 retry #2
+  chain, and nothing in the UI call set resolves it (a parity-diff
   finding).** A configured erc20 asset's `address` in `loadtest.config.json`
   is always the **origin** network's address (`config/schema.ts`'s
   `originNetworkId` convention). On any other ring chain the token exists
@@ -1371,7 +1369,7 @@ Reported, not silently corrected. Each is falsifiable at the cited line.
      **Not** `Bridge.getPrecalculatedWrapperAddress`
      (`precalculatedWrapperAddress`): the two differ on this devnet's
      deployed bridge contract — `precalculatedWrapperAddress` **reverts
-     with no reason** (confirmed live during S08 retry #1), while
+     with no reason** (confirmed live during the retried acceptance run), while
      `getTokenWrappedAddress` returns the zero address instead of
      reverting when no wrapper is deployed on that chain yet (a plain
      Solidity mapping default, not an error). A zero-address result is
@@ -1391,7 +1389,7 @@ Reported, not silently corrected. Each is falsifiable at the cited line.
   (pure, unit-tested) + `headlessUser.ts`'s `tokenAddressResolver` (wires
   the two tiers above to the pinned SDK).
 
-- **C6 refinement (S23 parity diff) — "zero token-mappings calls" holds
+- **C6 refinement (the headless-vs-browser parity diff) — "zero token-mappings calls" holds
   only for the seeded chain, not the whole lap.**
   `loadtest/workers/browser/browserUser.ts:262-266`'s `bridge()` seeds the
   custom token **per hop, for that hop's `fromChain` only**
@@ -1404,7 +1402,7 @@ Reported, not silently corrected. Each is falsifiable at the cited line.
   transient `bridge/token-mappings[0]` call (network_id 0 = this ERC20's
   origin network, per P6's `originTokenNetwork` convention, regardless of
   which chain's row triggered it) for that row until the next hop's seed
-  call lands. The S10 acceptance run (`accept-collector-snapshot.json`)
+  call lands. The acceptance run (`accept-collector-snapshot.json`)
   shows exactly this: **3** `bridge/token-mappings[0]` calls across 4 users'
   ERC20 laps (0.75/user) — small, transient, and **not** the "the UI issues
   zero token-mappings calls for the seeded ERC20" claim taken literally.
@@ -1453,7 +1451,7 @@ Reported, not silently corrected. Each is falsifiable at the cited line.
   polling in parallel. This is structural, not fixable without either (a)
   giving the driver a DOM-only signal (it has none, per the module doc) or
   (b) hooking react-query's cache from outside the page (not available to
-  Playwright). It is visible in the S10 acceptance HAR as a much higher
+  Playwright). It is visible in the acceptance HAR as a much higher
   `tracker/activity` request volume per user (200.5/user) than headless
   (107/user) despite comparable per-hop wall-clock budgets, and as
   near-simultaneous (3–20 ms apart) duplicate-looking timestamps where the
@@ -1463,7 +1461,7 @@ Reported, not silently corrected. Each is falsifiable at the cited line.
   correct in the merged stream (§ PARITY.md P1) — the divergence is in
   request *volume*, not in whether the UI's own cadence rule is honored.
 
-  **S24 fix and measurement (mitigated, not eliminated — the structural
+  **The follow-up fix and measurement (mitigated, not eliminated — the structural
   asymmetry above still holds).** Two changes, both scoped to
   `browserUser.ts`, no DOM scraping, no UI cadence change:
   1. **Attribution.** Every HTTP sample now carries `origin: 'ui' | 'harness'`
@@ -1514,24 +1512,24 @@ Reported, not silently corrected. Each is falsifiable at the cited line.
   `TypeError: Failed to fetch` occurrences. Run B still shows a comparable
   count of `internal` hop outcomes (32), but from an unrelated cause —
   `locator.click`/`locator.getAttribute` UI-interaction timeouts, not
-  `observeActivity()` at all — consistent with this session's own
-  documented finding that devnet/browser-mode grows flakier after many
-  hours of continuous load-testing; flagged as an S13/S14 follow-up, not
-  an S24 regression. See `PARITY.md` §2 for the origin-split update to the
+  `observeActivity()` at all — consistent with a documented observation
+  that devnet/browser-mode grows flakier after many
+  hours of continuous load-testing; flagged as a follow-up, not a
+  regression from the mitigation. See `PARITY.md` §2 for the origin-split update to the
   endpoint-class table.
 
 ### 9.4 Declared divergences (exhaustive)
 
 | Divergence | Browser | Headless | Why |
 |---|---|---|---|
-| `gas.bridgeGasOffset` | applied as `BRIDGE_GAS_BUFFER` (S36) | applied | C5 — closed |
+| `gas.bridgeGasOffset` | applied as `BRIDGE_GAS_BUFFER` (C5 fix) | applied | C5 — closed |
 | `gas.claimGasOffset` | **not applied** (UI claim has no margin) | applied (+60 000 on the claim gas limit) | Stage-2 ring J: 4/64 first-mint claims reverted out-of-gas (limit 202 542 vs ~228k needed when concurrent claims changed state between estimate and execution). Intentional, load-test-only: it keeps the harness measuring throughput instead of the estimate race. The race itself is a **separate product finding** (the real UI can hit it) |
 | `page_load`, `wallet_connect` phases | measured | absent | no page |
 | `console_error` capture | yes | n/a | no console |
 | `seedTokenList` | always (custom-token seeding is how the UI selects the devnet ERC20); a transient, per-hop seeding gap still yields a small residual `token-mappings[0]` count (0.75/user observed) | config `headless.seedTokenList`, default `true` | C6 |
 | Per-chain ERC20 wrapped-address resolution (token-mappings + on-chain fallback) | not performed (no equivalent UI code path — see C6) | `TokenAddressResolver`, three tiers, per-hop lazy resolution | C14 |
 | `eth_fillTransaction` wasted-round-trip frequency | paid once per (user, chain) **per real wallet chain-switch visit** (a fresh client uid per hop) | paid once per (user, chain) **for the whole run** (one long-lived client per chain) | C15 |
-| `tracker/activity` request volume (not cadence) | UI's own background poll (attributed `origin: 'ui'`) **plus** the driver's independent `readState()`/`observeActivity()` control-flow poll (attributed `origin: 'harness'`, single-flight + ~5s TTL cached since S24) — attributed and rate-bounded, still a second, undeduped poller | the worker's single poll loop **is** the P1 replay — no second poller | C16 |
+| `tracker/activity` request volume (not cadence) | UI's own background poll (attributed `origin: 'ui'`) **plus** the driver's independent `readState()`/`observeActivity()` control-flow poll (attributed `origin: 'harness'`, single-flight + ~5s TTL cached) — attributed and rate-bounded, still a second, undeduped poller | the worker's single poll loop **is** the P1 replay — no second poller | C16 |
 
 Anything else that differs between the two modes is a defect.
 
@@ -1546,18 +1544,18 @@ HTTP sample's `attempt` field (§5.2) is what makes it visible. A non-2xx
 
 ---
 
-## 10. Non-goals (recorded so S20 does not report them as gaps)
+## 10. Non-goals (recorded so audits do not report them as gaps)
 
-- No Prometheus exporter or dashboards (S07 non-goal).
-- No distributed / multi-host mode (S11 non-goal); the report's host section
+- No Prometheus exporter or dashboards (deliberate non-goal).
+- No distributed / multi-host mode (deliberate non-goal); the report's host section
   is what documents the single-host ceiling.
 - No mainnet run.
 - No LBT seeding step — §3.7 makes it structural instead.
 - No `bridgeMessage` / `bridgeMessageWETH` path. A ring chain whose
   `gasTokenAddress() != 0x0` is **refused at `validate`** with
   `GAS_TOKEN_NOT_ETHER`, mirroring aggkit `bridge_loop_tester` DESIGN.md §6's
-  recommendation. **[VERIFY@S05]** — `preflight` reads `gasTokenAddress()`
+  recommendation. **[VERIFY]** — `preflight` reads `gasTokenAddress()`
   live on every ring chain rather than trusting the devnet's expected zero
   address.
 - No changes to `tests/bridge/models/bridge-page.ts` beyond additive,
-  backward-compatible helpers (S10 non-goal).
+  backward-compatible helpers (deliberate non-goal).
