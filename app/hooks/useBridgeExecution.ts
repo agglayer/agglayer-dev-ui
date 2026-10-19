@@ -12,7 +12,7 @@ import { ZERO_ADDRESS } from '@/app/types/bridge';
 import { isValidEthereumAddress } from '@/app/utils/address';
 import { getNetworkId } from '@/app/utils/chains';
 import { normalize } from '@/app/utils/format';
-import { mapTransactionRequest } from '@/app/utils/transaction';
+import { BRIDGE_GAS_BUFFER, mapTransactionRequest } from '@/app/utils/transaction';
 import { useCallback, useState } from 'react';
 import { usePublicClient, useSendTransaction } from 'wagmi';
 
@@ -121,6 +121,16 @@ export const useBridgeExecution = (params: { fromChainId: number }) => {
           });
 
           if (approvalReceipt.status === 'reverted') {
+            // Same reason as the catch below: the modal deliberately shows a
+            // generic message, so the only way a reverted approval is
+            // diagnosable is this log. Without it the user -- and anyone
+            // reading their bug report -- gets "Transaction failed" and
+            // nothing else.
+            console.error('[bridge-execution] approval transaction reverted', {
+              txHash: localApprovalHash,
+              blockNumber: approvalReceipt.blockNumber,
+              gasUsed: approvalReceipt.gasUsed
+            });
             setState({
               isExecuting: false,
               currentStep: 'error',
@@ -151,8 +161,14 @@ export const useBridgeExecution = (params: { fromChainId: number }) => {
                 forceUpdateGlobalExitRoot: true
               });
 
+        // BRIDGE_GAS_BUFFER, not a bare estimate: this send passes
+        // `forceUpdateGlobalExitRoot: true` above, so it races the global exit
+        // root and the SDK's bufferless estimate can leave the inner
+        // GlobalExitRootV2 call out of gas -- surfacing as the plain
+        // "Bridge transaction reverted" below. See BRIDGE_GAS_BUFFER's comment
+        // for the measurement (4.5% of L1 bridges, on an idle system).
         localBridgeHash = await sendTransactionAsync({
-          ...mapTransactionRequest(bridgeTx),
+          ...mapTransactionRequest(bridgeTx, { gasBuffer: BRIDGE_GAS_BUFFER }),
           account: senderAccount,
           chainId: fromChainId
         });
@@ -161,6 +177,24 @@ export const useBridgeExecution = (params: { fromChainId: number }) => {
         const receipt = await publicClient.waitForTransactionReceipt({ hash: localBridgeHash });
 
         if (receipt.status === 'reverted') {
+          // This branch is the single most common real browser failure, and
+          // until 2026-09-17 it was the only error path here that logged
+          // NOTHING (unlike the catch below), so it reached users as a bare
+          // "Transaction failed" with nothing actionable -- see
+          // loadtest/CAPACITY-REPORT.md §5.4.
+          //
+          // Read `gasUsed` with care: a revert is NOT necessarily what it
+          // looks like. §5.3's out-of-gas inner `updateGlobalExitRoot`
+          // surfaces here as a plain revert with `gasUsed` at only ~97% of the
+          // limit, because EIP-150's 63/64 rule leaves the outer frame enough
+          // gas to return -- so `gasUsed` vs the limit does not identify it
+          // and only a `callTracer` trace of `txHash` will. The hash is
+          // logged precisely so that trace is possible after the fact.
+          console.error('[bridge-execution] bridge transaction reverted', {
+            txHash: localBridgeHash,
+            blockNumber: receipt.blockNumber,
+            gasUsed: receipt.gasUsed
+          });
           setState({
             isExecuting: false,
             currentStep: 'error',

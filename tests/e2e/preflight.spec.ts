@@ -11,7 +11,7 @@ import { createPublicClient, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 
 // Like the other devnet-specific specs in this suite (tracker.spec.ts,
-// console-hygiene.spec.ts, manual-claim.spec.ts, claim-autoclaim.spec.ts),
+// console-hygiene.spec.ts, manual-claim.spec.ts, claim-l1-to-l2.spec.ts),
 // this depends on a live Kurtosis `cdk` devnet enclave (or, in CI, the
 // vendored devnet bundle): it hits aggkit's sync-status endpoint and checks
 // the E2E wallet's on-chain balance against config.json's default app mode.

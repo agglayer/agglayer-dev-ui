@@ -1,7 +1,7 @@
 import type { Token } from '@/app/types/token';
 import type { Locator, Page } from '@playwright/test';
 
-import { E2E_BRIDGE_SUCCESS_TIMEOUT_MS } from '@/app/constants/e2e';
+import { E2E_BRIDGE_SUCCESS_TIMEOUT_MS, E2E_CLAIM_TIMEOUT_MS } from '@/app/constants/e2e';
 import { STORAGE_KEYS } from '@/app/utils/storage';
 import { loadAppConfigForNode } from '@/tests/e2e/appConfig';
 import { expect } from '@playwright/test';
@@ -251,8 +251,49 @@ class BridgePage {
   }
 
   /**
-   * Bridges L1 -> L2 and waits for the deposit to autoclaim, crediting the
-   * destination L2's per-origin `LocalBalanceTree` by `amount`.
+   * Waits for the deposit row to read "Ready to claim", clicks "Claim tokens",
+   * confirms the "Claim successful" modal, closes it and waits for "Completed".
+   * The devnet has no autoclaimer, so every deposit needs this click.
+   * `readyTimeoutMs` budgets the wait for Ready to claim; `claimTimeoutMs` the
+   * claim confirmation and final refresh.
+   */
+  async waitForReadyAndClaim(
+    transactionHash: string,
+    { readyTimeoutMs, claimTimeoutMs }: { readyTimeoutMs: number; claimTimeoutMs: number }
+  ): Promise<void> {
+    const status = this.getTransactionStatus(transactionHash);
+
+    await expect
+      .poll(
+        async () => {
+          await this.refreshActivity();
+          return status.textContent().catch(() => null);
+        },
+        {
+          message: 'Waiting for the deposit to reach Ready to claim',
+          timeout: readyTimeoutMs,
+          intervals: [5_000]
+        }
+      )
+      .toContain('Ready to claim');
+
+    await this.clickClaim(transactionHash);
+
+    await expect(this.page.getByRole('heading', { name: 'Claim successful' })).toBeVisible({
+      timeout: claimTimeoutMs
+    });
+    // exact: true -- otherwise this substring-matches both the Modal's own
+    // "Close modal" icon button and this CTA's "Close" text.
+    await this.page.getByRole('button', { name: 'Close', exact: true }).click();
+
+    await this.refreshActivity();
+    await expect(status).toContainText('Completed', { timeout: claimTimeoutMs });
+  }
+
+  /**
+   * Bridges L1 -> L2 and manually claims the deposit once it is Ready to
+   * claim, crediting the destination L2's per-origin `LocalBalanceTree` by
+   * `amount`.
    *
    * Any spec whose subject is an L2-SOURCED transfer of a token that did not
    * originate on that L2 (native ETH originates on L1, network 0) must call
@@ -269,6 +310,9 @@ class BridgePage {
    * Funding the credit here, rather than inheriting one from whichever spec
    * happened to run earlier, is what makes such a spec independent of suite
    * order, of sharding, of `-g` filters and of accumulated enclave state.
+   *
+   * `claimTimeoutMs` is the budget for the deposit to reach Ready to claim; the
+   * claim itself gets a further E2E_CLAIM_TIMEOUT_MS.
    *
    * Leaves the browser on the transactions route; callers driving a further
    * chain-pair selection must `navigate()` + `connectWallet()` again.
@@ -300,25 +344,12 @@ class BridgePage {
 
     await this.bridgeSuccessCta.click();
 
-    const row = this.getTransactionRow(transactionHash);
-    await expect(row).toBeVisible();
+    await expect(this.getTransactionRow(transactionHash)).toBeVisible();
 
-    await expect
-      .poll(
-        async () => {
-          await this.refreshActivity();
-          return row
-            .getByText('Completed')
-            .isVisible()
-            .catch(() => false);
-        },
-        {
-          message: `Waiting for the ${fromChainId}->${toChainId} top-up deposit to reach Completed (CLAIMED)`,
-          timeout: claimTimeoutMs,
-          intervals: [5_000]
-        }
-      )
-      .toBe(true);
+    await this.waitForReadyAndClaim(transactionHash, {
+      readyTimeoutMs: claimTimeoutMs,
+      claimTimeoutMs: E2E_CLAIM_TIMEOUT_MS
+    });
   }
 }
 
