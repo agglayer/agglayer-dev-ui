@@ -227,6 +227,14 @@ human entrypoint (see [HTML report](#html-report-outreporthtml)); `results.json`
 `activity.ndjson` and `summary.md` below are the machine-readable and debugging artifacts it
 is built from.
 
+> **Do not share a `loadtest-results/` directory as-is.** The redaction guarantees below
+> cover the human-facing reports (`report.html`, `summary.md`), and `results.json` masks
+> keyed RPC URLs and re-shapes secret references at write time — but `activity.ndjson` is
+> the raw event stream (transaction hashes, endpoint class names and host names as
+> observed at the time), and directories written by older tool versions predate the
+> write-time masking entirely. Treat the whole directory as internal until you have
+> checked what is in it.
+
 - **`report.html`** — the single-file human report, written at the end of every run
   (including aborted and failed ones). Regenerate it with `pnpm loadtest report --dir <dir>
   --html`.
