@@ -34,10 +34,11 @@ import { BridgePage } from './models/bridge-page';
 //
 // Cases 1 and 2 need a wrapped token to exist on the L2, which only happens
 // once an L1->L2 deposit of it was claimed there, so they share one bridge in
-// a single devnet-only test (it relies on the built-in aggkit autoclaim, see
-// claim-autoclaim.spec.ts). Cases 3 and 4 are fast and mode-agnostic. Each
-// Playwright test gets a fresh browser context, so localStorage starts empty
-// and nothing here depends on other specs having run first.
+// a single devnet-only test (the deposit is claimed by hand, as the devnet's
+// aggkit has no autoclaimer, see claim-l1-to-l2.spec.ts). Cases 3 and 4 are
+// fast and mode-agnostic. Each Playwright test gets a fresh browser context,
+// so localStorage starts empty and nothing here depends on other specs having
+// run first.
 
 const DEAD_ADDRESS = '0x000000000000000000000000000000000000dEaD';
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
@@ -65,9 +66,11 @@ test('custom token with a wrapped version: it appears on the L2, and adding the 
 }) => {
   test.skip(
     E2E_BACKEND_MODE !== 'devnet',
-    'Wrapped-token resolution depends on the devnet built-in autoclaim; see the comment above.'
+    'Wrapped-token resolution depends on a devnet L1->L2 claim; see the comment above.'
   );
-  test.setTimeout(E2E_BRIDGE_SUCCESS_TIMEOUT_MS + E2E_CLAIM_TIMEOUT_MS + 120_000);
+  // Bridge success + ready wait + claim modal + Completed (2x claim for the
+  // claim step, as in waitForReadyAndClaim) + margin for the rest of the journey.
+  test.setTimeout(E2E_BRIDGE_SUCCESS_TIMEOUT_MS + 3 * E2E_CLAIM_TIMEOUT_MS + 120_000);
   if (!E2E_ERC20_ADDRESS) {
     throw new Error('E2E_ERC20_ADDRESS is not set (see beforeAll above for how it should be set).');
   }
@@ -101,7 +104,7 @@ test('custom token with a wrapped version: it appears on the L2, and adding the 
   expect((storedCustomTokens[0].address as string).toLowerCase()).toBe(originAddress.toLowerCase());
 
   // 2. Bridge it L1 -> L2 so the L2 bridge deploys its wrapped version, and
-  //    wait for the built-in autoclaim to credit it.
+  //    claim it by hand (the devnet has no autoclaimer).
   await bridgePage.selectToken(erc20.symbol);
   await bridgePage.fillAmount(E2E_ERC20_BRIDGE_AMOUNT);
   await bridgePage.submitBridge();
@@ -117,22 +120,10 @@ test('custom token with a wrapped version: it appears on the L2, and adding the 
 
   const row = bridgePage.getTransactionRow(transactionHash);
   await expect(row).toBeVisible();
-  await expect
-    .poll(
-      async () => {
-        await bridgePage.refreshActivity();
-        return row
-          .getByText('Completed')
-          .isVisible()
-          .catch(() => false);
-      },
-      {
-        message: 'Waiting for the ERC20 deposit to reach Completed (CLAIMED) via autoclaim',
-        timeout: E2E_CLAIM_TIMEOUT_MS,
-        intervals: [5_000]
-      }
-    )
-    .toBe(true);
+  await bridgePage.waitForReadyAndClaim(transactionHash, {
+    readyTimeoutMs: E2E_CLAIM_TIMEOUT_MS,
+    claimTimeoutMs: E2E_CLAIM_TIMEOUT_MS
+  });
 
   // 3. Switch "Bridge from" to the L2 (full navigation: the transactions route
   //    needs a fresh connect) and open the selector: the wrapped version of the
