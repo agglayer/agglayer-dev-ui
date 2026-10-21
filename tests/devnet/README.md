@@ -59,9 +59,14 @@ categories above -- anything else is a hand-edit, and a bug.
 
 The aggkit bridge is now a **component** of the main aggkit process, not a
 separate service: `aggkit-001` and `aggkit-002` each run
-`--components=aggsender,aggoracle,autoclaim,bridge`, exposing aggkit RPC
+`--components=aggsender,aggoracle,bridge`, exposing aggkit RPC
 (`5576`), bridge REST (`5577`) and pprof (`6060`) on one container. There is
-no `aggkit-00X-bridge` service anymore. `agglayer-dev-ui-002` (the baked
+no `aggkit-00X-bridge` service anymore. The bundle runs aggkit `v0.11.0-rc17`,
+which removed the autoclaim component ([agglayer/aggkit#1901](https://github.com/agglayer/aggkit/pull/1901)):
+**nothing on this devnet claims deposits automatically**, so every e2e and loadtest
+flow claims manually through the UI, and `config/config.ci.devnet.json` sets
+`expectedAutoclaim: false` on every route (`claim-l1-to-l2.spec.ts` guards this by
+asserting a deposit stays "Ready to claim" for a window). `agglayer-dev-ui-002` (the baked
 dev-ui itself, `:8557`, "manual use") is inert for CI and sits behind the
 `devui` compose profile — a plain `up`/`up -d --wait` never starts it; use
 `docker compose -f tests/devnet/docker-compose.yml --profile devui up -d`
@@ -81,7 +86,7 @@ The `@sha256:<digest>` is what Docker actually resolves — immutable, and
 independently re-verifiable (`docker buildx imagetools inspect
 ghcr.io/0xpolygon/kurtosis-cdk-snapshot-<service>@sha256:<digest>`). The
 trailing `# <component-version>-<unix-ts>` comment (e.g.
-`0.11.0-rc8-1788360503`) is a human-readable tag carrying the same digest —
+`0.11.0-rc17-1791560572`) is a human-readable tag carrying the same digest —
 provenance for a reader, not something Docker resolves. Re-running
 kurtosis-cdk's publish workflow can never silently move what this file
 pulls, unlike the old `snapshot-<sha>` tag scheme (a tag containing a commit

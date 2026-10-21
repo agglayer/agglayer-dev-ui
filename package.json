@@ -20,6 +20,7 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "validate:config": "node ./scripts/validateConfig.mjs",
+    "check:prod-e2e": "node ./scripts/checkProdE2eOff.mjs",
     "typecheck": "tsc --noEmit",
     "check": "pnpm run validate:config && pnpm run lint && pnpm run typecheck && pnpm run test"
   },

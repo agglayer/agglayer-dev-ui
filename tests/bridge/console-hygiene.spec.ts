@@ -239,9 +239,9 @@ test('core journey produces no console errors/warnings outside the documented al
     // A quick native bridge guarantees a transaction row exists (rather than
     // depending on whatever history the shared E2E wallet happens to already
     // have on the live enclave). transactionDetailsModal.tsx only mounts
-    // TrackerDetail directly while status !== 'CLAIMED'; with rc8's activity
-    // endpoint live and autoclaim actually running, this deposit can reach
-    // CLAIMED before the modal is opened, in which case the modal shows a
+    // TrackerDetail directly while status !== 'CLAIMED'; the devnet has no
+    // autoclaimer so this deposit normally stays unclaimed, but if it is
+    // CLAIMED before the modal is opened (e.g. testnet mode) the modal shows a
     // "Show bridge steps" button instead and only mounts TrackerDetail
     // (onDemand) once that's clicked. BridgePage.revealTrackerDetail handles
     // both branches -- either way this exercises TrackerDetail's console
@@ -276,7 +276,7 @@ test('core journey produces no console errors/warnings outside the documented al
     // than opening the modal blind.
     //
     // The predicate also accepts the row already reading "Completed"
-    // (CLAIMED): with rc8's autoclaim actually running, a deposit can settle
+    // (CLAIMED): if a deposit settles
     // fast enough that the bar (which never renders for a CLAIMED row) has
     // no window to appear in at all between 5s polls. That's fine -- once
     // CLAIMED, BridgePage.revealTrackerDetail reaches TrackerDetail through

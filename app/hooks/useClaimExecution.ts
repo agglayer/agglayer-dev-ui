@@ -16,6 +16,7 @@ import { toClaimProof } from '@/app/services/claimProof';
 import { isValidEthereumAddress } from '@/app/utils/address';
 import {
   buildClaimAssetParams,
+  CLAIM_GAS_BUFFER,
   mapTransactionRequest,
   resolveLeafIndex
 } from '@/app/utils/transaction';
@@ -164,7 +165,7 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
 
         failedStep = 'sending-transaction';
         localClaimHash = await sendTransactionAsync({
-          ...mapTransactionRequest(claimTx),
+          ...mapTransactionRequest(claimTx, { gasBuffer: CLAIM_GAS_BUFFER }),
           account: senderAccount,
           chainId: destinationChainId
         });
@@ -180,6 +181,17 @@ export const useClaimExecution = (params: UseClaimExecutionParams) => {
         const receipt = await publicClient.waitForTransactionReceipt({ hash: localClaimHash });
 
         if (receipt.status === 'reverted') {
+          // The modal shows a generic message, so log the detail -- same
+          // rationale as `useBridgeExecution`'s two reverted-receipt branches
+          // (loadtest/CAPACITY-REPORT.md §5.4). A claim that reverts on-chain
+          // AFTER being mined is not the `AlreadyClaimed()` race the catch
+          // below handles (that one reverts at estimateGas, before a send), so
+          // this is worth distinguishing in a bug report rather than losing.
+          console.error('[claim-execution] claim transaction reverted', {
+            txHash: localClaimHash,
+            blockNumber: receipt.blockNumber,
+            gasUsed: receipt.gasUsed
+          });
           const error = {
             message: 'Claim transaction reverted',
             txHash: localClaimHash,
