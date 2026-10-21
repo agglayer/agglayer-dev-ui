@@ -1,0 +1,1 @@
+ring=G users=1 minutes=50 rate=0.2 check=0 dev-ui=feat/bridge-loadtest-docker@76d451b

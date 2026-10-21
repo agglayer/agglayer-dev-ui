@@ -3,7 +3,10 @@ import { jsonConfigSchema } from './configSchema.mjs';
 
 const APP_MODE_SET = new Set(APP_MODES);
 const MIN_ENABLED_MODE_CHAIN_COUNT = 2;
-const DEFAULT_CHAIN_KEY_FIELDS = /** @type {const} */ (['defaultFromChainKey', 'defaultToChainKey']);
+const DEFAULT_CHAIN_KEY_FIELDS = /** @type {const} */ ([
+  'defaultFromChainKey',
+  'defaultToChainKey'
+]);
 
 /**
  * @typedef {import('zod').infer<typeof jsonConfigSchema>} JsonConfig
@@ -31,7 +34,7 @@ const getDuplicateChainIdErrors = (chainsByKey) => {
     const existingChainKey = firstChainKeyById.get(chainConfig.id);
     if (existingChainKey) {
       return [
-        `chains.${chainKey}.id: duplicate chain id "${chainConfig.id}" (already used by "${existingChainKey}")`,
+        `chains.${chainKey}.id: duplicate chain id "${chainConfig.id}" (already used by "${existingChainKey}")`
       ];
     }
 
@@ -47,7 +50,10 @@ const getDuplicateChainIdErrors = (chainsByKey) => {
 const getUnsupportedModeKeyErrors = (modeConfigsByKey) =>
   Object.keys(modeConfigsByKey)
     .filter((modeKey) => !APP_MODE_SET.has(modeKey))
-    .map((modeKey) => `appModes.configs.${modeKey}: unsupported mode key; expected one of ${APP_MODES.join(', ')}`);
+    .map(
+      (modeKey) =>
+        `appModes.configs.${modeKey}: unsupported mode key; expected one of ${APP_MODES.join(', ')}`
+    );
 
 /**
  * @param {string} modeKey
@@ -65,15 +71,24 @@ const getModeConfigErrors = (modeKey, modeConfig, chainsByKey) => {
 
   const missingModeChainKeyErrors = modeConfig.chainKeys
     .filter((chainKey) => !chainsByKey[chainKey])
-    .map((chainKey) => `appModes.configs.${modeKey}.chainKeys: chain key "${chainKey}" does not exist in chains`);
+    .map(
+      (chainKey) =>
+        `appModes.configs.${modeKey}.chainKeys: chain key "${chainKey}" does not exist in chains`
+    );
 
   const invalidDefaultChainKeyErrors = DEFAULT_CHAIN_KEY_FIELDS.flatMap((fieldName) => {
     const configuredChainKey = modeConfig[fieldName];
     if (!configuredChainKey || modeChainKeySet.has(configuredChainKey)) return [];
-    return [`appModes.configs.${modeKey}.${fieldName}: "${configuredChainKey}" must be listed in chainKeys`];
+    return [
+      `appModes.configs.${modeKey}.${fieldName}: "${configuredChainKey}" must be listed in chainKeys`
+    ];
   });
 
-  return [...duplicateModeChainKeyErrors, ...missingModeChainKeyErrors, ...invalidDefaultChainKeyErrors];
+  return [
+    ...duplicateModeChainKeyErrors,
+    ...missingModeChainKeyErrors,
+    ...invalidDefaultChainKeyErrors
+  ];
 };
 
 /**
@@ -112,7 +127,7 @@ const validateSemantics = (config) => {
     ...unsupportedModeKeyErrors,
     ...missingEnabledModeError,
     ...missingDefaultModeConfigError,
-    ...modeConfigErrors,
+    ...modeConfigErrors
   ];
 };
 
@@ -129,12 +144,16 @@ export const parseConfigOrThrow = (configJson, options = {}) => {
       const issuePath = formatZodPath(issue.path);
       return `${issuePath}: ${issue.message}`;
     });
-    throw new Error(`${sourceName} schema validation failed:\n${lines.map((line) => `- ${line}`).join('\n')}`);
+    throw new Error(
+      `${sourceName} schema validation failed:\n${lines.map((line) => `- ${line}`).join('\n')}`
+    );
   }
 
   const semanticErrors = validateSemantics(parsedConfig.data);
   if (semanticErrors.length > 0) {
-    throw new Error(`${sourceName} semantic validation failed:\n${semanticErrors.map((line) => `- ${line}`).join('\n')}`);
+    throw new Error(
+      `${sourceName} semantic validation failed:\n${semanticErrors.map((line) => `- ${line}`).join('\n')}`
+    );
   }
 
   return parsedConfig.data;

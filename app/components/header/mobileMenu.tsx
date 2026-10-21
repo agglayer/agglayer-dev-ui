@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react';
 
-import { MENU_LINKS, NAV_ITEMS } from '@/app/components/header/constants';
+import { getMenuLinks, NAV_ITEMS } from '@/app/components/header/constants';
 import { HeaderNavLink } from '@/app/components/header/headerNavLink';
 import { ModeSwitch } from '@/app/components/modeSwitch';
 import { Logo } from '@/app/components/ui/logo';
@@ -66,7 +66,7 @@ export const MobileMenu = ({
           })}
         </nav>
         <div className="flex flex-col gap-3 mt-3">
-          {MENU_LINKS.map((item) => (
+          {getMenuLinks().map((item) => (
             <a
               key={`mobile-${item.label}`}
               href={item.href}
