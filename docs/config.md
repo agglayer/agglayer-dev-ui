@@ -145,6 +145,9 @@ how the app calls aggkit.
 `aggkitProxy` may be omitted entirely to mark a mode "not yet configured" — see
 [Validation](#validation) below.
 
+To load-test an `aggkitProxy` deployment at scale (many simulated users bridging
+concurrently through it), see [`loadtest/README.md`](../loadtest/README.md).
+
 ### Removed: the per-network `aggkitBridgeApis` map
 
 Earlier versions of this schema also accepted `aggkitBridgeApis` — an object mapping L2
@@ -496,9 +499,11 @@ cp config/config.ci.devnet.json config.json
 pnpm run validate:config
 ```
 
-It is **byte-identical to the committed `config.json` except for a single key**:
-`appModes.default` is `"devnet"` instead of `"testnet"`. Everything else it relies on
-is already in the committed file:
+It is **byte-identical to the committed `config.json` except for two things**:
+`appModes.default` is `"devnet"` instead of `"testnet"`, and the `autoclaim` block sets
+`expectedAutoclaim: false` on every route (the devnet runs aggkit rc17, which has no autoclaim
+component, so the UI must offer `Claim tokens` immediately; real environments keep their own
+expectations in `config.json`). Everything else it relies on is already in the committed file:
 
 - `chains` already carries the three fixed-URL entries — `DEVNET_L1` (chain id `271828`), `DEVNET_L2_001` (`20201`), `DEVNET_L2_002` (`20202`) — with `rpcUrl` pointed at `http://127.0.0.1:8555/l1rpc`, `/l2rpc-001`, `/l2rpc-002` respectively. `8555` is the vendored compose bundle's fixed haproxy port (`DEVNET_PROXY_PORT`, see [`tests/devnet/README.md`](../tests/devnet/README.md) and kurtosis-cdk's [Anvil-Flavor Devnet Snapshot](https://github.com/0xPolygon/kurtosis-cdk/blob/feat/aggkit-bridge-ui-backend/docs/docs/advanced/anvil-devnet-snapshot.md#the-bundle-contract) doc), never an ephemeral `kurtosis port print` value — this file is only valid against the fixed-port compose bundle, not a live Kurtosis enclave (use `scripts/kurtosisDevnetEnv.mjs` for that instead, which writes the committed `config.json` directly).
 - `appModes.configs.devnet.chainKeys` is already `["DEVNET_L1", "DEVNET_L2_001", "DEVNET_L2_002"]`, `bridgeAddress` is the deterministic devnet bridge address `0xC8cbEBf950B9Df44d987c8619f092beA980fF038`, and `aggkitProxy` is `http://127.0.0.1:8555/aggkitapi` — the single aggkit-proxy origin fronting both L2s, selected per-network server-side via `?network_id=`.
