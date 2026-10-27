@@ -15,7 +15,9 @@ permissions:
 
 jobs:
   e2e:
-    runs-on: ubuntu-latest
+    # Pinned, not ubuntu-latest: that alias moved to 26.04, which Playwright
+    # does not support yet ("does not support chromium on ubuntu26.04-x64").
+    runs-on: ubuntu-24.04
     # Budget: devnet compose boot-to-ready ~24s with images already local
     # (kurtosis-cdk S10/S11), ~65s on a cold CI runner including the image
     # pull; install+browsers a few minutes, preflight seconds, then the full

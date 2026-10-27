@@ -22,7 +22,8 @@ permissions:
 
 jobs:
   loadtest-e2e:
-    runs-on: ubuntu-latest
+    # Pinned for the same reason as e2e.yaml: Playwright lacks ubuntu 26.04 support.
+    runs-on: ubuntu-24.04
     # Budget: devnet bring-up mirrors e2e.yaml's (~24s warm, ~65s cold CI
     # runner). `playwright.loadtest.config.ts`'s `testMatch` picks up EVERY
     # `*.spec.ts` under `tests/loadtest-e2e/` and (`fullyParallel: false,
