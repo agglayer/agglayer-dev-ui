@@ -1,3 +1,4 @@
+import type { JsonAutoclaimConfig } from '@/app/types/config';
 import type { APP_MODES } from '@/config/appModes.mjs';
 
 export type AppMode = (typeof APP_MODES)[number];
@@ -46,6 +47,10 @@ export type AppChain = {
   // only mint wrapped ETH (wethToken above) here, never native currency. See
   // app/hooks/useBridge.ts's nativeBridgeUrl derivation.
   nativeBridgeURL?: string;
+  // config.json's chains.<key>.autoclaim, verbatim (no defaults applied),
+  // possibly unset. Read only via app/utils/autoclaim.ts's
+  // getAutoclaimRouteConfig, which layers it over the global autoclaim config.
+  autoclaim?: JsonAutoclaimConfig;
 };
 
 type BaseModeConfig = {
