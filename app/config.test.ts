@@ -469,3 +469,31 @@ describe('regression guard: no module-scope config reads (A-5 item 6)', () => {
     expect(() => freshConfigModule.getAppConfig()).not.toThrow();
   });
 });
+
+describe('buildAppConfig — chains.<key>.autoclaim (per-chain autoclaim override)', () => {
+  it('is undefined when autoclaim is omitted', () => {
+    const resolved = buildAppConfig(buildConfigJson());
+
+    const [devnetL1] = resolved.appModeConfig.devnet.chains as [AppChain, ...AppChain[]];
+    expect(devnetL1.autoclaim).toBeUndefined();
+  });
+
+  it("carries a chain's own autoclaim override through verbatim, leaving the global config alone", () => {
+    const configJson = buildConfigJson();
+    configJson.chains.DEVNET_L2_001 = chain({
+      id: 20201,
+      name: 'Devnet L2-001',
+      networkId: 1,
+      autoclaim: { l1_to_l2: { expectedAutoclaim: false } }
+    });
+
+    const resolved = buildAppConfig(configJson);
+
+    const [devnetL1, devnetL2001] = resolved.appModeConfig.devnet.chains as [AppChain, AppChain];
+    expect(devnetL2001.autoclaim).toEqual({ l1_to_l2: { expectedAutoclaim: false } });
+    expect(devnetL1.autoclaim).toBeUndefined();
+    expect(resolved.autoclaim.l1_to_l2.expectedAutoclaim).toBe(
+      buildAppConfig(buildConfigJson()).autoclaim.l1_to_l2.expectedAutoclaim
+    );
+  });
+});

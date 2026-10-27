@@ -89,6 +89,30 @@ export const JsonNativeCurrencyConfigSchema = z
   })
   .strict();
 
+const routeAutoclaimSchema = z
+  .object({
+    // Whether an autoclaim service is expected to claim this route on the user's
+    // behalf. When false, the manual "Claim tokens" button shows as soon as the
+    // deposit is READY_TO_CLAIM (legacy behavior).
+    expectedAutoclaim: z.boolean(),
+    // Grace period (milliseconds, measured from when the deposit first becomes
+    // READY_TO_CLAIM) to wait for the autoclaim service before surfacing the
+    // manual claim button. Only used when expectedAutoclaim is true.
+    waitForAutoclaimMs: z.number().int().min(0).optional()
+  })
+  .strict();
+
+// Per-route autoclaim UX config. Optional in config.json — app/config.ts applies
+// per-route defaults for any route omitted here. Also reused, unchanged, as the
+// per-chain override at chains.<key>.autoclaim (see jsonChainConfigSchema).
+export const autoclaimConfigSchema = z
+  .object({
+    l1_to_l2: routeAutoclaimSchema.optional(),
+    l2_to_l1: routeAutoclaimSchema.optional(),
+    l2_to_l2: routeAutoclaimSchema.optional()
+  })
+  .strict();
+
 export const jsonChainConfigSchema = z
   .object({
     id: z.number().int().positive(),
@@ -130,7 +154,15 @@ export const jsonChainConfigSchema = z
     // app/hooks/useBridge.ts's nativeBridgeUrl derivation. Purely
     // informational: never blocks or otherwise changes the AggLayer bridge
     // flow itself.
-    nativeBridgeURL: urlString.optional()
+    nativeBridgeURL: urlString.optional(),
+    // Per-chain override of the global `autoclaim` block, same shape. Each
+    // route is overridden independently and each omitted route (or omitted
+    // waitForAutoclaimMs) inherits the global value. Which chain a route's
+    // override is read from: `l1_to_l2` and `l2_to_l2` use the DESTINATION
+    // chain (bridges arriving on this chain), `l2_to_l1` uses the SOURCE
+    // chain (bridges leaving this chain for L1). See app/utils/autoclaim.ts's
+    // getAutoclaimRouteConfig.
+    autoclaim: autoclaimConfigSchema.optional()
   })
   .strict();
 
@@ -153,29 +185,6 @@ export const jsonAppModeConfigSchema = z
     chainKeys: z.array(nonEmptyString),
     defaultFromChainKey: nonEmptyString.optional(),
     defaultToChainKey: nonEmptyString.optional()
-  })
-  .strict();
-
-const routeAutoclaimSchema = z
-  .object({
-    // Whether an autoclaim service is expected to claim this route on the user's
-    // behalf. When false, the manual "Claim tokens" button shows as soon as the
-    // deposit is READY_TO_CLAIM (legacy behavior).
-    expectedAutoclaim: z.boolean(),
-    // Grace period (milliseconds, measured from when the deposit first becomes
-    // READY_TO_CLAIM) to wait for the autoclaim service before surfacing the
-    // manual claim button. Only used when expectedAutoclaim is true.
-    waitForAutoclaimMs: z.number().int().min(0).optional()
-  })
-  .strict();
-
-// Per-route autoclaim UX config. Optional in config.json — app/config.ts applies
-// per-route defaults for any route omitted here.
-export const autoclaimConfigSchema = z
-  .object({
-    l1_to_l2: routeAutoclaimSchema.optional(),
-    l2_to_l1: routeAutoclaimSchema.optional(),
-    l2_to_l2: routeAutoclaimSchema.optional()
   })
   .strict();
 

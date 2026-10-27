@@ -304,6 +304,7 @@ Chains are defined in the `chains` object, keyed by an uppercase identifier:
 | `etaL2Minutes` | No | Per-chain override (minutes) of the enclosing mode's `etaL2Minutes` default: estimated bridging time when the destination is any L2 (a deposit, or an L2-to-L2 transfer). Omit to inherit the mode's value. |
 | `bridgeAddress` | No | Per-chain override of the enclosing mode's `bridgeAddress` (see below). Omit to inherit the mode's value. |
 | `nativeBridgeURL` | No | This chain's own native/canonical bridge UI (see below). Omit for no advisory. |
+| `autoclaim` | No | Per-chain override of the global `autoclaim` block, same shape (see [Per-chain `autoclaim` override](#per-chain-autoclaim-override) below). Omit to use the global config. |
 
 #### `currency.address` override
 
@@ -439,6 +440,42 @@ TO any L2 (a deposit, or an L2-to-L2 transfer) — see `app/utils/chains.ts`'s
 `getEtaMinutes`, which every UI consumer uses to pick between the two based on the
 transaction's actual destination. Like `bridgeAddress` above, both are resolved once
 per mode by `app/config.ts`'s `buildModeConfig` before the chain reaches any UI code.
+
+#### Per-chain `autoclaim` override
+
+The top-level `autoclaim` block sets, per route (`l1_to_l2`, `l2_to_l1`, `l2_to_l2`),
+whether an autoclaim service is expected (`expectedAutoclaim`) and how long the UI waits
+(`waitForAutoclaimMs`, measured from when the deposit becomes ready to claim) before showing
+the manual claim button. It applies to every network. A chain can override it, using the
+same shape, when its own autoclaim setup differs:
+
+```json
+{
+  "chains": {
+    "MY_L2": {
+      "...": "...",
+      "autoclaim": {
+        "l1_to_l2": { "expectedAutoclaim": false },
+        "l2_to_l1": { "expectedAutoclaim": false },
+        "l2_to_l2": { "expectedAutoclaim": true, "waitForAutoclaimMs": 120000 }
+      }
+    }
+  }
+}
+```
+
+| Route | Override read from | Meaning |
+|-------|--------------------|---------|
+| `l1_to_l2` | the destination L2 | Bridges from L1 to this L2 |
+| `l2_to_l1` | the source L2 | Bridges from this L2 to L1 |
+| `l2_to_l2` | the destination L2 | Bridges from any other L2 to this L2 |
+
+Each route is resolved independently: a route the chain does not set uses the global value,
+and so does an omitted `waitForAutoclaimMs` (the global wait of that route, not `0`). Note
+that this means enabling `expectedAutoclaim` on a route whose global wait is `0` (the default
+for `l2_to_l1`) without a `waitForAutoclaimMs` of its own shows no grace period, so set one.
+Resolution happens in `app/utils/autoclaim.ts`'s `getAutoclaimRouteConfig`, which is scoped to
+the current app mode's chains.
 
 ## App Modes
 

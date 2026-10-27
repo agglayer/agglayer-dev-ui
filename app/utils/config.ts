@@ -25,6 +25,7 @@ export const createChainEntry = (params: ChainEntryParams): ChainEntry => ({
     // this mode's bridgeAddress".
     bridgeAddress: params.bridgeAddress ?? '',
     nativeBridgeURL: params.nativeBridgeURL,
+    autoclaim: params.autoclaim,
     nativeCurrency: {
       address: params.nativeCurrencyAddress ?? ZERO_ADDRESS,
       decimals: params.wagmi.nativeCurrency.decimals,

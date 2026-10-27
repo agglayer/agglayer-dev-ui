@@ -249,3 +249,42 @@ describe('parseConfigOrThrow — chains.<key>.nativeBridgeURL (optional native-b
     expect(() => parseConfigOrThrow(config)).toThrow();
   });
 });
+
+describe('parseConfigOrThrow — chains.<key>.autoclaim (optional per-chain autoclaim override)', () => {
+  it('passes when autoclaim is omitted', () => {
+    expect(() => parseConfigOrThrow(buildConfig())).not.toThrow();
+  });
+
+  it('passes with a partial per-route override', () => {
+    const config = buildConfig();
+    config.chains.DEVNET_L2_001.autoclaim = {
+      l1_to_l2: { expectedAutoclaim: false },
+      l2_to_l2: { expectedAutoclaim: true, waitForAutoclaimMs: 120000 }
+    };
+
+    expect(() => parseConfigOrThrow(config)).not.toThrow();
+  });
+
+  it('rejects an unknown route key', () => {
+    const config = buildConfig();
+    config.chains.DEVNET_L2_001.autoclaim = { l1_to_l3: { expectedAutoclaim: true } };
+
+    expect(() => parseConfigOrThrow(config)).toThrow();
+  });
+
+  it('rejects a route override without expectedAutoclaim', () => {
+    const config = buildConfig();
+    config.chains.DEVNET_L2_001.autoclaim = { l1_to_l2: { waitForAutoclaimMs: 1000 } };
+
+    expect(() => parseConfigOrThrow(config)).toThrow();
+  });
+
+  it('rejects a negative waitForAutoclaimMs', () => {
+    const config = buildConfig();
+    config.chains.DEVNET_L2_001.autoclaim = {
+      l1_to_l2: { expectedAutoclaim: true, waitForAutoclaimMs: -1 }
+    };
+
+    expect(() => parseConfigOrThrow(config)).toThrow();
+  });
+});

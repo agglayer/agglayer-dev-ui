@@ -5,6 +5,7 @@ import { initAppConfig, resetAppConfig } from '@/app/config';
 import {
   computeAutoclaimGate,
   evictReadyAt,
+  getAutoclaimRouteConfig,
   getReadyAt,
   getRouteType,
   recordReadyAt
@@ -218,5 +219,168 @@ describe('readyAt storage (getReadyAt / recordReadyAt / evictReadyAt)', () => {
     getReadyAt(devnet, '0xhash-a');
     getReadyAt(devnet, '0xhash-d');
     expect(Object.keys(rawMap(devnet))).toHaveLength(1);
+  });
+});
+
+describe('getAutoclaimRouteConfig (per-chain override)', () => {
+  const chain = (overrides: Partial<JsonConfig['chains'][string]> = {}) => ({
+    id: 1,
+    name: 'Chain',
+    rpcUrl: 'https://rpc.example',
+    explorerUrl: 'https://explorer.example',
+    currency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+    iconUrl: 'https://icon.example/icon.svg',
+    networkId: 0,
+    isTestnet: true,
+    etaL1Minutes: 1,
+    etaL2Minutes: 1,
+    ...overrides
+  });
+
+  const build = (chains: JsonConfig['chains']): JsonConfig =>
+    ({
+      autoclaim: {
+        l1_to_l2: { expectedAutoclaim: true, waitForAutoclaimMs: 1_000 },
+        l2_to_l1: { expectedAutoclaim: false, waitForAutoclaimMs: 0 },
+        l2_to_l2: { expectedAutoclaim: true, waitForAutoclaimMs: 2_000 }
+      },
+      walletConnect: { projectId: 'test-project-id' },
+      externalLinks: {
+        privacyPolicy: 'https://privacy.example',
+        termsOfUse: 'https://terms.example',
+        contactSupport: 'https://support.example'
+      },
+      chains,
+      appModes: {
+        default: 'devnet',
+        configs: {
+          devnet: {
+            label: 'Devnet',
+            bridgeAddress: '0xC8cbEBf950B9Df44d987c8619f092beA980fF038',
+            etaL1Minutes: 1,
+            etaL2Minutes: 1,
+            aggkitProxy: 'https://aggkit-proxy.example/aggkitapi',
+            chainKeys: Object.keys(chains),
+            defaultFromChainKey: Object.keys(chains)[0],
+            defaultToChainKey: Object.keys(chains)[1]
+          }
+        }
+      }
+    }) as JsonConfig;
+
+  const devnet: AppMode = 'devnet';
+
+  afterEach(() => {
+    resetAppConfig();
+  });
+
+  it('uses the global config for every route when no chain sets an override', () => {
+    initAppConfig(
+      build({
+        L1: chain({ id: 100, networkId: 0 }),
+        L2_A: chain({ id: 101, networkId: 1 }),
+        L2_B: chain({ id: 102, networkId: 2 })
+      })
+    );
+    expect(getAutoclaimRouteConfig(devnet, 0, 1)).toEqual({
+      expectedAutoclaim: true,
+      waitForAutoclaimMs: 1_000
+    });
+    expect(getAutoclaimRouteConfig(devnet, 1, 0)).toEqual({
+      expectedAutoclaim: false,
+      waitForAutoclaimMs: 0
+    });
+    expect(getAutoclaimRouteConfig(devnet, 1, 2)).toEqual({
+      expectedAutoclaim: true,
+      waitForAutoclaimMs: 2_000
+    });
+  });
+
+  it('applies l1_to_l2 and l2_to_l2 overrides from the DESTINATION chain', () => {
+    initAppConfig(
+      build({
+        L1: chain({ id: 100, networkId: 0 }),
+        L2_A: chain({
+          id: 101,
+          networkId: 1,
+          autoclaim: {
+            l1_to_l2: { expectedAutoclaim: false },
+            l2_to_l2: { expectedAutoclaim: false }
+          }
+        }),
+        L2_B: chain({ id: 102, networkId: 2 })
+      })
+    );
+    // L1 -> L2_A and L2_B -> L2_A: destination is L2_A, so its override wins.
+    expect(getAutoclaimRouteConfig(devnet, 0, 1).expectedAutoclaim).toBe(false);
+    expect(getAutoclaimRouteConfig(devnet, 2, 1).expectedAutoclaim).toBe(false);
+    // L2_A -> L2_B: destination is L2_B, which has no override; global applies.
+    expect(getAutoclaimRouteConfig(devnet, 1, 2)).toEqual({
+      expectedAutoclaim: true,
+      waitForAutoclaimMs: 2_000
+    });
+  });
+
+  it('applies the l2_to_l1 override from the SOURCE chain', () => {
+    initAppConfig(
+      build({
+        L1: chain({ id: 100, networkId: 0 }),
+        L2_A: chain({
+          id: 101,
+          networkId: 1,
+          autoclaim: { l2_to_l1: { expectedAutoclaim: true, waitForAutoclaimMs: 5_000 } }
+        }),
+        L2_B: chain({ id: 102, networkId: 2 })
+      })
+    );
+    expect(getAutoclaimRouteConfig(devnet, 1, 0)).toEqual({
+      expectedAutoclaim: true,
+      waitForAutoclaimMs: 5_000
+    });
+    // Another L2's withdrawal is unaffected.
+    expect(getAutoclaimRouteConfig(devnet, 2, 0).expectedAutoclaim).toBe(false);
+  });
+
+  it('inherits the global waitForAutoclaimMs when the override omits it', () => {
+    initAppConfig(
+      build({
+        L1: chain({ id: 100, networkId: 0 }),
+        L2_A: chain({
+          id: 101,
+          networkId: 1,
+          autoclaim: { l2_to_l2: { expectedAutoclaim: true } }
+        })
+      })
+    );
+    expect(getAutoclaimRouteConfig(devnet, 2, 1)).toEqual({
+      expectedAutoclaim: true,
+      waitForAutoclaimMs: 2_000
+    });
+  });
+
+  it('keeps the readyAt age bound at or above the largest per-chain wait', () => {
+    initAppConfig(
+      build({
+        L1: chain({ id: 100, networkId: 0 }),
+        L2_A: chain({
+          id: 101,
+          networkId: 1,
+          autoclaim: { l1_to_l2: { expectedAutoclaim: true, waitForAutoclaimMs: 9_000 } }
+        })
+      })
+    );
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(0);
+      window.localStorage.clear();
+      recordReadyAt(devnet, '0xhash', 0);
+      // Past the global max (2_000) but within the chain override's 9_000.
+      vi.setSystemTime(5_000);
+      expect(getReadyAt(devnet, '0xhash')).toBe(0);
+      vi.setSystemTime(9_001);
+      expect(getReadyAt(devnet, '0xhash')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

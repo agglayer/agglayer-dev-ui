@@ -39,6 +39,8 @@ export type ChainEntryParams = {
   nativeCurrencyWethToken?: string;
   // config.json's chains.<key>.nativeBridgeURL, verbatim, possibly unset.
   nativeBridgeURL?: string;
+  // config.json's chains.<key>.autoclaim, verbatim, possibly unset.
+  autoclaim?: JsonAutoclaimConfig;
 };
 
 export type JsonNativeCurrencyConfig = z.infer<typeof JsonNativeCurrencyConfigSchema>;

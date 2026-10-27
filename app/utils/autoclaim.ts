@@ -1,7 +1,7 @@
 import type { AppMode } from '@/app/types/appMode';
 import type { AutoclaimRouteConfig, RouteType } from '@/app/types/config';
 
-import { getAutoclaimConfig } from '@/app/config';
+import { getAppModeConfig, getAutoclaimConfig } from '@/app/config';
 import { STORAGE_KEYS, StorageUtils } from '@/app/utils/storage';
 
 // L1 is networkId 0; any other networkId is an L2. Note `sourceNetworkId` is the
@@ -14,6 +14,30 @@ export const getRouteType = (sourceNetworkId: number, destinationNetworkId: numb
   if (sourceIsL1 && !destIsL1) return 'l1_to_l2';
   if (!sourceIsL1 && destIsL1) return 'l2_to_l1';
   return 'l2_to_l2';
+};
+
+// Resolves the autoclaim config for one bridge in `mode`: the global
+// per-route config (getAutoclaimConfig), overridden by the chain-level
+// chains.<key>.autoclaim when that chain sets this route. The chain whose
+// override applies is the one the route is "about": the SOURCE for l2_to_l1
+// (a withdrawal leaving that L2), the DESTINATION for l1_to_l2 and l2_to_l2
+// (a bridge arriving on that L2). Each route, and waitForAutoclaimMs within
+// it, falls back to the global value independently.
+export const getAutoclaimRouteConfig = (
+  mode: AppMode,
+  sourceNetworkId: number,
+  destinationNetworkId: number
+): AutoclaimRouteConfig => {
+  const routeType = getRouteType(sourceNetworkId, destinationNetworkId);
+  const globalRoute = getAutoclaimConfig()[routeType];
+  const networkId = routeType === 'l2_to_l1' ? sourceNetworkId : destinationNetworkId;
+  const override = getAppModeConfig()[mode].chains.find((chain) => chain.networkId === networkId)
+    ?.autoclaim?.[routeType];
+  if (!override) return globalRoute;
+  return {
+    expectedAutoclaim: override.expectedAutoclaim,
+    waitForAutoclaimMs: override.waitForAutoclaimMs ?? globalRoute.waitForAutoclaimMs
+  };
 };
 
 // Whether the manual "Claim tokens" button should show, and whether the autoclaim
@@ -48,15 +72,27 @@ const readReadyAtMap = (mode: AppMode): ReadyAtMap =>
 // the gate would already read 'overdue' either way. Used to bound map growth
 // for entries whose CLAIMED status never got observed (e.g. the tab closed,
 // or the wallet changed) without needing a timer.
-const getMaxWaitForAutoclaimMs = (): number =>
-  Math.max(...Object.values(getAutoclaimConfig()).map((route) => route.waitForAutoclaimMs));
+const getMaxWaitForAutoclaimMs = (mode: AppMode): number => {
+  const globalConfig = getAutoclaimConfig();
+  const waits = Object.values(globalConfig).map((route) => route.waitForAutoclaimMs);
+  // A chain-level override can raise a route's wait above the global one, so
+  // it has to count towards the bound too (an omitted override wait inherits
+  // the global route value, already in `waits`).
+  for (const chain of getAppModeConfig()[mode].chains) {
+    for (const route of Object.keys(chain.autoclaim ?? {}) as RouteType[]) {
+      const wait = chain.autoclaim?.[route]?.waitForAutoclaimMs;
+      if (wait !== undefined) waits.push(wait);
+    }
+  }
+  return Math.max(...waits);
+};
 
 // Drops entries older than getMaxWaitForAutoclaimMs, persisting the result
 // only when something was actually evicted (so a clean map isn't rewritten
 // on every read). This is the eviction pass: it runs inline on every read or
 // record below rather than on a timer.
 const pruneReadyAtMap = (mode: AppMode, map: ReadyAtMap, now: number): ReadyAtMap => {
-  const maxAgeMs = getMaxWaitForAutoclaimMs();
+  const maxAgeMs = getMaxWaitForAutoclaimMs(mode);
   const entries = Object.entries(map);
   const pruned = Object.fromEntries(entries.filter(([, readyAt]) => now - readyAt <= maxAgeMs));
   if (Object.keys(pruned).length !== entries.length) {
