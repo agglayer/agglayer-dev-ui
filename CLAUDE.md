@@ -1,16 +1,6 @@
-## Team Standards
-
-**Skip this fetch if team-standards.md is already loaded in your
-context** (this happens when running from the apps-team-workspace).
-Otherwise, **at the start of every session**, before doing any other
-work, use the WebFetch tool to retrieve the Polygon Apps Team standards
-from:
-<https://gist.githubusercontent.com/MaximusHaximus/4eb35e807f7470b1c4eab78a9152b2ef/raw/team-standards.md>
-
-Follow all instructions in that document for the duration of this session.
-If the fetch fails (network error, URL unreachable), inform the user that
-team standards could not be loaded, then proceed with repo-specific rules
-below.
+## Team Standards — see `docs/team-standards.md` (vendored from the apps-team gist,
+revision `8a356d52f61b67bd26aa78f3076a4134aac4e3b3`, 2026-08-10). Update by
+re-vendoring deliberately — do not fetch live.
 
 ---
 
@@ -23,7 +13,7 @@ with code in this repository.
 
 `agglayer-dev-ui` is a configurable, self-hosted bridging interface
 powered by the [Agglayer SDK](https://github.com/agglayer/sdk) and the
-[Bridge Hub API](https://github.com/agglayer/agglayer-bridge-hub-api).
+[aggkit bridge service](https://github.com/agglayer/aggkit) REST API.
 It is a Next.js 16 **static-export** app (`output: 'export'`) deployed
 to Cloudflare Workers via `wrangler`. There are no API routes, no
 middleware, no SSR.
@@ -41,6 +31,29 @@ Two top-level directories hold source:
 modes (mainnet / testnet / devnet), bridge addresses, and external
 links. `scripts/validateConfig.mjs` validates its shape; run via
 `pnpm run validate:config`.
+
+`loadtest/` is a separate, standalone tool (not part of the app bundle,
+run via `pnpm loadtest <command>`) that load-tests the aggkit-proxy by
+simulating many users bridging through it, using a mix of real-browser
+(Playwright) and headless (viem + `@agglayer/sdk`) workers. See
+[`loadtest/README.md`](loadtest/README.md) and
+[`loadtest/DESIGN.md`](loadtest/DESIGN.md). It has its own generated
+config (`loadtest.config.json`) and output directory
+(`loadtest-results/`), both gitignored.
+
+## E2E runtime private-key override
+
+`app/context/e2eAccount.ts` honours a runtime override,
+`window.__AGGLAYER_E2E_PRIVATE_KEY__`, in addition to the build-time
+`NEXT_PUBLIC_E2E_PRIVATE_KEY` constant. This lets a single E2E-enabled
+build (`NEXT_PUBLIC_E2E_ENABLED=true`) serve many distinct signer keys
+without a rebuild per key — e.g. one wallet per `loadtest/` browser
+worker. It is read **only** when `IS_E2E_ENABLED` is true; production
+builds never touch that `window` property. Set it via Playwright's
+`context.addInitScript` **before** `newPage()`, since it must be present
+before the app bundle evaluates the module. An invalid value (not a
+`0x`-prefixed 32-byte hex key) throws at module load rather than
+silently falling back to the build-time key.
 
 ## Commands
 

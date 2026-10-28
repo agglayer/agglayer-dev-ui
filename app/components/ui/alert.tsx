@@ -1,11 +1,12 @@
 import type { LucideIcon } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 import { cn } from '@/app/utils/common';
 import { TriangleAlert, Info } from 'lucide-react';
 
 interface AlertProps {
   title: string;
-  message: string;
+  message: ReactNode;
   type?: 'warning' | 'danger' | 'info';
   className?: string;
 }

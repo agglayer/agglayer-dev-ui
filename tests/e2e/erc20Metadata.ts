@@ -1,8 +1,7 @@
 import type { Address } from 'viem';
 
-import { getE2EFromChainRpcUrl } from '@/tests/e2e/testnetRpc';
+import { getE2EFromChain, getE2EFromChainRpcUrl } from '@/tests/e2e/chainRpc';
 import { createPublicClient, erc20Abi, http } from 'viem';
-import { sepolia } from 'viem/chains';
 
 export interface Erc20Metadata {
   symbol: string;
@@ -12,7 +11,7 @@ export interface Erc20Metadata {
 
 export const fetchErc20Metadata = async (address: Address): Promise<Erc20Metadata> => {
   const client = createPublicClient({
-    chain: sepolia,
+    chain: getE2EFromChain(),
     transport: http(getE2EFromChainRpcUrl())
   });
 

@@ -9,9 +9,9 @@
   },
   "scripts": {
     "prepare": "husky",
-    "dev": "next dev",
-    "build": "next build",
-    "build:production": "cp .env.production .env.local && rm -f .env.staging && next build",
+    "dev": "node ./scripts/syncPublicConfig.mjs && node ./scripts/writeVersionInfo.mjs && next dev",
+    "build": "node ./scripts/syncPublicConfig.mjs && node ./scripts/writeVersionInfo.mjs && next build",
+    "build:production": "cp .env.production .env.local && rm -f .env.staging && node ./scripts/syncPublicConfig.mjs && node ./scripts/writeVersionInfo.mjs && next build",
     "start": "next start",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -20,11 +20,14 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "validate:config": "node ./scripts/validateConfig.mjs",
+    "check:prod-e2e": "node ./scripts/checkProdE2eOff.mjs",
     "typecheck": "tsc --noEmit",
-    "check": "pnpm run validate:config && pnpm run lint && pnpm run typecheck && pnpm run test"
+    "check": "pnpm run validate:config && pnpm run lint && pnpm run typecheck && pnpm run test",
+    "loadtest": "tsx loadtest/cli.ts",
+    "loadtest:test": "vitest run loadtest"
   },
   "dependencies": {
-    "@agglayer/sdk": "^1.0.0-beta.29",
+    "@agglayer/sdk": "1.0.0-beta.33",
     "@reown/appkit": "^1.8.15",
     "@reown/appkit-adapter-wagmi": "^1.8.15",
     "@tanstack/react-query": "^5.90.16",
@@ -61,6 +64,7 @@
     "lint-staged": "^16.2.7",
     "prettier": "^3.7.4",
     "tailwindcss": "^4",
+    "tsx": "^4.23.13",
     "typescript": "^5",
     "vitest": "^4.1.5"
   }

@@ -3,6 +3,7 @@
 import type { ClaimStep, Transaction } from '@/app/types/transaction';
 
 import { CopyText } from '@/app/components/copyText';
+import { TrackerDetail } from '@/app/components/transactions/trackerDetail';
 import { TransactionDetailsHeader } from '@/app/components/transactions/transactionDetailsModal/transactionDetailsHeader';
 import { Alert } from '@/app/components/ui/alert';
 import { Button } from '@/app/components/ui/button';
@@ -16,7 +17,7 @@ import { formatDateTime } from '@/app/utils/date';
 import { getTokenLogoUrl } from '@/app/utils/tokens';
 import { formatTransactionAmount, isNativeToken } from '@/app/utils/transaction';
 import { ExternalLink, Loader2 } from 'lucide-react';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 interface TransactionDetailsModalProps {
   open: boolean;
@@ -26,6 +27,10 @@ interface TransactionDetailsModalProps {
   onClaim?: (transaction: Transaction) => void;
   claimStep?: ClaimStep;
   isAnyClaiming?: boolean;
+  // See transactionListItem.tsx's isPendingClaimConfirmation: true right
+  // after this transaction's claim succeeded, until the next activity poll
+  // confirms it (status moving off READY_TO_CLAIM).
+  isPendingClaimConfirmation?: boolean;
 }
 
 export const TransactionDetailsModal = ({
@@ -35,7 +40,8 @@ export const TransactionDetailsModal = ({
   isDifferentAddress,
   onClaim,
   claimStep,
-  isAnyClaiming
+  isAnyClaiming,
+  isPendingClaimConfirmation
 }: TransactionDetailsModalProps) => {
   const tx = transaction;
   const { getToken } = useTokens();
@@ -70,9 +76,20 @@ export const TransactionDetailsModal = ({
       getTokenLogoUrl({ chainId: originChain?.id, address: tx?.originTokenAddress });
   const formattedAmount = tx ? formatTransactionAmount(tx.amount, decimals) : '-';
 
+  // A completed row has no embedded tracking to show automatically (see
+  // useBridgeTracking.ts) -- its step timeline is only fetched on demand,
+  // gated behind the "Show bridge steps" button below. Reset whenever a
+  // different transaction is opened (or the modal closes) so re-opening a
+  // completed row always starts from the button again, not a previously
+  // expanded state.
+  const [showTrackerDetail, setShowTrackerDetail] = useState(false);
+  useEffect(() => {
+    setShowTrackerDetail(false);
+  }, [tx?.hubUID]);
+
   if (!tx) return null;
 
-  const isClaimable = tx.status === 'READY_TO_CLAIM';
+  const isClaimable = tx.status === 'READY_TO_CLAIM' && !isPendingClaimConfirmation;
 
   return (
     <Modal open={open} onClose={onClose} title="Transaction Details" contentClassName="space-y-6">
@@ -154,6 +171,25 @@ export const TransactionDetailsModal = ({
           </div>
         </div>
 
+        {tx.status === 'CLAIMED' ? (
+          showTrackerDetail ? (
+            <TrackerDetail transaction={tx} onDemand />
+          ) : (
+            <div className="flex justify-center">
+              <Button
+                variant="outline"
+                size="sm"
+                data-test-id="show-tracker-detail-button"
+                onClick={() => setShowTrackerDetail(true)}
+              >
+                Show bridge steps
+              </Button>
+            </div>
+          )
+        ) : (
+          <TrackerDetail transaction={tx} />
+        )}
+
         {isDifferentAddress && (
           <Alert
             title="Different receive address"
@@ -170,6 +206,7 @@ export const TransactionDetailsModal = ({
             }}
             size="md"
             className="w-full"
+            data-test-id="claim-tokens-button-modal"
           >
             {claimStep === 'claiming' ? (
               <>
@@ -180,6 +217,16 @@ export const TransactionDetailsModal = ({
               'Claim tokens'
             )}
           </Button>
+        )}
+
+        {isPendingClaimConfirmation && (
+          <div
+            className="flex items-center justify-center gap-2 text-sm text-grey"
+            data-test-id="claim-confirmation-loading"
+          >
+            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+            Updating status…
+          </div>
         )}
       </div>
     </Modal>

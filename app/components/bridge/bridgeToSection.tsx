@@ -50,6 +50,7 @@ export const BridgeToSection = ({
           options={chainOptions}
           selectedValue={selectedChainId.toString()}
           onSelect={(option) => onSelectChain(Number(option.value))}
+          testId="to-chain-selector"
         />
 
         {hasDestinationAddress ? (

@@ -1,0 +1,3738 @@
+{
+ "schemaVersion": 1,
+ "run": {
+  "startedAt": "2026-10-13T14:52:19.708Z",
+  "endedAt": "2026-10-13T16:10:00.089Z",
+  "durationMs": 4660381,
+  "aborted": false,
+  "abortCause": null,
+  "lapsInFlightAtStop": 7,
+  "toolVersion": "76d451b",
+  "sdkVersion": "1.0.0-snapshot-ca6df75e",
+  "host": {
+   "cores": 64,
+   "totalMemMb": 64399,
+   "platform": "linux"
+  }
+ },
+ "config": {
+  "env": "testnet",
+  "aggkitProxyUrl": "https://aggkit-proxy-devnet.polygon.technology",
+  "chains": [
+   {
+    "key": "SEPOLIA",
+    "chainId": 11155111,
+    "networkId": 0,
+    "rpcUrl": "https://l1.example.invalid/FAKEKEYFAKEKEYFAKEKEYFAKE",
+    "bridgeAddress": "0x1348947e282138d8f377b467F7D9c2EB0F335d1f",
+    "explorerUrl": "https://sepolia.etherscan.io",
+    "nativeSymbol": "ETH"
+   },
+   {
+    "key": "BALI_82",
+    "chainId": 828282,
+    "networkId": 82,
+    "rpcUrl": "https://l1.example.invalid",
+    "bridgeAddress": "0x1348947e282138d8f377b467F7D9c2EB0F335d1f",
+    "explorerUrl": "",
+    "nativeSymbol": "ETH"
+   },
+   {
+    "key": "BALI_85",
+    "chainId": 858585,
+    "networkId": 85,
+    "rpcUrl": "https://l1.example.invalid",
+    "bridgeAddress": "0x1348947e282138d8f377b467F7D9c2EB0F335d1f",
+    "explorerUrl": "",
+    "nativeSymbol": "ETH"
+   }
+  ],
+  "ring": [
+   "BALI_82",
+   "BALI_85",
+   "BALI_82"
+  ],
+  "autoclaim": {
+   "BALI_82->BALI_85": {
+    "expected": false
+   },
+   "BALI_85->BALI_82": {
+    "expected": false
+   }
+  },
+  "assets": [
+   {
+    "kind": "eth",
+    "amount": "0.00001",
+    "decimals": 18
+   },
+   {
+    "kind": "erc20",
+    "address": "0xCA2B03B319145447B3E4F432c17D45351198Db86",
+    "originNetworkId": 82,
+    "amount": "0.001",
+    "decimals": 18
+   }
+  ],
+  "users": {
+   "total": 1,
+   "browser": 0,
+   "wallets": {
+    "mnemonicRef": {
+     "ref": "env:LOADTEST_MNEMONIC"
+    },
+    "startIndex": 100
+   },
+   "funder": {
+    "privateKeyRef": {
+     "ref": "env:LOADTEST_FUNDER_PRIVATE_KEY"
+    },
+    "gasPerChain": {
+     "BALI_82": "0.005",
+     "BALI_85": "0.005"
+    },
+    "maxTotalSpend": {
+     "BALI_82": "0.03",
+     "BALI_85": "0.03"
+    },
+    "maxTotalErc20Spend": "0.05"
+   }
+  },
+  "load": {
+   "bridgesPerMinutePerUser": 0.2,
+   "durationMinutes": 50,
+   "rampUpSeconds": 0,
+   "maxInflightLapsPerUser": 5
+  },
+  "browser": {
+   "contextsPerBrowser": 8,
+   "headless": true,
+   "trace": false,
+   "recycleContextAfterLaps": 10
+  },
+  "timeouts": {
+   "txReceiptMs": 180000,
+   "appearsInActivityMs": 300000,
+   "readyToClaimMs": 7200000,
+   "claimedMs": 1800000,
+   "hopMs": 10800000,
+   "lapMs": 21600000,
+   "pageLoadMs": 60000,
+   "walletConnectMs": 30000
+  },
+  "gas": {
+   "bridgeGasOffset": 300000
+  },
+  "measurement": {
+   "stageProbeIntervalMs": 5000
+  },
+  "output": {
+   "dir": "loadtest-results/20261013T145219Z",
+   "activityLog": true
+  }
+ },
+ "requested": {
+  "users": 1,
+  "browser": 0,
+  "ratePerUserPerMin": 0.2,
+  "minutes": 50
+ },
+ "achieved": {
+  "ticksOffered": 9,
+  "lapStartsSubmitted": 9,
+  "skippedBackpressure": 0,
+  "ticksLostToRamp": 0,
+  "ticksExpected": 10,
+  "hopBridgesSubmitted": 18,
+  "steadyStateRatePerUserPerMin": 0.11587035480575515,
+  "steadyStateRatePerUserPerModeMin": {
+   "browser": null,
+   "headless": 0.11587035480575515
+  }
+ },
+ "hops": {
+  "byOutcome": {
+   "hop_completed_manual": 18
+  },
+  "byRoute": {
+   "BALI_82->BALI_85": {
+    "byOutcome": {
+     "hop_completed_manual": 9
+    },
+    "byOutcomeByMode": {
+     "browser": {},
+     "headless": {
+      "hop_completed_manual": 9
+     }
+    },
+    "phases": {
+     "bridge_submit": {
+      "browser": null,
+      "headless": {
+       "n": 9,
+       "p50": 23,
+       "p90": 27,
+       "p99": 27,
+       "max": 27
+      }
+     },
+     "bridge_receipt": {
+      "browser": null,
+      "headless": {
+       "n": 9,
+       "p50": 4045,
+       "p90": 4049,
+       "p99": 4049,
+       "max": 4049
+      }
+     },
+     "appears_in_activity": {
+      "browser": null,
+      "headless": {
+       "n": 9,
+       "p50": 3858,
+       "p90": 7057,
+       "p99": 7057,
+       "max": 7057
+      }
+     },
+     "allowance": {
+      "browser": null,
+      "headless": {
+       "n": 4,
+       "p50": 0,
+       "p90": 13,
+       "p99": 13,
+       "max": 13
+      }
+     },
+     "approve_submit": {
+      "browser": null,
+      "headless": {
+       "n": 4,
+       "p50": 23,
+       "p90": 24,
+       "p99": 24,
+       "max": 24
+      }
+     },
+     "approve_receipt": {
+      "browser": null,
+      "headless": {
+       "n": 4,
+       "p50": 4044,
+       "p90": 4046,
+       "p99": 4046,
+       "max": 4046
+      }
+     },
+     "ready_to_claim": {
+      "browser": null,
+      "headless": {
+       "n": 9,
+       "p50": 659979,
+       "p90": 720023,
+       "p99": 720023,
+       "max": 720023
+      }
+     },
+     "claim_inputs": {
+      "browser": null,
+      "headless": {
+       "n": 9,
+       "p50": 268,
+       "p90": 291,
+       "p99": 291,
+       "max": 291
+      }
+     },
+     "claim_submit": {
+      "browser": null,
+      "headless": {
+       "n": 9,
+       "p50": 23,
+       "p90": 26,
+       "p99": 26,
+       "max": 26
+      }
+     },
+     "claim_receipt": {
+      "browser": null,
+      "headless": {
+       "n": 9,
+       "p50": 4042,
+       "p90": 4045,
+       "p99": 4045,
+       "max": 4045
+      }
+     },
+     "claimed_observed": {
+      "browser": null,
+      "headless": {
+       "n": 9,
+       "p50": 25631,
+       "p90": 25675,
+       "p99": 25675,
+       "max": 25675
+      }
+     },
+     "hop_total": {
+      "browser": null,
+      "headless": {
+       "n": 9,
+       "p50": 701164,
+       "p90": 761855,
+       "p99": 761855,
+       "max": 761855
+      }
+     }
+    }
+   },
+   "BALI_85->BALI_82": {
+    "byOutcome": {
+     "hop_completed_manual": 9
+    },
+    "byOutcomeByMode": {
+     "browser": {},
+     "headless": {
+      "hop_completed_manual": 9
+     }
+    },
+    "phases": {
+     "bridge_submit": {
+      "browser": null,
+      "headless": {
+       "n": 9,
+       "p50": 21,
+       "p90": 23,
+       "p99": 23,
+       "max": 23
+      }
+     },
+     "bridge_receipt": {
+      "browser": null,
+      "headless": {
+       "n": 9,
+       "p50": 4043,
+       "p90": 4050,
+       "p99": 4050,
+       "max": 4050
+      }
+     },
+     "appears_in_activity": {
+      "browser": null,
+      "headless": {
+       "n": 9,
+       "p50": 26886,
+       "p90": 26937,
+       "p99": 26937,
+       "max": 26937
+      }
+     },
+     "allowance": {
+      "browser": null,
+      "headless": {
+       "n": 4,
+       "p50": 0,
+       "p90": 10,
+       "p99": 10,
+       "max": 10
+      }
+     },
+     "approve_submit": {
+      "browser": null,
+      "headless": {
+       "n": 4,
+       "p50": 22,
+       "p90": 23,
+       "p99": 23,
+       "max": 23
+      }
+     },
+     "approve_receipt": {
+      "browser": null,
+      "headless": {
+       "n": 4,
+       "p50": 4044,
+       "p90": 4049,
+       "p99": 4049,
+       "max": 4049
+      }
+     },
+     "ready_to_claim": {
+      "browser": null,
+      "headless": {
+       "n": 9,
+       "p50": 1288050,
+       "p90": 1586066,
+       "p99": 1586066,
+       "max": 1586066
+      }
+     },
+     "claim_inputs": {
+      "browser": null,
+      "headless": {
+       "n": 9,
+       "p50": 295,
+       "p90": 360,
+       "p99": 360,
+       "max": 360
+      }
+     },
+     "claim_submit": {
+      "browser": null,
+      "headless": {
+       "n": 9,
+       "p50": 24,
+       "p90": 26,
+       "p99": 26,
+       "max": 26
+      }
+     },
+     "claim_receipt": {
+      "browser": null,
+      "headless": {
+       "n": 9,
+       "p50": 4043,
+       "p90": 4046,
+       "p99": 4046,
+       "max": 4046
+      }
+     },
+     "claimed_observed": {
+      "browser": null,
+      "headless": {
+       "n": 9,
+       "p50": 25595,
+       "p90": 25650,
+       "p99": 25650,
+       "max": 25650
+      }
+     },
+     "hop_total": {
+      "browser": null,
+      "headless": {
+       "n": 9,
+       "p50": 1348052,
+       "p90": 1647075,
+       "p99": 1647075,
+       "max": 1647075
+      }
+     },
+     "lap_total": {
+      "browser": null,
+      "headless": {
+       "n": 9,
+       "p50": 2048136,
+       "p90": 2348239,
+       "p99": 2348239,
+       "max": 2348239
+      }
+     }
+    }
+   }
+  },
+  "byRouteMode": {
+   "BALI_82->BALI_85": {
+    "browser": {
+     "attempted": 0,
+     "completed": 0,
+     "completionRate": null
+    },
+    "headless": {
+     "attempted": 9,
+     "completed": 9,
+     "completionRate": 1
+    }
+   },
+   "BALI_85->BALI_82": {
+    "browser": {
+     "attempted": 0,
+     "completed": 0,
+     "completionRate": null
+    },
+    "headless": {
+     "attempted": 9,
+     "completed": 9,
+     "completionRate": 1
+    }
+   }
+  }
+ },
+ "laps": {
+  "byOutcome": {
+   "LAP_DONE": 9,
+   "LAP_FAILED": 0,
+   "LAP_ABORTED": 0
+  },
+  "byMode": {
+   "browser": {
+    "attempted": 0,
+    "completed": 0,
+    "completionRate": null
+   },
+   "headless": {
+    "attempted": 9,
+    "completed": 9,
+    "completionRate": 1
+   }
+  }
+ },
+ "phases": {
+  "bridge_submit": {
+   "browser": null,
+   "headless": {
+    "n": 18,
+    "p50": 22,
+    "p90": 24,
+    "p99": 27,
+    "max": 27
+   }
+  },
+  "bridge_receipt": {
+   "browser": null,
+   "headless": {
+    "n": 18,
+    "p50": 4044,
+    "p90": 4049,
+    "p99": 4050,
+    "max": 4050
+   }
+  },
+  "appears_in_activity": {
+   "browser": null,
+   "headless": {
+    "n": 18,
+    "p50": 7057,
+    "p90": 26907,
+    "p99": 26937,
+    "max": 26937
+   }
+  },
+  "allowance": {
+   "browser": null,
+   "headless": {
+    "n": 8,
+    "p50": 0,
+    "p90": 13,
+    "p99": 13,
+    "max": 13
+   }
+  },
+  "approve_submit": {
+   "browser": null,
+   "headless": {
+    "n": 8,
+    "p50": 22,
+    "p90": 24,
+    "p99": 24,
+    "max": 24
+   }
+  },
+  "approve_receipt": {
+   "browser": null,
+   "headless": {
+    "n": 8,
+    "p50": 4044,
+    "p90": 4049,
+    "p99": 4049,
+    "max": 4049
+   }
+  },
+  "ready_to_claim": {
+   "browser": null,
+   "headless": {
+    "n": 18,
+    "p50": 720023,
+    "p90": 1500057,
+    "p99": 1586066,
+    "max": 1586066
+   }
+  },
+  "claim_inputs": {
+   "browser": null,
+   "headless": {
+    "n": 18,
+    "p50": 273,
+    "p90": 321,
+    "p99": 360,
+    "max": 360
+   }
+  },
+  "claim_submit": {
+   "browser": null,
+   "headless": {
+    "n": 18,
+    "p50": 24,
+    "p90": 26,
+    "p99": 26,
+    "max": 26
+   }
+  },
+  "claim_receipt": {
+   "browser": null,
+   "headless": {
+    "n": 18,
+    "p50": 4043,
+    "p90": 4046,
+    "p99": 4046,
+    "max": 4046
+   }
+  },
+  "claimed_observed": {
+   "browser": null,
+   "headless": {
+    "n": 18,
+    "p50": 25617,
+    "p90": 25669,
+    "p99": 25675,
+    "max": 25675
+   }
+  },
+  "hop_total": {
+   "browser": null,
+   "headless": {
+    "n": 18,
+    "p50": 761855,
+    "p90": 1561054,
+    "p99": 1647075,
+    "max": 1647075
+   }
+  },
+  "lap_total": {
+   "browser": null,
+   "headless": {
+    "n": 9,
+    "p50": 2048136,
+    "p90": 2348239,
+    "p99": 2348239,
+    "max": 2348239
+   }
+  }
+ },
+ "phaseCensoredCounts": {},
+ "uncontextedRequests": 0,
+ "http": {
+  "rpc/203.0.113.10/eth_gasPrice": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 9,
+     "p50": 19,
+     "p90": 22,
+     "p99": 22,
+     "max": 22,
+     "byStatus": {
+      "200": 9
+     },
+     "retries": 0
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.10/eth_getBalance": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 5,
+     "p50": 10,
+     "p90": 11,
+     "p99": 11,
+     "max": 11,
+     "byStatus": {
+      "200": 5
+     },
+     "retries": 0
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.10/eth_getTransactionCount": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 22,
+     "p50": 10,
+     "p90": 12,
+     "p99": 18,
+     "max": 18,
+     "byStatus": {
+      "200": 22
+     },
+     "retries": 8
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.10/eth_estimateGas": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 22,
+     "p50": 19,
+     "p90": 21,
+     "p99": 21,
+     "max": 21,
+     "byStatus": {
+      "200": 22
+     },
+     "retries": 8
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.10/eth_fillTransaction": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 22,
+     "p50": 11,
+     "p90": 12,
+     "p99": 14,
+     "max": 14,
+     "byStatus": {
+      "200": 22
+     },
+     "retries": 8
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.10/eth_sendRawTransaction": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 22,
+     "p50": 10,
+     "p90": 11,
+     "p99": 12,
+     "max": 12,
+     "byStatus": {
+      "200": 22
+     },
+     "retries": 8
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.10/eth_getTransactionReceipt": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 66,
+     "p50": 11,
+     "p90": 12,
+     "p99": 13,
+     "max": 13,
+     "byStatus": {
+      "200": 66
+     },
+     "retries": 52
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.10/eth_blockNumber": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 44,
+     "p50": 10,
+     "p90": 11,
+     "p99": 11,
+     "max": 11,
+     "byStatus": {
+      "200": 44
+     },
+     "retries": 30
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.10/eth_getTransactionByHash": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 22,
+     "p50": 10,
+     "p90": 11,
+     "p99": 12,
+     "max": 12,
+     "byStatus": {
+      "200": 22
+     },
+     "retries": 8
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.10/eth_getBlockByNumber": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 22,
+     "p50": 10,
+     "p90": 11,
+     "p99": 12,
+     "max": 12,
+     "byStatus": {
+      "200": 22
+     },
+     "retries": 8
+    },
+    "harness": null
+   }
+  },
+  "bridge/l1-info-tree-index[82]": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 9,
+     "p50": 143,
+     "p90": 156,
+     "p99": 156,
+     "max": 156,
+     "byStatus": {
+      "200": 9
+     },
+     "retries": 9
+    },
+    "harness": {
+     "n": 1185,
+     "p50": 35,
+     "p90": 44,
+     "p99": 95,
+     "max": 299,
+     "byStatus": {
+      "200": 9,
+      "500": 1176
+     },
+     "retries": 1184
+    }
+   }
+  },
+  "tracker/activity": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 896,
+     "p50": 34,
+     "p90": 51,
+     "p99": 103,
+     "max": 1108,
+     "byStatus": {
+      "200": 896
+     },
+     "retries": 0
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.10/eth_call": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 14,
+     "p50": 18,
+     "p90": 20,
+     "p99": 21,
+     "max": 21,
+     "byStatus": {
+      "200": 14
+     },
+     "retries": 5
+    },
+    "harness": null
+   }
+  },
+  "bridge/injected-l1-info-leaf[85]": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 9,
+     "p50": 87,
+     "p90": 103,
+     "p99": 103,
+     "max": 103,
+     "byStatus": {
+      "200": 9
+     },
+     "retries": 7
+    },
+    "harness": {
+     "n": 9,
+     "p50": 71,
+     "p90": 220,
+     "p99": 220,
+     "max": 220,
+     "byStatus": {
+      "200": 9
+     },
+     "retries": 0
+    }
+   }
+  },
+  "bridge/claim-proof[82]": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 9,
+     "p50": 33,
+     "p90": 41,
+     "p99": 41,
+     "max": 41,
+     "byStatus": {
+      "200": 9
+     },
+     "retries": 7
+    },
+    "harness": {
+     "n": 9,
+     "p50": 34,
+     "p90": 38,
+     "p99": 38,
+     "max": 38,
+     "byStatus": {
+      "200": 9
+     },
+     "retries": 0
+    }
+   }
+  },
+  "rpc/203.0.113.11/eth_call": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 14,
+     "p50": 17,
+     "p90": 19,
+     "p99": 23,
+     "max": 23,
+     "byStatus": {
+      "200": 14
+     },
+     "retries": 5
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.11/eth_getTransactionCount": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 22,
+     "p50": 10,
+     "p90": 10,
+     "p99": 12,
+     "max": 12,
+     "byStatus": {
+      "200": 22
+     },
+     "retries": 13
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.11/eth_estimateGas": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 22,
+     "p50": 18,
+     "p90": 20,
+     "p99": 21,
+     "max": 21,
+     "byStatus": {
+      "200": 22
+     },
+     "retries": 13
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.11/eth_fillTransaction": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 22,
+     "p50": 10,
+     "p90": 11,
+     "p99": 12,
+     "max": 12,
+     "byStatus": {
+      "200": 22
+     },
+     "retries": 13
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.11/eth_sendRawTransaction": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 22,
+     "p50": 10,
+     "p90": 10,
+     "p99": 10,
+     "max": 10,
+     "byStatus": {
+      "200": 22
+     },
+     "retries": 13
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.11/eth_getTransactionReceipt": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 66,
+     "p50": 10,
+     "p90": 12,
+     "p99": 19,
+     "max": 19,
+     "byStatus": {
+      "200": 66
+     },
+     "retries": 57
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.11/eth_blockNumber": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 44,
+     "p50": 9,
+     "p90": 10,
+     "p99": 11,
+     "max": 11,
+     "byStatus": {
+      "200": 44
+     },
+     "retries": 35
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.11/eth_getTransactionByHash": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 22,
+     "p50": 10,
+     "p90": 10,
+     "p99": 11,
+     "max": 11,
+     "byStatus": {
+      "200": 22
+     },
+     "retries": 13
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.11/eth_getBlockByNumber": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 22,
+     "p50": 9,
+     "p90": 10,
+     "p99": 10,
+     "max": 10,
+     "byStatus": {
+      "200": 22
+     },
+     "retries": 13
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.11/eth_gasPrice": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 9,
+     "p50": 17,
+     "p90": 23,
+     "p99": 23,
+     "max": 23,
+     "byStatus": {
+      "200": 9
+     },
+     "retries": 0
+    },
+    "harness": null
+   }
+  },
+  "rpc/203.0.113.11/eth_getBalance": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 5,
+     "p50": 9,
+     "p90": 10,
+     "p99": 10,
+     "max": 10,
+     "byStatus": {
+      "200": 5
+     },
+     "retries": 0
+    },
+    "harness": null
+   }
+  },
+  "bridge/l1-info-tree-index[85]": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 9,
+     "p50": 195,
+     "p90": 227,
+     "p99": 227,
+     "max": 227,
+     "byStatus": {
+      "200": 9
+     },
+     "retries": 8
+    },
+    "harness": {
+     "n": 2224,
+     "p50": 35,
+     "p90": 42,
+     "p99": 105,
+     "max": 840,
+     "byStatus": {
+      "200": 9,
+      "500": 2215
+     },
+     "retries": 2223
+    }
+   }
+  },
+  "bridge/token-mappings[85]": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 1,
+     "p50": 36,
+     "p90": 36,
+     "p99": 36,
+     "max": 36,
+     "byStatus": {
+      "200": 1
+     },
+     "retries": 0
+    },
+    "harness": null
+   }
+  },
+  "bridge/injected-l1-info-leaf[82]": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 9,
+     "p50": 52,
+     "p90": 148,
+     "p99": 148,
+     "max": 148,
+     "byStatus": {
+      "200": 9
+     },
+     "retries": 8
+    },
+    "harness": {
+     "n": 175,
+     "p50": 39,
+     "p90": 55,
+     "p99": 103,
+     "max": 105,
+     "byStatus": {
+      "200": 9,
+      "404": 166
+     },
+     "retries": 170
+    }
+   }
+  },
+  "bridge/claim-proof[85]": {
+   "browser": {
+    "ui": null,
+    "harness": null
+   },
+   "headless": {
+    "ui": {
+     "n": 9,
+     "p50": 36,
+     "p90": 49,
+     "p99": 49,
+     "max": 49,
+     "byStatus": {
+      "200": 9
+     },
+     "retries": 9
+    },
+    "harness": {
+     "n": 9,
+     "p50": 40,
+     "p90": 45,
+     "p99": 45,
+     "max": 45,
+     "byStatus": {
+      "200": 9
+     },
+     "retries": 4
+    }
+   }
+  }
+ },
+ "gates": {
+  "activity-index": {
+   "hopsEntered": 18,
+   "totalMs": 267310,
+   "p50": 7057,
+   "p90": 26907,
+   "p99": 26937,
+   "blockedTicks": 0,
+   "timedOutVisits": 0
+  },
+  "claim-proof": {
+   "hopsEntered": 18,
+   "totalMs": 18071612,
+   "p50": 720023,
+   "p90": 1500057,
+   "p99": 1586066,
+   "blockedTicks": 0,
+   "timedOutVisits": 0
+  },
+  "claimed": {
+   "hopsEntered": 18,
+   "totalMs": 445058,
+   "p50": 25617,
+   "p90": 25669,
+   "p99": 25675,
+   "blockedTicks": 0,
+   "timedOutVisits": 0
+  }
+ },
+ "errors": {
+  "byClass": {
+   "activity_warning": 55
+  },
+  "top": [
+   {
+    "class": "activity_warning",
+    "count": 55,
+    "firstSeen": "2026-10-13T14:57:25.041Z",
+    "lastSeen": "2026-10-13T15:37:57.174Z",
+    "sample": "activity_warning[network_id=82]: bridge service for network 82 is not fully synchronized, some bridges may still be missing",
+    "endpointClass": "tracker/activity"
+   }
+  ],
+  "suppressed": {
+   "notReady": 0,
+   "benignExternalAsset": 0
+  }
+ },
+ "policy": {
+  "autoclaimOverdue": 0,
+  "unexpectedAutoclaim": 0,
+  "claimRaceLost": 0
+ },
+ "resources": {
+  "samples": [
+   {
+    "toolRssMb": 227.0078125,
+    "toolCpuPct": 0.4855686588047171,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.616831,
+    "ts": "2026-10-13T14:52:24.712Z"
+   },
+   {
+    "toolRssMb": 160.7421875,
+    "toolCpuPct": 0.20323935212957409,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.117119,
+    "ts": "2026-10-13T14:52:54.728Z"
+   },
+   {
+    "toolRssMb": 161,
+    "toolCpuPct": 0.1652,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.117119,
+    "ts": "2026-10-13T14:53:24.738Z"
+   },
+   {
+    "toolRssMb": 161.25,
+    "toolCpuPct": 0.15296821906855884,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.108927,
+    "ts": "2026-10-13T14:53:54.746Z"
+   },
+   {
+    "toolRssMb": 161.5078125,
+    "toolCpuPct": 0.11173765246950611,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.108927,
+    "ts": "2026-10-13T14:54:24.753Z"
+   },
+   {
+    "toolRssMb": 162.0234375,
+    "toolCpuPct": 0.15736852629474107,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.117119,
+    "ts": "2026-10-13T14:54:54.757Z"
+   },
+   {
+    "toolRssMb": 162.0234375,
+    "toolCpuPct": 0.17948410317936414,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.117119,
+    "ts": "2026-10-13T14:55:24.760Z"
+   },
+   {
+    "toolRssMb": 162.0234375,
+    "toolCpuPct": 0.16325469812075172,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.117119,
+    "ts": "2026-10-13T14:55:54.767Z"
+   },
+   {
+    "toolRssMb": 162.0234375,
+    "toolCpuPct": 0.15462907418516297,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.133503,
+    "ts": "2026-10-13T14:56:24.774Z"
+   },
+   {
+    "toolRssMb": 162.02734375,
+    "toolCpuPct": 0.13657999999999998,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.117119,
+    "ts": "2026-10-13T14:56:54.782Z"
+   },
+   {
+    "toolRssMb": 163.5234375,
+    "toolCpuPct": 1.2924045572656406,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.543103,
+    "ts": "2026-10-13T14:57:24.796Z"
+   },
+   {
+    "toolRssMb": 163.55859375,
+    "toolCpuPct": 0.2807,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.190847,
+    "ts": "2026-10-13T14:57:54.800Z"
+   },
+   {
+    "toolRssMb": 163.65234375,
+    "toolCpuPct": 0.3017996400719856,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.223615,
+    "ts": "2026-10-13T14:58:24.807Z"
+   },
+   {
+    "toolRssMb": 163.65234375,
+    "toolCpuPct": 0.3114,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.272767,
+    "ts": "2026-10-13T14:58:54.813Z"
+   },
+   {
+    "toolRssMb": 163.65234375,
+    "toolCpuPct": 0.2502199120351859,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.149887,
+    "ts": "2026-10-13T14:59:24.820Z"
+   },
+   {
+    "toolRssMb": 163.7109375,
+    "toolCpuPct": 0.40695860827834435,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.231807,
+    "ts": "2026-10-13T14:59:54.827Z"
+   },
+   {
+    "toolRssMb": 164.3046875,
+    "toolCpuPct": 0.37028594281143773,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.215423,
+    "ts": "2026-10-13T15:00:24.838Z"
+   },
+   {
+    "toolRssMb": 164.609375,
+    "toolCpuPct": 0.39020195960807835,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.248191,
+    "ts": "2026-10-13T15:00:54.844Z"
+   },
+   {
+    "toolRssMb": 165.109375,
+    "toolCpuPct": 0.3588764494202319,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.313727,
+    "ts": "2026-10-13T15:01:24.849Z"
+   },
+   {
+    "toolRssMb": 165.34375,
+    "toolCpuPct": 0.34451329202478514,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.272767,
+    "ts": "2026-10-13T15:01:54.862Z"
+   },
+   {
+    "toolRssMb": 167.11328125,
+    "toolCpuPct": 3.9739852029594083,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.731519,
+    "ts": "2026-10-13T15:02:24.872Z"
+   },
+   {
+    "toolRssMb": 167.11328125,
+    "toolCpuPct": 0.29190323870451823,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.215423,
+    "ts": "2026-10-13T15:02:54.880Z"
+   },
+   {
+    "toolRssMb": 167.11328125,
+    "toolCpuPct": 0.2701,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.272767,
+    "ts": "2026-10-13T15:03:24.888Z"
+   },
+   {
+    "toolRssMb": 167.171875,
+    "toolCpuPct": 0.27672,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.256383,
+    "ts": "2026-10-13T15:03:54.892Z"
+   },
+   {
+    "toolRssMb": 167.171875,
+    "toolCpuPct": 0.2426,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.166271,
+    "ts": "2026-10-13T15:04:24.901Z"
+   },
+   {
+    "toolRssMb": 167.19140625,
+    "toolCpuPct": 0.3052778888444622,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.174463,
+    "ts": "2026-10-13T15:04:54.915Z"
+   },
+   {
+    "toolRssMb": 167.19140625,
+    "toolCpuPct": 0.2338264694122351,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.256383,
+    "ts": "2026-10-13T15:05:24.925Z"
+   },
+   {
+    "toolRssMb": 167.28515625,
+    "toolCpuPct": 0.30777844431113777,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.207231,
+    "ts": "2026-10-13T15:05:54.935Z"
+   },
+   {
+    "toolRssMb": 167.28515625,
+    "toolCpuPct": 0.2513897220555889,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.248191,
+    "ts": "2026-10-13T15:06:24.945Z"
+   },
+   {
+    "toolRssMb": 167.28515625,
+    "toolCpuPct": 0.3374725054989002,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.199039,
+    "ts": "2026-10-13T15:06:54.955Z"
+   },
+   {
+    "toolRssMb": 167.4296875,
+    "toolCpuPct": 0.7582,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.444799,
+    "ts": "2026-10-13T15:07:24.962Z"
+   },
+   {
+    "toolRssMb": 167.5546875,
+    "toolCpuPct": 0.27580967612954815,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.231807,
+    "ts": "2026-10-13T15:07:54.971Z"
+   },
+   {
+    "toolRssMb": 167.70703125,
+    "toolCpuPct": 0.259628074385123,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.207231,
+    "ts": "2026-10-13T15:08:24.979Z"
+   },
+   {
+    "toolRssMb": 168.30859375,
+    "toolCpuPct": 0.3659068186362727,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.313727,
+    "ts": "2026-10-13T15:08:54.991Z"
+   },
+   {
+    "toolRssMb": 168.37890625,
+    "toolCpuPct": 0.29158168366326737,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.313727,
+    "ts": "2026-10-13T15:09:25.000Z"
+   },
+   {
+    "toolRssMb": 168.5546875,
+    "toolCpuPct": 0.42909418116376724,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.272767,
+    "ts": "2026-10-13T15:09:55.010Z"
+   },
+   {
+    "toolRssMb": 168.5546875,
+    "toolCpuPct": 0.3024790083966414,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.190847,
+    "ts": "2026-10-13T15:10:25.022Z"
+   },
+   {
+    "toolRssMb": 168.5546875,
+    "toolCpuPct": 0.303218712514994,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.272767,
+    "ts": "2026-10-13T15:10:55.033Z"
+   },
+   {
+    "toolRssMb": 168.73828125,
+    "toolCpuPct": 0.33007398520295944,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.248191,
+    "ts": "2026-10-13T15:11:25.044Z"
+   },
+   {
+    "toolRssMb": 168.890625,
+    "toolCpuPct": 0.27177693383969614,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.264575,
+    "ts": "2026-10-13T15:11:55.054Z"
+   },
+   {
+    "toolRssMb": 170.953125,
+    "toolCpuPct": 3.877409036385446,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.543103,
+    "ts": "2026-10-13T15:12:25.068Z"
+   },
+   {
+    "toolRssMb": 170.953125,
+    "toolCpuPct": 0.3125749700119952,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.190847,
+    "ts": "2026-10-13T15:12:55.081Z"
+   },
+   {
+    "toolRssMb": 170.953125,
+    "toolCpuPct": 0.30367779332400563,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.264575,
+    "ts": "2026-10-13T15:13:25.093Z"
+   },
+   {
+    "toolRssMb": 171.625,
+    "toolCpuPct": 0.3234553089382123,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.215423,
+    "ts": "2026-10-13T15:13:55.102Z"
+   },
+   {
+    "toolRssMb": 171.6484375,
+    "toolCpuPct": 0.4016596680663867,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.264575,
+    "ts": "2026-10-13T15:14:25.118Z"
+   },
+   {
+    "toolRssMb": 171.6484375,
+    "toolCpuPct": 0.3198920431827269,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.289151,
+    "ts": "2026-10-13T15:14:55.127Z"
+   },
+   {
+    "toolRssMb": 171.65625,
+    "toolCpuPct": 0.3422431027588964,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.297343,
+    "ts": "2026-10-13T15:15:25.136Z"
+   },
+   {
+    "toolRssMb": 171.65625,
+    "toolCpuPct": 0.2923845692584449,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.231807,
+    "ts": "2026-10-13T15:15:55.153Z"
+   },
+   {
+    "toolRssMb": 171.65625,
+    "toolCpuPct": 0.31535692861427717,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.264575,
+    "ts": "2026-10-13T15:16:25.167Z"
+   },
+   {
+    "toolRssMb": 171.65625,
+    "toolCpuPct": 0.26950439648281377,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.305535,
+    "ts": "2026-10-13T15:16:55.181Z"
+   },
+   {
+    "toolRssMb": 171.6875,
+    "toolCpuPct": 0.7708458308338332,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.657791,
+    "ts": "2026-10-13T15:17:25.192Z"
+   },
+   {
+    "toolRssMb": 171.6875,
+    "toolCpuPct": 0.37755346791924843,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.272767,
+    "ts": "2026-10-13T15:17:55.203Z"
+   },
+   {
+    "toolRssMb": 171.84765625,
+    "toolCpuPct": 0.3127774445110978,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.272767,
+    "ts": "2026-10-13T15:18:25.215Z"
+   },
+   {
+    "toolRssMb": 171.84765625,
+    "toolCpuPct": 0.32033186725309876,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.239999,
+    "ts": "2026-10-13T15:18:55.228Z"
+   },
+   {
+    "toolRssMb": 171.02734375,
+    "toolCpuPct": 0.3594043573855687,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.477567,
+    "ts": "2026-10-13T15:19:25.240Z"
+   },
+   {
+    "toolRssMb": 171.02734375,
+    "toolCpuPct": 0.3630547780887645,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.239999,
+    "ts": "2026-10-13T15:19:55.249Z"
+   },
+   {
+    "toolRssMb": 171.02734375,
+    "toolCpuPct": 0.3244653208075155,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.239999,
+    "ts": "2026-10-13T15:20:25.263Z"
+   },
+   {
+    "toolRssMb": 171.03125,
+    "toolCpuPct": 0.37235105957616954,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.633215,
+    "ts": "2026-10-13T15:20:55.278Z"
+   },
+   {
+    "toolRssMb": 171.12109375,
+    "toolCpuPct": 0.34340263894442224,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.248191,
+    "ts": "2026-10-13T15:21:25.288Z"
+   },
+   {
+    "toolRssMb": 171.12109375,
+    "toolCpuPct": 0.4059588082383523,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.379263,
+    "ts": "2026-10-13T15:21:55.299Z"
+   },
+   {
+    "toolRssMb": 171.3203125,
+    "toolCpuPct": 4.08672530987605,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.780671,
+    "ts": "2026-10-13T15:22:25.312Z"
+   },
+   {
+    "toolRssMb": 171.3203125,
+    "toolCpuPct": 0.48660535785685727,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.518527,
+    "ts": "2026-10-13T15:22:55.327Z"
+   },
+   {
+    "toolRssMb": 171.4453125,
+    "toolCpuPct": 0.3549180327868853,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.313727,
+    "ts": "2026-10-13T15:23:25.346Z"
+   },
+   {
+    "toolRssMb": 171.5859375,
+    "toolCpuPct": 0.35354787127723364,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.297343,
+    "ts": "2026-10-13T15:23:55.360Z"
+   },
+   {
+    "toolRssMb": 171.59375,
+    "toolCpuPct": 0.3989806116330202,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.330111,
+    "ts": "2026-10-13T15:24:25.378Z"
+   },
+   {
+    "toolRssMb": 171.60546875,
+    "toolCpuPct": 0.408713029576339,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.469375,
+    "ts": "2026-10-13T15:24:55.391Z"
+   },
+   {
+    "toolRssMb": 171.60546875,
+    "toolCpuPct": 0.3303878448620552,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.493951,
+    "ts": "2026-10-13T15:25:25.406Z"
+   },
+   {
+    "toolRssMb": 171.61328125,
+    "toolCpuPct": 0.39928043174095545,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.444799,
+    "ts": "2026-10-13T15:25:55.423Z"
+   },
+   {
+    "toolRssMb": 171.68359375,
+    "toolCpuPct": 0.43479216626698647,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.256383,
+    "ts": "2026-10-13T15:26:25.436Z"
+   },
+   {
+    "toolRssMb": 171.68359375,
+    "toolCpuPct": 0.367453018792483,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.313727,
+    "ts": "2026-10-13T15:26:55.447Z"
+   },
+   {
+    "toolRssMb": 171.921875,
+    "toolCpuPct": 3.0479808076769292,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.289151,
+    "ts": "2026-10-13T15:27:25.467Z"
+   },
+   {
+    "toolRssMb": 171.93359375,
+    "toolCpuPct": 0.47597441535078955,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.395647,
+    "ts": "2026-10-13T15:27:55.482Z"
+   },
+   {
+    "toolRssMb": 171.93359375,
+    "toolCpuPct": 0.40439912017596485,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.280959,
+    "ts": "2026-10-13T15:28:25.495Z"
+   },
+   {
+    "toolRssMb": 171.93359375,
+    "toolCpuPct": 0.5486005597760896,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.698751,
+    "ts": "2026-10-13T15:28:55.511Z"
+   },
+   {
+    "toolRssMb": 171.93359375,
+    "toolCpuPct": 0.3384046381447421,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.338303,
+    "ts": "2026-10-13T15:29:25.525Z"
+   },
+   {
+    "toolRssMb": 171.9609375,
+    "toolCpuPct": 0.4052347652347652,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.297343,
+    "ts": "2026-10-13T15:29:55.541Z"
+   },
+   {
+    "toolRssMb": 171.9609375,
+    "toolCpuPct": 0.4280575539568346,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.256383,
+    "ts": "2026-10-13T15:30:25.556Z"
+   },
+   {
+    "toolRssMb": 171.96875,
+    "toolCpuPct": 0.5306477409036385,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.264575,
+    "ts": "2026-10-13T15:30:55.573Z"
+   },
+   {
+    "toolRssMb": 171.96875,
+    "toolCpuPct": 0.42205117952818877,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.321919,
+    "ts": "2026-10-13T15:31:25.589Z"
+   },
+   {
+    "toolRssMb": 171.96875,
+    "toolCpuPct": 0.39502199120351855,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.723327,
+    "ts": "2026-10-13T15:31:55.603Z"
+   },
+   {
+    "toolRssMb": 171.98828125,
+    "toolCpuPct": 1.0747601918465228,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.657791,
+    "ts": "2026-10-13T15:32:25.619Z"
+   },
+   {
+    "toolRssMb": 171.98828125,
+    "toolCpuPct": 0.4909018196360728,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.485759,
+    "ts": "2026-10-13T15:32:55.636Z"
+   },
+   {
+    "toolRssMb": 172.00390625,
+    "toolCpuPct": 0.630993801239752,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.428415,
+    "ts": "2026-10-13T15:33:25.646Z"
+   },
+   {
+    "toolRssMb": 172.00390625,
+    "toolCpuPct": 0.3612832300619628,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.313727,
+    "ts": "2026-10-13T15:33:55.663Z"
+   },
+   {
+    "toolRssMb": 172.15234375,
+    "toolCpuPct": 0.3697920831667333,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.469375,
+    "ts": "2026-10-13T15:34:25.677Z"
+   },
+   {
+    "toolRssMb": 172.20703125,
+    "toolCpuPct": 0.3517992802878849,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.264575,
+    "ts": "2026-10-13T15:34:55.700Z"
+   },
+   {
+    "toolRssMb": 172.20703125,
+    "toolCpuPct": 0.35889288569144684,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.280959,
+    "ts": "2026-10-13T15:35:25.720Z"
+   },
+   {
+    "toolRssMb": 172.20703125,
+    "toolCpuPct": 0.384406237504998,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.412031,
+    "ts": "2026-10-13T15:35:55.742Z"
+   },
+   {
+    "toolRssMb": 172.20703125,
+    "toolCpuPct": 0.3616107114308553,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.289151,
+    "ts": "2026-10-13T15:36:25.766Z"
+   },
+   {
+    "toolRssMb": 172.20703125,
+    "toolCpuPct": 0.3588164734106357,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.264575,
+    "ts": "2026-10-13T15:36:55.786Z"
+   },
+   {
+    "toolRssMb": 172.20703125,
+    "toolCpuPct": 0.4854916067146283,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.493951,
+    "ts": "2026-10-13T15:37:25.803Z"
+   },
+   {
+    "toolRssMb": 172.22265625,
+    "toolCpuPct": 0.3624750099960016,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.248191,
+    "ts": "2026-10-13T15:37:55.822Z"
+   },
+   {
+    "toolRssMb": 172.22265625,
+    "toolCpuPct": 0.40801358912869706,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.330111,
+    "ts": "2026-10-13T15:38:25.839Z"
+   },
+   {
+    "toolRssMb": 172.22265625,
+    "toolCpuPct": 0.39522286628023184,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.518527,
+    "ts": "2026-10-13T15:38:55.860Z"
+   },
+   {
+    "toolRssMb": 172.22265625,
+    "toolCpuPct": 0.46507492507492515,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.289151,
+    "ts": "2026-10-13T15:39:25.878Z"
+   },
+   {
+    "toolRssMb": 172.22265625,
+    "toolCpuPct": 0.4071357185688587,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.452991,
+    "ts": "2026-10-13T15:39:55.892Z"
+   },
+   {
+    "toolRssMb": 172.22265625,
+    "toolCpuPct": 0.35939624150339866,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.354687,
+    "ts": "2026-10-13T15:40:25.905Z"
+   },
+   {
+    "toolRssMb": 172.22265625,
+    "toolCpuPct": 0.6192522990803678,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.412031,
+    "ts": "2026-10-13T15:40:55.926Z"
+   },
+   {
+    "toolRssMb": 172.22265625,
+    "toolCpuPct": 0.45106935838496903,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.592255,
+    "ts": "2026-10-13T15:41:25.944Z"
+   },
+   {
+    "toolRssMb": 172.22265625,
+    "toolCpuPct": 0.37170263788968827,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.469375,
+    "ts": "2026-10-13T15:41:55.963Z"
+   },
+   {
+    "toolRssMb": 172.22265625,
+    "toolCpuPct": 0.4069558265040975,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.403839,
+    "ts": "2026-10-13T15:42:25.984Z"
+   },
+   {
+    "toolRssMb": 172.34765625,
+    "toolCpuPct": 0.40063974410235903,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.305535,
+    "ts": "2026-10-13T15:42:56.008Z"
+   },
+   {
+    "toolRssMb": 172.3828125,
+    "toolCpuPct": 0.43657805316809917,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.674175,
+    "ts": "2026-10-13T15:43:26.021Z"
+   },
+   {
+    "toolRssMb": 172.390625,
+    "toolCpuPct": 0.45066959824105535,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.452991,
+    "ts": "2026-10-13T15:43:56.040Z"
+   },
+   {
+    "toolRssMb": 172.40625,
+    "toolCpuPct": 0.5644426687974431,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.387455,
+    "ts": "2026-10-13T15:44:26.060Z"
+   },
+   {
+    "toolRssMb": 172.55078125,
+    "toolCpuPct": 0.35474715170897464,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.231807,
+    "ts": "2026-10-13T15:44:56.078Z"
+   },
+   {
+    "toolRssMb": 172.55078125,
+    "toolCpuPct": 0.45643485211830537,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.264575,
+    "ts": "2026-10-13T15:45:26.097Z"
+   },
+   {
+    "toolRssMb": 172.55078125,
+    "toolCpuPct": 0.34735052989402115,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.313727,
+    "ts": "2026-10-13T15:45:56.113Z"
+   },
+   {
+    "toolRssMb": 172.5546875,
+    "toolCpuPct": 0.34878097521982415,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.395647,
+    "ts": "2026-10-13T15:46:26.133Z"
+   },
+   {
+    "toolRssMb": 172.5546875,
+    "toolCpuPct": 0.3138916650009994,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.289151,
+    "ts": "2026-10-13T15:46:56.154Z"
+   },
+   {
+    "toolRssMb": 172.5546875,
+    "toolCpuPct": 0.42327207351178586,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.420223,
+    "ts": "2026-10-13T15:47:26.172Z"
+   },
+   {
+    "toolRssMb": 172.5546875,
+    "toolCpuPct": 0.35350789526284226,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.477567,
+    "ts": "2026-10-13T15:47:56.192Z"
+   },
+   {
+    "toolRssMb": 172.5546875,
+    "toolCpuPct": 0.40821342925659476,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.567679,
+    "ts": "2026-10-13T15:48:26.210Z"
+   },
+   {
+    "toolRssMb": 172.5546875,
+    "toolCpuPct": 0.3643871225754849,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.223615,
+    "ts": "2026-10-13T15:48:56.226Z"
+   },
+   {
+    "toolRssMb": 172.5546875,
+    "toolCpuPct": 0.3664135864135864,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.412031,
+    "ts": "2026-10-13T15:49:26.246Z"
+   },
+   {
+    "toolRssMb": 172.5546875,
+    "toolCpuPct": 0.32760895641743304,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.215423,
+    "ts": "2026-10-13T15:49:56.266Z"
+   },
+   {
+    "toolRssMb": 172.5546875,
+    "toolCpuPct": 0.36896620675864833,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.215423,
+    "ts": "2026-10-13T15:50:26.280Z"
+   },
+   {
+    "toolRssMb": 172.5546875,
+    "toolCpuPct": 0.33146112332600436,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.379263,
+    "ts": "2026-10-13T15:50:56.297Z"
+   },
+   {
+    "toolRssMb": 172.5546875,
+    "toolCpuPct": 0.3732067932067932,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.289151,
+    "ts": "2026-10-13T15:51:26.316Z"
+   },
+   {
+    "toolRssMb": 172.5546875,
+    "toolCpuPct": 0.32461015593762493,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.190847,
+    "ts": "2026-10-13T15:51:56.337Z"
+   },
+   {
+    "toolRssMb": 172.5546875,
+    "toolCpuPct": 0.4076154307415551,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.231807,
+    "ts": "2026-10-13T15:52:26.355Z"
+   },
+   {
+    "toolRssMb": 172.55859375,
+    "toolCpuPct": 0.3909672262190248,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.231807,
+    "ts": "2026-10-13T15:52:56.382Z"
+   },
+   {
+    "toolRssMb": 172.56640625,
+    "toolCpuPct": 0.3901878497202238,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.231807,
+    "ts": "2026-10-13T15:53:26.403Z"
+   },
+   {
+    "toolRssMb": 173.5703125,
+    "toolCpuPct": 0.45695443645083933,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.215423,
+    "ts": "2026-10-13T15:53:56.424Z"
+   },
+   {
+    "toolRssMb": 173.5703125,
+    "toolCpuPct": 0.31606072712744704,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.207231,
+    "ts": "2026-10-13T15:54:26.446Z"
+   },
+   {
+    "toolRssMb": 173.64453125,
+    "toolCpuPct": 0.3684452438049561,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.215423,
+    "ts": "2026-10-13T15:54:56.468Z"
+   },
+   {
+    "toolRssMb": 173.64453125,
+    "toolCpuPct": 0.28821414302836595,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.248191,
+    "ts": "2026-10-13T15:55:26.488Z"
+   },
+   {
+    "toolRssMb": 173.64453125,
+    "toolCpuPct": 0.33498501498501493,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.215423,
+    "ts": "2026-10-13T15:55:56.512Z"
+   },
+   {
+    "toolRssMb": 173.64453125,
+    "toolCpuPct": 0.30577307231322415,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.256383,
+    "ts": "2026-10-13T15:56:26.535Z"
+   },
+   {
+    "toolRssMb": 173.64453125,
+    "toolCpuPct": 0.2699580251848891,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.149887,
+    "ts": "2026-10-13T15:56:56.558Z"
+   },
+   {
+    "toolRssMb": 173.64453125,
+    "toolCpuPct": 0.3065334665334665,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.379263,
+    "ts": "2026-10-13T15:57:26.581Z"
+   },
+   {
+    "toolRssMb": 173.64453125,
+    "toolCpuPct": 0.3666133866133866,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.207231,
+    "ts": "2026-10-13T15:57:56.605Z"
+   },
+   {
+    "toolRssMb": 173.88671875,
+    "toolCpuPct": 2.393445243804956,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.297343,
+    "ts": "2026-10-13T15:58:26.624Z"
+   },
+   {
+    "toolRssMb": 173.88671875,
+    "toolCpuPct": 0.2660271782573941,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.158079,
+    "ts": "2026-10-13T15:58:56.648Z"
+   },
+   {
+    "toolRssMb": 173.88671875,
+    "toolCpuPct": 0.3403557865280831,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.321919,
+    "ts": "2026-10-13T15:59:26.668Z"
+   },
+   {
+    "toolRssMb": 173.88671875,
+    "toolCpuPct": 0.26925074925074927,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.256383,
+    "ts": "2026-10-13T15:59:56.690Z"
+   },
+   {
+    "toolRssMb": 174.08203125,
+    "toolCpuPct": 0.3014791125324805,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.215423,
+    "ts": "2026-10-13T16:00:26.709Z"
+   },
+   {
+    "toolRssMb": 174.08203125,
+    "toolCpuPct": 0.2796122326604038,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.223615,
+    "ts": "2026-10-13T16:00:56.727Z"
+   },
+   {
+    "toolRssMb": 174.12890625,
+    "toolCpuPct": 0.2716513394642143,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.248191,
+    "ts": "2026-10-13T16:01:26.743Z"
+   },
+   {
+    "toolRssMb": 174.12890625,
+    "toolCpuPct": 0.28381618381618384,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.158079,
+    "ts": "2026-10-13T16:01:56.766Z"
+   },
+   {
+    "toolRssMb": 174.12890625,
+    "toolCpuPct": 0.3788726763941635,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.387455,
+    "ts": "2026-10-13T16:02:26.783Z"
+   },
+   {
+    "toolRssMb": 174.12890625,
+    "toolCpuPct": 0.35346791924845095,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.223615,
+    "ts": "2026-10-13T16:02:56.803Z"
+   },
+   {
+    "toolRssMb": 174.12890625,
+    "toolCpuPct": 0.36809276289484205,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.239999,
+    "ts": "2026-10-13T16:03:26.826Z"
+   },
+   {
+    "toolRssMb": 174.12890625,
+    "toolCpuPct": 0.3513891665000999,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.371071,
+    "ts": "2026-10-13T16:03:56.843Z"
+   },
+   {
+    "toolRssMb": 174.12890625,
+    "toolCpuPct": 0.3446642685851319,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.231807,
+    "ts": "2026-10-13T16:04:26.861Z"
+   },
+   {
+    "toolRssMb": 174.12890625,
+    "toolCpuPct": 0.2851089346392165,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.231807,
+    "ts": "2026-10-13T16:04:56.877Z"
+   },
+   {
+    "toolRssMb": 174.12890625,
+    "toolCpuPct": 0.24868052778888447,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.158079,
+    "ts": "2026-10-13T16:05:26.893Z"
+   },
+   {
+    "toolRssMb": 174.12890625,
+    "toolCpuPct": 0.3031987205117953,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.166271,
+    "ts": "2026-10-13T16:05:56.912Z"
+   },
+   {
+    "toolRssMb": 174.12890625,
+    "toolCpuPct": 0.2875349580503396,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.223615,
+    "ts": "2026-10-13T16:06:26.933Z"
+   },
+   {
+    "toolRssMb": 174.13671875,
+    "toolCpuPct": 0.29192484509294425,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.199039,
+    "ts": "2026-10-13T16:06:56.956Z"
+   },
+   {
+    "toolRssMb": 174.13671875,
+    "toolCpuPct": 0.38362982210673596,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.231807,
+    "ts": "2026-10-13T16:07:26.978Z"
+   },
+   {
+    "toolRssMb": 174.13671875,
+    "toolCpuPct": 0.37198801198801196,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.174463,
+    "ts": "2026-10-13T16:07:57.007Z"
+   },
+   {
+    "toolRssMb": 174.13671875,
+    "toolCpuPct": 0.2933839696182291,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.174463,
+    "ts": "2026-10-13T16:08:27.026Z"
+   },
+   {
+    "toolRssMb": 174.13671875,
+    "toolCpuPct": 0.3080751549070558,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.215423,
+    "ts": "2026-10-13T16:08:57.049Z"
+   },
+   {
+    "toolRssMb": 174.13671875,
+    "toolCpuPct": 0.3576139088729017,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.108927,
+    "ts": "2026-10-13T16:09:27.067Z"
+   },
+   {
+    "toolRssMb": 174.13671875,
+    "toolCpuPct": 0.33219424460431657,
+    "browserProcesses": [],
+    "eventLoopDelayP99Ms": 10.108927,
+    "ts": "2026-10-13T16:09:57.087Z"
+   }
+  ]
+ },
+ "measurements": {
+  "probeIntervalMs": 5000,
+  "hops": [
+   {
+    "hopId": "u0:a0:l0:h0",
+    "lapId": "u0:a0:l0",
+    "userId": "u0",
+    "mode": "headless",
+    "hopRoute": "BALI_82->BALI_85",
+    "fromNetworkId": 82,
+    "toNetworkId": 85,
+    "assetKind": "eth",
+    "assetIndex": 0,
+    "outcome": "hop_completed_manual",
+    "depositCount": 137,
+    "bridge": {
+     "txHash": "0xfaketx0001",
+     "blockNumber": "5535309",
+     "minedObservedAt": 1791903443928,
+     "gas": {
+      "blockNumber": "5535309",
+      "gasUsed": "96392",
+      "effectiveGasPrice": "1000251",
+      "l1Fee": "122",
+      "l1GasUsed": "1727",
+      "l1GasPrice": "15",
+      "l1BaseFeeScalar": "1368",
+      "l1BlobBaseFee": "1",
+      "l1BlobBaseFeeScalar": "801949",
+      "daFootprintGasScalar": "400"
+     }
+    },
+    "stages": {
+     "l1InfoTreeIndexAt": 1791904064720,
+     "l1InfoTreeIndex": 374146,
+     "injectedLeafAt": 1791904064807,
+     "injectedLeafIndex": 374146,
+     "claimProofAt": 1791904064842,
+     "polls": 126
+    },
+    "readyObservedAt": 1791904081108,
+    "claim": {
+     "txHash": "0xfaketx0002",
+     "blockNumber": "3460335",
+     "sentAt": 1791904081411,
+     "minedObservedAt": 1791904085456,
+     "gas": {
+      "blockNumber": "3460335",
+      "gasUsed": "150401",
+      "effectiveGasPrice": "1000251",
+      "l1Fee": "1423",
+      "l1GasUsed": "20157",
+      "l1GasPrice": "15",
+      "l1BaseFeeScalar": "1368",
+      "l1BlobBaseFee": "1",
+      "l1BlobBaseFeeScalar": "801949",
+      "daFootprintGasScalar": "400",
+      "wrapperDeployed": false
+     },
+     "claimKind": "eth"
+    }
+   },
+   {
+    "hopId": "u0:a1:l0:h0",
+    "lapId": "u0:a1:l0",
+    "userId": "u0",
+    "mode": "headless",
+    "hopRoute": "BALI_82->BALI_85",
+    "fromNetworkId": 82,
+    "toNetworkId": 85,
+    "assetKind": "erc20",
+    "assetIndex": 1,
+    "tokenOriginNetworkId": 82,
+    "outcome": "hop_completed_manual",
+    "depositCount": 138,
+    "bridge": {
+     "txHash": "0xfaketx0003",
+     "blockNumber": "5535614",
+     "minedObservedAt": 1791903748095,
+     "gas": {
+      "blockNumber": "5535614",
+      "gasUsed": "147185",
+      "effectiveGasPrice": "1000251",
+      "l1Fee": "151",
+      "l1GasUsed": "2142",
+      "l1GasPrice": "15",
+      "l1BaseFeeScalar": "1368",
+      "l1BlobBaseFee": "1",
+      "l1BlobBaseFeeScalar": "801949",
+      "daFootprintGasScalar": "400"
+     }
+    },
+    "stages": {
+     "l1InfoTreeIndexAt": 1791904397988,
+     "l1InfoTreeIndex": 374147,
+     "injectedLeafAt": 1791904398089,
+     "injectedLeafIndex": 374147,
+     "claimProofAt": 1791904398123,
+     "polls": 132
+    },
+    "readyObservedAt": 1791904410124,
+    "claim": {
+     "txHash": "0xfaketx0004",
+     "blockNumber": "3460664",
+     "sentAt": 1791904410454,
+     "minedObservedAt": 1791904414495,
+     "gas": {
+      "blockNumber": "3460664",
+      "gasUsed": "1016660",
+      "effectiveGasPrice": "1000251",
+      "l1Fee": "1487",
+      "l1GasUsed": "21054",
+      "l1GasPrice": "15",
+      "l1BaseFeeScalar": "1368",
+      "l1BlobBaseFee": "1",
+      "l1BlobBaseFeeScalar": "801949",
+      "daFootprintGasScalar": "400",
+      "wrapperDeployed": true
+     },
+     "claimKind": "erc20_wrapper_deploy"
+    }
+   },
+   {
+    "hopId": "u0:a0:l1:h0",
+    "lapId": "u0:a0:l1",
+    "userId": "u0",
+    "mode": "headless",
+    "hopRoute": "BALI_82->BALI_85",
+    "fromNetworkId": 82,
+    "toNetworkId": 85,
+    "assetKind": "eth",
+    "assetIndex": 0,
+    "outcome": "hop_completed_manual",
+    "depositCount": 139,
+    "bridge": {
+     "txHash": "0xfaketx0005",
+     "blockNumber": "5535910",
+     "minedObservedAt": 1791904044087,
+     "gas": {
+      "blockNumber": "5535910",
+      "gasUsed": "98705",
+      "effectiveGasPrice": "1000251",
+      "l1Fee": "122",
+      "l1GasUsed": "1727",
+      "l1GasPrice": "15",
+      "l1BaseFeeScalar": "1368",
+      "l1BlobBaseFee": "1",
+      "l1BlobBaseFeeScalar": "801949",
+      "daFootprintGasScalar": "400"
+     }
+    },
+    "stages": {
+     "l1InfoTreeIndexAt": 1791904699083,
+     "l1InfoTreeIndex": 374148,
+     "injectedLeafAt": 1791904699170,
+     "injectedLeafIndex": 374148,
+     "claimProofAt": 1791904699201,
+     "polls": 133
+    },
+    "readyObservedAt": 1791904711124,
+    "claim": {
+     "txHash": "0xfaketx0006",
+     "blockNumber": "3460965",
+     "sentAt": 1791904711446,
+     "minedObservedAt": 1791904715488,
+     "gas": {
+      "blockNumber": "3460965",
+      "gasUsed": "150411",
+      "effectiveGasPrice": "1000251",
+      "l1Fee": "1423",
+      "l1GasUsed": "20157",
+      "l1GasPrice": "15",
+      "l1BaseFeeScalar": "1368",
+      "l1BlobBaseFee": "1",
+      "l1BlobBaseFeeScalar": "801949",
+      "daFootprintGasScalar": "400",
+      "wrapperDeployed": false
+     },
+     "claimKind": "eth"
+    }
+   },
+   {
+    "hopId": "u0:a1:l1:h0",
+    "lapId": "u0:a1:l1",
+    "userId": "u0",
+    "mode": "headless",
+    "hopRoute": "BALI_82->BALI_85",
+    "fromNetworkId": 82,
+    "toNetworkId": 85,
+    "assetKind": "erc20",
+    "assetIndex": 1,
+    "tokenOriginNetworkId": 82,
+    "outcome": "hop_completed_manual",
+    "depositCount": 140,
+    "bridge": {
+     "txHash": "0xfaketx0007",
+     "blockNumber": "5536214",
+     "minedObservedAt": 1791904348265,
+     "gas": {
+      "blockNumber": "5536214",
+      "gasUsed": "127285",
+      "effectiveGasPrice": "1000251",
+      "l1Fee": "151",
+      "l1GasUsed": "2142",
+      "l1GasPrice": "15",
+      "l1BaseFeeScalar": "1368",
+      "l1BlobBaseFee": "1",
+      "l1BlobBaseFeeScalar": "801949",
+      "daFootprintGasScalar": "400"
+     }
+    },
+    "stages": {
+     "l1InfoTreeIndexAt": 1791904972766,
+     "l1InfoTreeIndex": 374149,
+     "injectedLeafAt": 1791904972987,
+     "injectedLeafIndex": 374149,
+     "claimProofAt": 1791904973024,
+     "polls": 127
+    },
+    "readyObservedAt": 1791905010143,
+    "claim": {
+     "txHash": "0xfaketx0008",
+     "blockNumber": "3461264",
+     "sentAt": 1791905010489,
+     "minedObservedAt": 1791905014530,
+     "gas": {
+      "blockNumber": "3461264",
+      "gasUsed": "228040",
+      "effectiveGasPrice": "1000251",
+      "l1Fee": "1487",
+      "l1GasUsed": "21054",
+      "l1GasPrice": "15",
+      "l1BaseFeeScalar": "1368",
+      "l1BlobBaseFee": "1",
+      "l1BlobBaseFeeScalar": "801949",
+      "daFootprintGasScalar": "400",
+      "wrapperDeployed": false
+     },
+     "claimKind": "erc20_wrapped_mint"
+    }
+   },
+   {
+    "hopId": "u0:a0:l2:h0",
+    "lapId": "u0:a0:l2",
+    "userId": "u0",
+    "mode": "headless",
+    "hopRoute": "BALI_82->BALI_85",
+    "fromNetworkId": 82,
+    "toNetworkId": 85,
+    "assetKind": "eth",
+    "assetIndex": 0,
+    "outcome": "hop_completed_manual",
+    "depositCount": 141,
+    "bridge": {
+     "txHash": "0xfaketx0009",
+     "blockNumber": "5536510",
+     "minedObservedAt": 1791904644314,
+     "gas": {
+      "blockNumber": "5536510",
+      "gasUsed": "98531",
+      "effectiveGasPrice": "1000251",
+      "l1Fee": "122",
+      "l1GasUsed": "1727",
+      "l1GasPrice": "15",
+      "l1BaseFeeScalar": "1368",
+      "l1BlobBaseFee": "1",
+      "l1BlobBaseFeeScalar": "801949",
+      "daFootprintGasScalar": "400"
+     }
+    },
+    "stages": {
+     "l1InfoTreeIndexAt": 1791905334866,
+     "l1InfoTreeIndex": 374150,
+     "injectedLeafAt": 1791905334922,
+     "injectedLeafIndex": 374150,
+     "claimProofAt": 1791905334956,
+     "polls": 140
+    },
+    "readyObservedAt": 1791905371155,
+    "claim": {
+     "txHash": "0xfaketx0010",
+     "blockNumber": "3461625",
+     "sentAt": 1791905371496,
+     "minedObservedAt": 1791905375538,
+     "gas": {
+      "blockNumber": "3461625",
+      "gasUsed": "150411",
+      "effectiveGasPrice": "1000251",
+      "l1Fee": "1423",
+      "l1GasUsed": "20157",
+      "l1GasPrice": "15",
+      "l1BaseFeeScalar": "1368",
+      "l1BlobBaseFee": "1",
+      "l1BlobBaseFeeScalar": "801949",
+      "daFootprintGasScalar": "400",
+      "wrapperDeployed": false
+     },
+     "claimKind": "eth"
+    }
+   },
+   {
+    "hopId": "u0:a0:l0:h1",
+    "lapId": "u0:a0:l0",
+    "userId": "u0",
+    "mode": "headless",
+    "hopRoute": "BALI_85->BALI_82",
+    "fromNetworkId": 85,
+    "toNetworkId": 82,
+    "assetKind": "eth",
+    "assetIndex": 0,
+    "outcome": "hop_completed_manual",
+    "depositCount": 474,
+    "bridge": {
+     "txHash": "0xfaketx0011",
+     "blockNumber": "3460365",
+     "minedObservedAt": 1791904115222,
+     "gas": {
+      "blockNumber": "3460365",
+      "gasUsed": "102635",
+      "effectiveGasPrice": "1000251",
+      "l1Fee": "122",
+      "l1GasUsed": "1727",
+      "l1GasPrice": "15",
+      "l1BaseFeeScalar": "1368",
+      "l1BlobBaseFee": "1",
+      "l1BlobBaseFeeScalar": "801949",
+      "daFootprintGasScalar": "400"
+     }
+    },
+    "stages": {
+     "l1InfoTreeIndexAt": 1791905516568,
+     "l1InfoTreeIndex": 374151,
+     "injectedLeafAt": 1791905607476,
+     "injectedLeafIndex": 374151,
+     "claimProofAt": 1791905607515,
+     "polls": 299
+    },
+    "readyObservedAt": 1791905642166,
+    "claim": {
+     "txHash": "0xfaketx0012",
+     "blockNumber": "5537512",
+     "sentAt": 1791905642523,
+     "minedObservedAt": 1791905646566,
+     "gas": {
+      "blockNumber": "5537512",
+      "gasUsed": "150431",
+      "effectiveGasPrice": "1000251",
+      "l1Fee": "1456",
+      "l1GasUsed": "20612",
+      "l1GasPrice": "15",
+      "l1BaseFeeScalar": "1368",
+      "l1BlobBaseFee": "1",
+      "l1BlobBaseFeeScalar": "801949",
+      "daFootprintGasScalar": "400",
+      "wrapperDeployed": false
+     },
+     "claimKind": "eth"
+    }
+   },
+   {
+    "hopId": "u0:a1:l0:h1",
+    "lapId": "u0:a1:l0",
+    "userId": "u0",
+    "mode": "headless",
+    "hopRoute": "BALI_85->BALI_82",
+    "fromNetworkId": 85,
+    "toNetworkId": 82,
+    "assetKind": "erc20",
+    "assetIndex": 1,
+    "tokenOriginNetworkId": 82,
+    "outcome": "hop_completed_manual",
+    "depositCount": 475,
+    "bridge": {
+     "txHash": "0xfaketx0013",
+     "blockNumber": "3460698",
+     "minedObservedAt": 1791904448372,
+     "gas": {
+      "blockNumber": "3460698",
+      "gasUsed": "139117",
+      "effectiveGasPrice": "1000251",
+      "l1Fee": "151",
+      "l1GasUsed": "2142",
+      "l1GasPrice": "15",
+      "l1BaseFeeScalar": "1368",
+      "l1BlobBaseFee": "1",
+      "l1BlobBaseFeeScalar": "801949",
+      "daFootprintGasScalar": "400"
+     }
+    },
+    "stages": {
+     "l1InfoTreeIndexAt": 1791905516569,
+     "l1InfoTreeIndex": 374151,
+     "injectedLeafAt": 1791905607379,
+     "injectedLeafIndex": 374151,
+     "claimProofAt": 1791905607409,
+     "polls": 233
+    },
+    "readyObservedAt": 1791905642167,
+    "claim": {
+     "txHash": "0xfaketx0014",
+     "blockNumber": "5537516",
+     "sentAt": 1791905646588,
+     "minedObservedAt": 1791905650630,
+     "gas": {
+      "blockNumber": "5537516",
+      "gasUsed": "158281",
+      "effectiveGasPrice": "1000251",
+      "l1Fee": "1536",
+      "l1GasUsed": "21750",
+      "l1GasPrice": "15",
+      "l1BaseFeeScalar": "1368",
+      "l1BlobBaseFee": "1",
+      "l1BlobBaseFeeScalar": "801949",
+      "daFootprintGasScalar": "400",
+      "wrapperDeployed": false
+     },
+     "claimKind": "erc20_origin_unlock"
+    }
+   },
+   {
+    "hopId": "u0:a1:l2:h0",
+    "lapId": "u0:a1:l2",
+    "userId": "u0",
+    "mode": "headless",
+    "hopRoute": "BALI_82->BALI_85",
+    "fromNetworkId": 82,
+    "toNetworkId": 85,
+    "assetKind": "erc20",
+    "assetIndex": 1,
+    "tokenOriginNetworkId": 82,
+    "outcome": "hop_completed_manual",
+    "depositCount": 142,
+    "bridge": {
+     "txHash": "0xfaketx0015",
+     "blockNumber": "5536814",
+     "minedObservedAt": 1791904948503,
+     "gas": {
+      "blockNumber": "5536814",
+      "gasUsed": "129424",
+      "effectiveGasPrice": "1000251",
+      "l1Fee": "151",
+      "l1GasUsed": "2142",
+      "l1GasPrice": "15",
+      "l1BaseFeeScalar": "1368",
+      "l1BlobBaseFee": "1",
+      "l1BlobBaseFeeScalar": "801949",
+      "daFootprintGasScalar": "400"
+     }
+    },
+    "stages": {
+     "l1InfoTreeIndexAt": 1791905653865,
+     "l1InfoTreeIndex": 374152,
+     "injectedLeafAt": 1791905653918,
+     "injectedLeafIndex": 374152,
+     "claimProofAt": 1791905653950,
+     "polls": 143
+    },
+    "readyObservedAt": 1791905672161,
+    "claim": {
+     "txHash": "0xfaketx0016",
+     "blockNumber": "3461926",
+     "sentAt": 1791905672447,
+     "minedObservedAt": 1791905676487,
+     "gas": {
+      "blockNumber": "3461926",
+      "gasUsed": "228050",
+      "effectiveGasPrice": "1000251",
+      "l1Fee": "1487",
+      "l1GasUsed": "21054",
+      "l1GasPrice": "15",
+      "l1BaseFeeScalar": "1368",
+      "l1BlobBaseFee": "1",
+      "l1BlobBaseFeeScalar": "801949",
+      "daFootprintGasScalar": "400",
+      "wrapperDeployed": false
+     },
+     "claimKind": "erc20_wrapped_mint"
+    }
+   },
+   {
+    "hopId": "u0:a0:l3:h0",
+    "lapId": "u0:a0:l3",
+    "userId": "u0",
+    "mode": "headless",
+    "hopRoute": "BALI_82->BALI_85",
+    "fromNetworkId": 82,
+    "toNetworkId": 85,
+    "assetKind": "eth",
+    "assetIndex": 0,
+    "outcome": "hop_completed_manual",
+    "depositCount": 143,
+    "bridge": {
+     "txHash": "0xfaketx0017",
+     "blockNumber": "5537110",
+     "minedObservedAt": 1791905244581,
+     "gas": {
+      "blockNumber": "5537110",
+      "gasUsed": "101192",
+      "effectiveGasPrice": "1000251",
+      "l1Fee": "122",
+      "l1GasUsed": "1727",
+      "l1GasPrice": "15",
+      "l1BaseFeeScalar": "1368",
+      "l1BlobBaseFee": "1",
+      "l1BlobBaseFeeScalar": "801949",
+      "daFootprintGasScalar": "400"
+     }
+    },
+    "stages": {
+     "l1InfoTreeIndexAt": 1791905849134,
+     "l1InfoTreeIndex": 374153,
+     "injectedLeafAt": 1791905849189,
+     "injectedLeafIndex": 374153,
+     "claimProofAt": 1791905849219,
+     "polls": 123
+    },
+    "readyObservedAt": 1791905882177,
+    "claim": {
+     "txHash": "0xfaketx0018",
+     "blockNumber": "3462136",
+     "sentAt": 1791905882505,
+     "minedObservedAt": 1791905886546,
+     "gas": {
+      "blockNumber": "3462136",
+      "gasUsed": "150421",
+      "effectiveGasPrice": "1000251",
+      "l1Fee": "1423",
+      "l1GasUsed": "20157",
+      "l1GasPrice": "15",
+      "l1BaseFeeScalar": "1368",
+      "l1BlobBaseFee": "1",
+      "l1BlobBaseFeeScalar": "801949",
+      "daFootprintGasScalar": "400",
+      "wrapperDeployed": false
+     },
+     "claimKind": "eth"
+    }
+   },
+   {
+    "hopId": "u0:a1:l3:h0",
+    "lapId": "u0:a1:l3",
+    "userId": "u0",
+    "mode": "headless",
+    "hopRoute": "BALI_82->BALI_85",
+    "fromNetworkId": 82,
+    "toNetworkId": 85,
+    "assetKind": "erc20",
+    "assetIndex": 1,
+    "tokenOriginNetworkId": 82,
+    "outcome": "hop_completed_manual",
+    "depositCount": 144,
+    "bridge": {
+     "txHash": "0xfaketx0019",
+     "blockNumber": "5537414",
+     "minedObservedAt": 1791905548825,
+     "gas": {
+      "blockNumber": "5537414",
+      "gasUsed": "125146",
+      "effectiveGasPrice": "1000251",
+      "l1Fee": "151",
+      "l1GasUsed": "2142",
+      "l1GasPrice": "15",
+      "l1BaseFeeScalar": "1368",
+      "l1BlobBaseFee": "1",
+      "l1BlobBaseFeeScalar": "801949",
+      "daFootprintGasScalar": "400"
+     }
+    },
+    "stages": {
+     "l1InfoTreeIndexAt": 1791906238416,
+     "l1InfoTreeIndex": 374157,
+     "injectedLeafAt": 1791906238473,
+     "injectedLeafIndex": 374157,
+     "claimProofAt": 1791906238509,
+     "polls": 140
+    },
+    "readyObservedAt": 1791906268182,
+    "claim": {
+     "txHash": "0xfaketx0020",
+     "blockNumber": "3462522",
+     "sentAt": 1791906268538,
+     "minedObservedAt": 1791906272580,
+     "gas": {
+      "blockNumber": "3462522",
+      "gasUsed": "228018",
+      "effectiveGasPrice": "1000251",
+      "l1Fee": "1458",
+      "l1GasUsed": "21054",
+      "l1GasPrice": "14",
+      "l1BaseFeeScalar": "1368",
+      "l1BlobBaseFee": "1",
+      "l1BlobBaseFeeScalar": "801949",
+      "daFootprintGasScalar": "400",
+      "wrapperDeployed": false
+     },
+     "claimKind": "erc20_wrapped_mint"
+    }
+   },
+   {
+    "hopId": "u0:a1:l1:h1",
+    "lapId": "u0:a1:l1",
+    "userId": "u0",
+    "mode": "headless",
+    "hopRoute": "BALI_85->BALI_82",
+    "fromNetworkId": 85,
+    "toNetworkId": 82,
+    "assetKind": "erc20",
+    "assetIndex": 1,
+    "tokenOriginNetworkId": 82,
+    "outcome": "hop_completed_manual",
+    "depositCount": 477,
+    "bridge": {
+     "txHash": "0xfaketx0021",
+     "blockNumber": "3461298",
+     "minedObservedAt": 1791905048360,
+     "gas": {
+      "blockNumber": "3461298",
+      "gasUsed": "138943",
+      "effectiveGasPrice": "1000251",
+      "l1Fee": "151",
+      "l1GasUsed": "2142",
+      "l1GasPrice": "15",
+      "l1BaseFeeScalar": "1368",
+      "l1BlobBaseFee": "1",
+      "l1BlobBaseFeeScalar": "801949",
+      "daFootprintGasScalar": "400"
+     }
+    },
+    "stages": {
+     "l1InfoTreeIndexAt": 1791906236836,
+     "l1InfoTreeIndex": 374158,
+     "injectedLeafAt": 1791906327558,
+     "injectedLeafIndex": 374158,
+     "claimProofAt": 1791906327593,
+     "polls": 257
+    },
+    "readyObservedAt": 1791906358193,
+    "claim": {
+     "txHash": "0xfaketx0022",
+     "blockNumber": "5538228",
+     "sentAt": 1791906358519,
+     "minedObservedAt": 1791906362564,
+     "gas": {
+      "blockNumber": "5538228",
+      "gasUsed": "158281",
+      "effectiveGasPrice": "1000251",
+      "l1Fee": "1506",
+      "l1GasUsed": "21750",
+      "l1GasPrice": "14",
+      "l1BaseFeeScalar": "1368",
+      "l1BlobBaseFee": "1",
+      "l1BlobBaseFeeScalar": "801949",
+      "daFootprintGasScalar": "400",
+      "wrapperDeployed": false
+     },
+     "claimKind": "erc20_origin_unlock"
+    }
+   },
+   {
+    "hopId": "u0:a0:l1:h1",
+    "lapId": "u0:a0:l1",
+    "userId": "u0",
+    "mode": "headless",
+    "hopRoute": "BALI_85->BALI_82",
+    "fromNetworkId": 85,
+    "toNetworkId": 82,
+    "assetKind": "eth",
+    "assetIndex": 0,
+    "outcome": "hop_completed_manual",
+    "depositCount": 476,
+    "bridge": {
+     "txHash": "0xfaketx0023",
+     "blockNumber": "3460995",
+     "minedObservedAt": 1791904745234,
+     "gas": {
+      "blockNumber": "3460995",
+      "gasUsed": "99835",
+      "effectiveGasPrice": "1000251",
+      "l1Fee": "122",
+      "l1GasUsed": "1727",
+      "l1GasPrice": "15",
+      "l1BaseFeeScalar": "1368",
+      "l1BlobBaseFee": "1",
+      "l1BlobBaseFeeScalar": "801949",
+      "daFootprintGasScalar": "400"
+     }
+    },
+    "stages": {
+     "l1InfoTreeIndexAt": 1791906236701,
+     "l1InfoTreeIndex": 374158,
+     "injectedLeafAt": 1791906327428,
+     "injectedLeafIndex": 374158,
+     "claimProofAt": 1791906327469,
+     "polls": 317
+    },
+    "readyObservedAt": 1791906358193,
+    "claim": {
+     "txHash": "0xfaketx0024",
+     "blockNumber": "5538232",
+     "sentAt": 1791906362589,
+     "minedObservedAt": 1791906366632,
+     "gas": {
+      "blockNumber": "5538232",
+      "gasUsed": "150431",
+      "effectiveGasPrice": "1000251",
+      "l1Fee": "1427",
+      "l1GasUsed": "20612",
+      "l1GasPrice": "14",
+      "l1BaseFeeScalar": "1368",
+      "l1BlobBaseFee": "1",
+      "l1BlobBaseFeeScalar": "801949",
+      "daFootprintGasScalar": "400",
+      "wrapperDeployed": false
+     },
+     "claimKind": "eth"
+    }
+   },
+   {
+    "hopId": "u0:a0:l4:h0",
+    "lapId": "u0:a0:l4",
+    "userId": "u0",
+    "mode": "headless",
+    "hopRoute": "BALI_82->BALI_85",
+    "fromNetworkId": 82,
+    "toNetworkId": 85,
+    "assetKind": "eth",
+    "assetIndex": 0,
+    "outcome": "hop_completed_manual",
+    "depositCount": 145,
+    "bridge": {
+     "txHash": "0xfaketx0025",
+     "blockNumber": "5537709",
+     "minedObservedAt": 1791905843915,
+     "gas": {
+      "blockNumber": "5537709",
+      "gasUsed": "93592",
+      "effectiveGasPrice": "1000251",
+      "l1Fee": "122",
+      "l1GasUsed": "1727",
+      "l1GasPrice": "15",
+      "l1BaseFeeScalar": "1368",
+      "l1BlobBaseFee": "1",
+      "l1BlobBaseFeeScalar": "801949",
+      "daFootprintGasScalar": "400"
+     }
+    },
+    "stages": {
+     "l1InfoTreeIndexAt": 1791906528963,
+     "l1InfoTreeIndex": 374159,
+     "injectedLeafAt": 1791906529035,
+     "injectedLeafIndex": 374159,
+     "claimProofAt": 1791906529073,
+     "polls": 139
+    },
+    "readyObservedAt": 1791906538199,
+    "claim": {
+     "txHash": "0xfaketx0026",
+     "blockNumber": "3462792",
+     "sentAt": 1791906538484,
+     "minedObservedAt": 1791906542529,
+     "gas": {
+      "blockNumber": "3462792",
+      "gasUsed": "150389",
+      "effectiveGasPrice": "1000251",
+      "l1Fee": "1396",
+      "l1GasUsed": "20157",
+      "l1GasPrice": "14",
+      "l1BaseFeeScalar": "1368",
+      "l1BlobBaseFee": "1",
+      "l1BlobBaseFeeScalar": "801949",
+      "daFootprintGasScalar": "400",
+      "wrapperDeployed": false
+     },
+     "claimKind": "eth"
+    }
+   },
+   {
+    "hopId": "u0:a1:l2:h1",
+    "lapId": "u0:a1:l2",
+    "userId": "u0",
+    "mode": "headless",
+    "hopRoute": "BALI_85->BALI_82",
+    "fromNetworkId": 85,
+    "toNetworkId": 82,
+    "assetKind": "erc20",
+    "assetIndex": 1,
+    "tokenOriginNetworkId": 82,
+    "outcome": "hop_completed_manual",
+    "depositCount": 479,
+    "bridge": {
+     "txHash": "0xfaketx0027",
+     "blockNumber": "3461960",
+     "minedObservedAt": 1791905710365,
+     "gas": {
+      "blockNumber": "3461960",
+      "gasUsed": "141778",
+      "effectiveGasPrice": "1000251",
+      "l1Fee": "151",
+      "l1GasUsed": "2142",
+      "l1GasPrice": "15",
+      "l1BaseFeeScalar": "1368",
+      "l1BlobBaseFee": "1",
+      "l1BlobBaseFeeScalar": "801949",
+      "daFootprintGasScalar": "400"
+     }
+    },
+    "stages": {
+     "l1InfoTreeIndexAt": 1791906762668,
+     "l1InfoTreeIndex": 374160,
+     "injectedLeafAt": 1791906858484,
+     "injectedLeafIndex": 374160,
+     "claimProofAt": 1791906858522,
+     "polls": 231
+    },
+    "readyObservedAt": 1791906869206,
+    "claim": {
+     "txHash": "0xfaketx0028",
+     "blockNumber": "5538739",
+     "sentAt": 1791906869552,
+     "minedObservedAt": 1791906873595,
+     "gas": {
+      "blockNumber": "5538739",
+      "gasUsed": "158291",
+      "effectiveGasPrice": "1000251",
+      "l1Fee": "1506",
+      "l1GasUsed": "21750",
+      "l1GasPrice": "14",
+      "l1BaseFeeScalar": "1368",
+      "l1BlobBaseFee": "1",
+      "l1BlobBaseFeeScalar": "801949",
+      "daFootprintGasScalar": "400",
+      "wrapperDeployed": false
+     },
+     "claimKind": "erc20_origin_unlock"
+    }
+   },
+   {
+    "hopId": "u0:a0:l2:h1",
+    "lapId": "u0:a0:l2",
+    "userId": "u0",
+    "mode": "headless",
+    "hopRoute": "BALI_85->BALI_82",
+    "fromNetworkId": 85,
+    "toNetworkId": 82,
+    "assetKind": "eth",
+    "assetIndex": 0,
+    "outcome": "hop_completed_manual",
+    "depositCount": 478,
+    "bridge": {
+     "txHash": "0xfaketx0029",
+     "blockNumber": "3461655",
+     "minedObservedAt": 1791905405279,
+     "gas": {
+      "blockNumber": "3461655",
+      "gasUsed": "101974",
+      "effectiveGasPrice": "1000251",
+      "l1Fee": "122",
+      "l1GasUsed": "1727",
+      "l1GasPrice": "15",
+      "l1BaseFeeScalar": "1368",
+      "l1BlobBaseFee": "1",
+      "l1BlobBaseFeeScalar": "801949",
+      "daFootprintGasScalar": "400"
+     }
+    },
+    "stages": {
+     "l1InfoTreeIndexAt": 1791906760983,
+     "l1InfoTreeIndex": 374160,
+     "injectedLeafAt": 1791906856924,
+     "injectedLeafIndex": 374160,
+     "claimProofAt": 1791906856965,
+     "polls": 291
+    },
+    "readyObservedAt": 1791906869205,
+    "claim": {
+     "txHash": "0xfaketx0030",
+     "blockNumber": "5538743",
+     "sentAt": 1791906873619,
+     "minedObservedAt": 1791906877665,
+     "gas": {
+      "blockNumber": "5538743",
+      "gasUsed": "150441",
+      "effectiveGasPrice": "1000251",
+      "l1Fee": "1427",
+      "l1GasUsed": "20612",
+      "l1GasPrice": "14",
+      "l1BaseFeeScalar": "1368",
+      "l1BlobBaseFee": "1",
+      "l1BlobBaseFeeScalar": "801949",
+      "daFootprintGasScalar": "400",
+      "wrapperDeployed": false
+     },
+     "claimKind": "eth"
+    }
+   },
+   {
+    "hopId": "u0:a0:l3:h1",
+    "lapId": "u0:a0:l3",
+    "userId": "u0",
+    "mode": "headless",
+    "hopRoute": "BALI_85->BALI_82",
+    "fromNetworkId": 85,
+    "toNetworkId": 82,
+    "assetKind": "eth",
+    "assetIndex": 0,
+    "outcome": "hop_completed_manual",
+    "depositCount": 480,
+    "bridge": {
+     "txHash": "0xfaketx0031",
+     "blockNumber": "3462166",
+     "minedObservedAt": 1791905916281,
+     "gas": {
+      "blockNumber": "3462166",
+      "gasUsed": "95557",
+      "effectiveGasPrice": "1000251",
+      "l1Fee": "122",
+      "l1GasUsed": "1727",
+      "l1GasPrice": "15",
+      "l1BaseFeeScalar": "1368",
+      "l1BlobBaseFee": "1",
+      "l1BlobBaseFeeScalar": "801949",
+      "daFootprintGasScalar": "400"
+     }
+    },
+    "stages": {
+     "l1InfoTreeIndexAt": 1791907074965,
+     "l1InfoTreeIndex": 374161,
+     "injectedLeafAt": 1791907165808,
+     "injectedLeafIndex": 374161,
+     "claimProofAt": 1791907165853,
+     "polls": 251
+    },
+    "readyObservedAt": 1791907199215,
+    "claim": {
+     "txHash": "0xfaketx0032",
+     "blockNumber": "5539069",
+     "sentAt": 1791907199574,
+     "minedObservedAt": 1791907203617,
+     "gas": {
+      "blockNumber": "5539069",
+      "gasUsed": "150051",
+      "effectiveGasPrice": "1000251",
+      "l1Fee": "1483",
+      "l1GasUsed": "20599",
+      "l1GasPrice": "16",
+      "l1BaseFeeScalar": "1368",
+      "l1BlobBaseFee": "1",
+      "l1BlobBaseFeeScalar": "801949",
+      "daFootprintGasScalar": "400",
+      "wrapperDeployed": false
+     },
+     "claimKind": "eth"
+    }
+   },
+   {
+    "hopId": "u0:a0:l4:h1",
+    "lapId": "u0:a0:l4",
+    "userId": "u0",
+    "mode": "headless",
+    "hopRoute": "BALI_85->BALI_82",
+    "fromNetworkId": 85,
+    "toNetworkId": 82,
+    "assetKind": "eth",
+    "assetIndex": 0,
+    "outcome": "hop_completed_manual",
+    "depositCount": 482,
+    "bridge": {
+     "txHash": "0xfaketx0033",
+     "blockNumber": "3462822",
+     "minedObservedAt": 1791906572296,
+     "gas": {
+      "blockNumber": "3462822",
+      "gasUsed": "97696",
+      "effectiveGasPrice": "1000251",
+      "l1Fee": "119",
+      "l1GasUsed": "1727",
+      "l1GasPrice": "14",
+      "l1BaseFeeScalar": "1368",
+      "l1BlobBaseFee": "1",
+      "l1BlobBaseFeeScalar": "801949",
+      "daFootprintGasScalar": "400"
+     }
+    },
+    "stages": {
+     "l1InfoTreeIndexAt": 1791907662170,
+     "l1InfoTreeIndex": 374162,
+     "injectedLeafAt": 1791907758029,
+     "injectedLeafIndex": 374162,
+     "claimProofAt": 1791907758069,
+     "polls": 238
+    },
+    "readyObservedAt": 1791907769259,
+    "claim": {
+     "txHash": "0xfaketx0034",
+     "blockNumber": "5539639",
+     "sentAt": 1791907769577,
+     "minedObservedAt": 1791907773621,
+     "gas": {
+      "blockNumber": "5539639",
+      "gasUsed": "150061",
+      "effectiveGasPrice": "1000251",
+      "l1Fee": "1483",
+      "l1GasUsed": "20599",
+      "l1GasPrice": "16",
+      "l1BaseFeeScalar": "1368",
+      "l1BlobBaseFee": "1",
+      "l1BlobBaseFeeScalar": "801949",
+      "daFootprintGasScalar": "400",
+      "wrapperDeployed": false
+     },
+     "claimKind": "eth"
+    }
+   },
+   {
+    "hopId": "u0:a1:l3:h1",
+    "lapId": "u0:a1:l3",
+    "userId": "u0",
+    "mode": "headless",
+    "hopRoute": "BALI_85->BALI_82",
+    "fromNetworkId": 85,
+    "toNetworkId": 82,
+    "assetKind": "erc20",
+    "assetIndex": 1,
+    "tokenOriginNetworkId": 82,
+    "outcome": "hop_completed_manual",
+    "depositCount": 481,
+    "bridge": {
+     "txHash": "0xfaketx0035",
+     "blockNumber": "3462556",
+     "minedObservedAt": 1791906306378,
+     "gas": {
+      "blockNumber": "3462556",
+      "gasUsed": "131865",
+      "effectiveGasPrice": "1000251",
+      "l1Fee": "148",
+      "l1GasUsed": "2142",
+      "l1GasPrice": "14",
+      "l1BaseFeeScalar": "1368",
+      "l1BlobBaseFee": "1",
+      "l1BlobBaseFeeScalar": "801949",
+      "daFootprintGasScalar": "400"
+     }
+    },
+    "stages": {
+     "l1InfoTreeIndexAt": 1791907662168,
+     "l1InfoTreeIndex": 374162,
+     "injectedLeafAt": 1791907758157,
+     "injectedLeafIndex": 374162,
+     "claimProofAt": 1791907758199,
+     "polls": 291
+    },
+    "readyObservedAt": 1791907769258,
+    "claim": {
+     "txHash": "0xfaketx0036",
+     "blockNumber": "5539643",
+     "sentAt": 1791907773645,
+     "minedObservedAt": 1791907777691,
+     "gas": {
+      "blockNumber": "5539643",
+      "gasUsed": "153473",
+      "effectiveGasPrice": "1000251",
+      "l1Fee": "1595",
+      "l1GasUsed": "22151",
+      "l1GasPrice": "16",
+      "l1BaseFeeScalar": "1368",
+      "l1BlobBaseFee": "1",
+      "l1BlobBaseFeeScalar": "801949",
+      "daFootprintGasScalar": "400",
+      "wrapperDeployed": false
+     },
+     "claimKind": "erc20_origin_unlock"
+    }
+   }
+  ],
+  "claimGas": [
+   {
+    "toNetworkId": 82,
+    "claimKind": "erc20_origin_unlock",
+    "n": 4,
+    "gasUsed": {
+     "n": 4,
+     "min": "153473",
+     "median": "158281",
+     "max": "158291"
+    },
+    "effectiveGasPrice": {
+     "n": 4,
+     "min": "1000251",
+     "median": "1000251",
+     "max": "1000251"
+    },
+    "l1Fee": {
+     "n": 4,
+     "min": "1506",
+     "median": "1521",
+     "max": "1595"
+    },
+    "totalFeeWei": {
+     "n": 4,
+     "min": "153511523318",
+     "median": "158320730052",
+     "max": "158330732547"
+    }
+   },
+   {
+    "toNetworkId": 82,
+    "claimKind": "eth",
+    "n": 5,
+    "gasUsed": {
+     "n": 5,
+     "min": "150051",
+     "median": "150431",
+     "max": "150441"
+    },
+    "effectiveGasPrice": {
+     "n": 5,
+     "min": "1000251",
+     "median": "1000251",
+     "max": "1000251"
+    },
+    "l1Fee": {
+     "n": 5,
+     "min": "1427",
+     "median": "1456",
+     "max": "1483"
+    },
+    "totalFeeWei": {
+     "n": 5,
+     "min": "150088664284",
+     "median": "150468759608",
+     "max": "150478762118"
+    }
+   },
+   {
+    "toNetworkId": 85,
+    "claimKind": "erc20_wrapped_mint",
+    "n": 3,
+    "gasUsed": {
+     "n": 3,
+     "min": "228018",
+     "median": "228040",
+     "max": "228050"
+    },
+    "effectiveGasPrice": {
+     "n": 3,
+     "min": "1000251",
+     "median": "1000251",
+     "max": "1000251"
+    },
+    "l1Fee": {
+     "n": 3,
+     "min": "1458",
+     "median": "1487",
+     "max": "1487"
+    },
+    "totalFeeWei": {
+     "n": 3,
+     "min": "228075233976",
+     "median": "228097239527",
+     "max": "228107242037"
+    }
+   },
+   {
+    "toNetworkId": 85,
+    "claimKind": "erc20_wrapper_deploy",
+    "n": 1,
+    "gasUsed": {
+     "n": 1,
+     "min": "1016660",
+     "median": "1016660",
+     "max": "1016660"
+    },
+    "effectiveGasPrice": {
+     "n": 1,
+     "min": "1000251",
+     "median": "1000251",
+     "max": "1000251"
+    },
+    "l1Fee": {
+     "n": 1,
+     "min": "1487",
+     "median": "1487",
+     "max": "1487"
+    },
+    "totalFeeWei": {
+     "n": 1,
+     "min": "1016915183147",
+     "median": "1016915183147",
+     "max": "1016915183147"
+    }
+   },
+   {
+    "toNetworkId": 85,
+    "claimKind": "eth",
+    "n": 5,
+    "gasUsed": {
+     "n": 5,
+     "min": "150389",
+     "median": "150411",
+     "max": "150421"
+    },
+    "effectiveGasPrice": {
+     "n": 5,
+     "min": "1000251",
+     "median": "1000251",
+     "max": "1000251"
+    },
+    "l1Fee": {
+     "n": 5,
+     "min": "1396",
+     "median": "1423",
+     "max": "1423"
+    },
+    "totalFeeWei": {
+     "n": 5,
+     "min": "150426749035",
+     "median": "150448754584",
+     "max": "150458757094"
+    }
+   }
+  ],
+  "stageLatency": [
+   {
+    "route": "BALI_82->BALI_85",
+    "hops": 9,
+    "deltas": {
+     "l1InfoTreeIndex": {
+      "n": 9,
+      "min": 604553,
+      "median": 654996,
+      "max": 705362
+     },
+     "injectedLeaf": {
+      "n": 9,
+      "min": 604608,
+      "median": 655083,
+      "max": 705415
+     },
+     "claimProof": {
+      "n": 9,
+      "min": 604638,
+      "median": 655114,
+      "max": 705447
+     },
+     "trackerLag": {
+      "n": 9,
+      "min": 9126,
+      "median": 18211,
+      "max": 37119
+     },
+     "claimTx": {
+      "n": 9,
+      "min": 4040,
+      "median": 4042,
+      "max": 4045
+     },
+     "endToEnd": {
+      "n": 9,
+      "min": 641528,
+      "median": 671401,
+      "max": 731224
+     }
+    }
+   },
+   {
+    "route": "BALI_85->BALI_82",
+    "hops": 9,
+    "deltas": {
+     "l1InfoTreeIndex": {
+      "n": 9,
+      "min": 1052303,
+      "median": 1188476,
+      "max": 1491467
+     },
+     "injectedLeaf": {
+      "n": 9,
+      "min": 1148119,
+      "median": 1279198,
+      "max": 1582194
+     },
+     "claimProof": {
+      "n": 9,
+      "min": 1148157,
+      "median": 1279233,
+      "max": 1582235
+     },
+     "trackerLag": {
+      "n": 9,
+      "min": 10684,
+      "median": 30600,
+      "max": 34758
+     },
+     "claimTx": {
+      "n": 9,
+      "min": 4042,
+      "median": 4043,
+      "max": 4046
+     },
+     "endToEnd": {
+      "n": 9,
+      "min": 1163230,
+      "median": 1314204,
+      "max": 1621398
+     }
+    }
+   }
+  ],
+  "excludedHops": 0
+ }
+}

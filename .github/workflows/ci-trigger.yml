@@ -13,3 +13,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: 0xPolygon/pipelines/.github/actions/ci@main
+
+      # The runtime E2E key override (app/context/e2eAccount.ts) is only safe
+      # while NEXT_PUBLIC_E2E_ENABLED stays out of every production build
+      # surface. That guarantee is otherwise implicit (the app compares the
+      # var to the literal 'true' and every current surface simply omits it);
+      # this makes it explicit at review time. Pure node, no install needed.
+      - name: Assert production builds never enable E2E
+        run: node ./scripts/checkProdE2eOff.mjs

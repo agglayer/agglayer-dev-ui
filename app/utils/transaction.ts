@@ -23,7 +23,52 @@ export const isNativeToken = (address: string) => {
   return address === '0x0000000000000000000000000000000000000000';
 };
 
-export const mapTransactionRequest = (params: TransactionParams) => {
+// Gas headroom added on top of the SDK's estimate for a **bridge send only**
+// (finding C5, loadtest/DESIGN.md §9.4; measured in
+// loadtest/CAPACITY-REPORT.md §5.3).
+//
+// The UI bridges with `forceUpdateGlobalExitRoot: true`, so `bridgeAsset` calls
+// into GlobalExitRootV2. When the global exit root moves between the estimate
+// and inclusion, that inner call costs more than the estimate saw and runs OUT
+// OF GAS. EIP-150's 63/64 rule leaves the OUTER frame enough gas to return, so
+// the receipt is a plain revert with `gasUsed` at only ~97% of the limit — it
+// does **not** look like an out-of-gas failure from the receipt alone, and
+// `eth_call` replayed against the parent block succeeds. The cause is only
+// visible in a `callTracer` trace, whose innermost frame reads `out of gas`.
+//
+// Sized from measurement, not taste (compose devnet, browser-only, 20 users, an
+// otherwise idle system): 46 of 1019 L1 `bridgeAsset` calls — 4.5% — reverted
+// this way. Successful calls used up to 240,603 gas, while the bufferless
+// estimates that reverted carried limits of 186,507 (median) / 231,281 (max).
+// A conventional 10–25% multiplier does not cover that gap; this is the same
+// +300,000 the headless load-test worker applies as `gas.bridgeGasOffset`,
+// which saw zero such reverts across ~40,000 bridges in the same campaign.
+//
+// A gas limit is a cap, not a charge — unused gas is refunded — so the only
+// cost is that the sender must hold `gasLimit * maxFeePerGas` at send time.
+// (`BigInt(...)` rather than a `300_000n` literal: tsconfig targets < ES2020.)
+export const BRIDGE_GAS_BUFFER = BigInt(300_000);
+
+// Claims race too, not through the global exit root but through the wrapped
+// token's mint state: a first mint of a wrapped token costs about 228k gas
+// against about 194k for a repeat, and concurrent claims change that state
+// between estimate and execution. In a Bali load test (30 + 20 wallets), 4 of
+// 64 85>82 wrapped-token claims reverted out of gas with a limit of 202,542
+// (gas used 199,823 at the point of failure), and up to 245,542 gas was needed
+// by claims that succeeded. 202,542 + 60,000 clears that worst case with ~17k
+// to spare, and 0 of 1,779 claims reverted once the headless worker applied
+// the same +60,000 (`gas.claimGasOffset`). Same refund argument as above.
+export const CLAIM_GAS_BUFFER = BigInt(60_000);
+
+// `options.gasBuffer` is added to the SDK's `gas` when (and only when) the SDK
+// supplied one. If it ever stops supplying `gas`, no `gas` key is emitted at
+// all and viem re-estimates at send time — bufferless, so the C5 revert above
+// would return on that path. That is asserted by a test rather than silently
+// assumed.
+export const mapTransactionRequest = (
+  params: TransactionParams,
+  options?: { gasBuffer?: bigint }
+) => {
   const to = isValidEthereumAddress(params.to) ? params.to : undefined;
   if (!to) throw new Error('Invalid transaction recipient');
 
@@ -33,22 +78,42 @@ export const mapTransactionRequest = (params: TransactionParams) => {
   return {
     to,
     data,
-    value: toBigInt(params.value)
+    value: toBigInt(params.value),
+    // Forward the SDK's own gas estimate to skip a redundant client-side
+    // eth_estimateGas (finding C4, loadtest/DESIGN.md §9.3) -- the SDK's
+    // estimator is a bare, bufferless pass-through (see
+    // @agglayer/sdk src/native/bridge/build.ts's estimateGas), which is why a
+    // call site that races the global exit root has to add its own headroom
+    // via `options.gasBuffer`. Deliberately conditional so a
+    // TransactionParams without `gas` produces no `gas` key at all, matching
+    // today's behaviour exactly. `params.gas` is a string on the SDK type;
+    // viem's request wants a bigint.
+    //
+    // `nonce` is deliberately NOT forwarded here: unlike gas, a nonce fixed at
+    // build time can go stale while a human spends seconds-to-minutes signing
+    // in their wallet, colliding with or gapping other transactions.
+    //
+    // Finding C5 (forwarding a bufferless estimate does not stop a
+    // forceUpdateGlobalExitRoot bridge running OutOfGas) is closed by
+    // `options.gasBuffer` — see BRIDGE_GAS_BUFFER above. It is opt-in per call
+    // site, not applied here unconditionally: the bridge send races the global
+    // exit root (BRIDGE_GAS_BUFFER) and the claim send races the wrapped
+    // token's mint state (CLAIM_GAS_BUFFER). Approve is a plain ERC20 approve
+    // and showed no out-of-gas revert in either measurement, so its estimate
+    // is left exactly as it was.
+    ...(params.gas ? { gas: BigInt(params.gas) + (options?.gasBuffer ?? BigInt(0)) } : {})
   };
 };
 
-export const resolveLeafIndex = (tx: Transaction): number =>
-  tx.leafIndexForProof != null ? tx.leafIndexForProof : tx.leafIndex;
+// For `Bridge.isClaimed` ONLY — the contract's leafIndex arg is the local
+// deposit index (`deposit_count`), NOT the L1-info-tree index aggkit's
+// claim-proof needs. `tx.leafIndex` already carries
+// `deposit_count` (see AggkitBridgeAggregator.toTransaction); the L1-info-tree
+// index is a *separate*, freshly-probed value from
+// `AggkitBridgeAggregator.getClaimInputs`, never read off the row here.
+export const resolveLeafIndex = (tx: Transaction): number => tx.leafIndex;
 
-const GLOBAL_INDEX_MAINNET_FLAG = BigInt(2) ** BigInt(64);
-const GLOBAL_INDEX_NETWORK_OFFSET = BigInt(2) ** BigInt(32);
 const ZERO_HEX: Hex = '0x';
-
-// See https://github.com/agglayer/sdk/blob/main/src/native/bridge/util.ts
-export const computeGlobalIndex = (depositCount: number, sourceNetworkId: number): bigint =>
-  sourceNetworkId === 0
-    ? BigInt(depositCount) + GLOBAL_INDEX_MAINNET_FLAG
-    : BigInt(depositCount) + BigInt(sourceNetworkId - 1) * GLOBAL_INDEX_NETWORK_OFFSET;
 
 export const buildClaimAssetParams = (params: {
   transaction: Transaction;
@@ -57,10 +122,23 @@ export const buildClaimAssetParams = (params: {
   const { transaction, proof } = params;
   const metadata = isHex(transaction.metadata) ? transaction.metadata : ZERO_HEX;
 
+  // AggkitTransaction.globalIndex (see @agglayer/sdk) is the SDK's own,
+  // authoritative value -- aggkit computes it and ships it on the wire, so
+  // there's no need to re-derive it client-side from depositCount/
+  // sourceNetwork (that re-derivation duplicated the SDK's own formula --
+  // see https://github.com/agglayer/sdk/blob/main/src/native/bridge/util.ts
+  // -- and risked drifting from it). `Transaction.globalIndex` is only
+  // optional on the app's own type for older/synthetic rows; toTransaction
+  // (activity.ts) always sets it from the wire's bridge.global_index, so a
+  // real claim never reaches this without it.
+  if (transaction.globalIndex === undefined) {
+    throw new Error('Transaction is missing globalIndex');
+  }
+
   return {
     smtProofLocalExitRoot: proof.proof_local_exit_root,
     smtProofRollupExitRoot: proof.proof_rollup_exit_root,
-    globalIndex: computeGlobalIndex(transaction.depositCount, transaction.sourceNetwork),
+    globalIndex: BigInt(transaction.globalIndex),
     mainnetExitRoot: proof.l1_info_tree_leaf.mainnet_exit_root,
     rollupExitRoot: proof.l1_info_tree_leaf.rollup_exit_root,
     originNetwork: transaction.originTokenNetwork,
