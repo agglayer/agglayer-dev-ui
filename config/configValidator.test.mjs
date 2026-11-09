@@ -288,3 +288,16 @@ describe('parseConfigOrThrow — chains.<key>.autoclaim (optional per-chain auto
     expect(() => parseConfigOrThrow(config)).toThrow();
   });
 });
+
+describe('parseConfigOrThrow — logoBadge (optional)', () => {
+  it('accepts a config with logoBadge, with an empty string, or without it', () => {
+    expect(() => parseConfigOrThrow({ ...buildConfig(), logoBadge: 'MAINNET' })).not.toThrow();
+    expect(() => parseConfigOrThrow({ ...buildConfig(), logoBadge: '' })).not.toThrow();
+    expect(() => parseConfigOrThrow(buildConfig())).not.toThrow();
+  });
+
+  it('rejects a non-string or too long logoBadge', () => {
+    expect(() => parseConfigOrThrow({ ...buildConfig(), logoBadge: 5 })).toThrow();
+    expect(() => parseConfigOrThrow({ ...buildConfig(), logoBadge: 'x'.repeat(17) })).toThrow();
+  });
+});

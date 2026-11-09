@@ -205,6 +205,9 @@ export const walletConnectConfigSchema = z
 export const jsonConfigSchema = z
   .object({
     autoclaim: autoclaimConfigSchema.optional(),
+    // Text of the small badge next to the logo in the header. Omitted -> "DEV"
+    // (the previous hardcoded label); an empty string hides the badge.
+    logoBadge: z.string().trim().max(16).optional(),
     externalLinks: z
       .object({
         privacyPolicy: optionalUrlString,

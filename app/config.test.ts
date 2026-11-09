@@ -497,3 +497,19 @@ describe('buildAppConfig — chains.<key>.autoclaim (per-chain autoclaim overrid
     );
   });
 });
+
+describe('buildAppConfig — logoBadge', () => {
+  it('defaults to "DEV" when omitted', () => {
+    expect(buildAppConfig(buildConfigJson()).logoBadge).toBe('DEV');
+  });
+
+  it('uses the configured text', () => {
+    expect(buildAppConfig({ ...buildConfigJson(), logoBadge: 'MAINNET' }).logoBadge).toBe(
+      'MAINNET'
+    );
+  });
+
+  it('keeps an empty string (hides the badge)', () => {
+    expect(buildAppConfig({ ...buildConfigJson(), logoBadge: '' }).logoBadge).toBe('');
+  });
+});

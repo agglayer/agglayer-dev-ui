@@ -32,8 +32,12 @@ export const customRpcUrls: Record<string, { url: string }[]> = {
   // 'eip155:1234': [{ url: 'https://rpc.example.org' }],
 };
 
+const DEFAULT_LOGO_BADGE = 'DEV';
+
 export type ResolvedAppConfig = {
   autoclaim: AutoclaimConfig;
+  // Header logo badge text; '' hides it. See config.json's logoBadge.
+  logoBadge: string;
   externalLinks: Readonly<{
     PRIVACY_POLICY: string;
     TERMS_OF_USE: string;
@@ -274,6 +278,7 @@ export const buildAppConfig = (configJson: JsonConfig): ResolvedAppConfig => {
 
   return {
     autoclaim: resolveAutoclaimConfig(configJson.autoclaim),
+    logoBadge: configJson.logoBadge ?? DEFAULT_LOGO_BADGE,
     externalLinks: Object.freeze({
       PRIVACY_POLICY: configJson.externalLinks.privacyPolicy,
       TERMS_OF_USE: configJson.externalLinks.termsOfUse,
@@ -320,6 +325,7 @@ export const getAppConfig = (): ResolvedAppConfig => {
 // ---- narrow accessors: one per pre-refactor export, so call sites are
 // one-token edits (identifier -> accessor call) ----
 export const getAutoclaimConfig = (): AutoclaimConfig => getAppConfig().autoclaim;
+export const getLogoBadge = (): string => getAppConfig().logoBadge;
 export const getExternalLinks = (): ResolvedAppConfig['externalLinks'] =>
   getAppConfig().externalLinks;
 export const getAppModeConfig = (): Record<AppMode, AppModeConfig> => getAppConfig().appModeConfig;
