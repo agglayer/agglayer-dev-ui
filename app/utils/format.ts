@@ -44,3 +44,19 @@ export const toBigInt = (value?: string) => {
     return undefined;
   }
 };
+
+const MAX_ERROR_SUMMARY_LENGTH = 200;
+
+// Short, single-line, tag-free summary of an unknown error for UI tooltips:
+// a failed RPC call can carry a whole HTML page (e.g. a Cloudflare block) as its message.
+export const summarizeError = (error: unknown): string => {
+  const raw = error instanceof Error ? error.message : String(error ?? '');
+  const text = raw
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!text) return 'Unknown error';
+  return text.length > MAX_ERROR_SUMMARY_LENGTH
+    ? `${text.slice(0, MAX_ERROR_SUMMARY_LENGTH)}…`
+    : text;
+};

@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react';
 
+import { Tooltip } from '@/app/components/ui/tooltip';
 import { bn } from '@/app/utils/bigNumber';
 import { cn } from '@/app/utils/common';
 import { useMemo } from 'react';
@@ -17,6 +18,9 @@ interface AmountInputProps {
   onChange: (value: string) => void;
   placeholder?: string;
   balanceText?: string;
+  // When set, the balance could not be read: show an error marker (with this detail in a
+  // tooltip) instead of balanceText, so a failed read isn't mistaken for a real 0 balance.
+  balanceError?: string;
   tokenLabel?: string;
   tokenIcon?: ReactNode;
   onClick?: () => void;
@@ -34,6 +38,7 @@ export const AmountInput = ({
   onChange,
   placeholder = '0',
   balanceText,
+  balanceError,
   tokenLabel,
   tokenIcon,
   onClick,
@@ -118,9 +123,22 @@ export const AmountInput = ({
         )}
       </div>
 
-      {(balanceText || quickActions.length > 0) && (
+      {(balanceText || balanceError || quickActions.length > 0) && (
         <div className="flex items-center justify-between text-sm">
-          {balanceText ? <span className="text-grey">Balance: {balanceText}</span> : <span />}
+          {balanceError ? (
+            <span className="text-grey" data-test-id="balance-error">
+              Balance:{' '}
+              <Tooltip content={`Couldn't load balance: ${balanceError}`}>
+                <span tabIndex={0} className="cursor-help font-semibold text-red">
+                  Error ⓘ
+                </span>
+              </Tooltip>
+            </span>
+          ) : balanceText ? (
+            <span className="text-grey">Balance: {balanceText}</span>
+          ) : (
+            <span />
+          )}
           {quickActions.length > 0 && (
             <div className="flex flex-wrap gap-2 justify-end">
               {quickActions.map((action) => (

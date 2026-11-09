@@ -98,7 +98,12 @@ export const useBridge = () => {
     [address]
   );
 
-  const { rawBalance, isLoading: isLoadingBalance } = useTokenBalance({
+  const {
+    rawBalance,
+    isLoading: isLoadingBalance,
+    isError: isBalanceError,
+    error: balanceError
+  } = useTokenBalance({
     token: selectedToken,
     userAddress: walletAddress,
     enabled: Boolean(selectedToken && walletAddress)
@@ -231,11 +236,13 @@ export const useBridge = () => {
       validationError,
       isValid: validationError === null,
       isLoadingBalance,
+      isBalanceError,
       isLoadingAllowance: isNative ? false : isLoadingAllowance,
       needsApproval: isNative ? false : needsApproval
     },
     balance: {
       raw: rawBalance,
+      error: isBalanceError ? balanceError : null,
       amountWei,
       maxNativeAmount,
       refetchAllowance

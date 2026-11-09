@@ -7,7 +7,7 @@ import { AmountInput } from '@/app/components/ui/amountInput';
 import { BadgeImageFallback } from '@/app/components/ui/badgeImageFallback';
 import { Dropdown } from '@/app/components/ui/dropdown';
 import { ZERO_ADDRESS } from '@/app/types/bridge';
-import { normalize } from '@/app/utils/format';
+import { normalize, summarizeError } from '@/app/utils/format';
 import { formatTokenBalance, getTokenLogoUrl, portionOfBalance } from '@/app/utils/tokens';
 import { useMemo } from 'react';
 
@@ -19,6 +19,7 @@ interface BridgeFromSectionProps {
   onAmountChange: (value: string) => void;
   rawBalance?: string;
   balancesLoading: boolean;
+  balanceError?: unknown;
   selectedToken?: Token;
   onOpenTokenSelector: () => void;
   maxNativeAmount?: string;
@@ -32,6 +33,7 @@ export const BridgeFromSection = ({
   onAmountChange,
   rawBalance,
   balancesLoading,
+  balanceError,
   selectedToken,
   onOpenTokenSelector,
   maxNativeAmount
@@ -72,6 +74,7 @@ export const BridgeFromSection = ({
           onChange={onAmountChange}
           placeholder="0"
           balanceText={balancesLoading ? '...' : balanceText}
+          balanceError={balanceError ? summarizeError(balanceError) : undefined}
           inputTestId="bridge-amount-input"
           tokenLabel={selectedToken?.symbol ?? 'Select token'}
           tokenButtonTestId="token-selector-trigger"
