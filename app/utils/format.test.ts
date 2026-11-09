@@ -14,6 +14,18 @@ describe('summarizeError', () => {
     );
   });
 
+  it('redacts URLs (RPC URLs may embed an API key)', () => {
+    const msg =
+      'HTTP request failed.\nURL: https://rpc.example.xyz/SECRETTOKEN123456\nRequest body: {"method":"eth_call"}';
+    const out = summarizeError(new Error(msg));
+    expect(out).toContain('[redacted URL]');
+    expect(out).not.toContain('SECRETTOKEN123456');
+    expect(out).not.toContain('rpc.example.xyz');
+    expect(summarizeError(new Error('failed wss://ws.example.io/KEY999'))).toBe(
+      'failed [redacted URL]'
+    );
+  });
+
   it('truncates long messages', () => {
     const out = summarizeError(new Error('x'.repeat(500)));
     expect(out).toHaveLength(201);

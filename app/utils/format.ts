@@ -47,12 +47,14 @@ export const toBigInt = (value?: string) => {
 
 const MAX_ERROR_SUMMARY_LENGTH = 200;
 
-// Short, single-line, tag-free summary of an unknown error for UI tooltips:
-// a failed RPC call can carry a whole HTML page (e.g. a Cloudflare block) as its message.
+// Short, single-line, tag-free, URL-free summary of an unknown error for UI tooltips:
+// a failed RPC call can carry a whole HTML page (e.g. a Cloudflare block) as its message,
+// and the request URL, which for many RPC providers embeds the API key/token.
 export const summarizeError = (error: unknown): string => {
   const raw = error instanceof Error ? error.message : String(error ?? '');
   const text = raw
     .replace(/<[^>]*>/g, ' ')
+    .replace(/\b(?:https?|wss?):\/\/[^\s"'<>)]+/gi, '[redacted URL]')
     .replace(/\s+/g, ' ')
     .trim();
   if (!text) return 'Unknown error';
