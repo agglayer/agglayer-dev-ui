@@ -204,4 +204,27 @@ describe('TransactionListItem', () => {
     expect(onClaim).toHaveBeenCalledWith(transaction);
     expect(onSelect).not.toHaveBeenCalled();
   });
+
+  it('shows "Network N (disabled)" and greys the row when the destination network is not an enabled chain', () => {
+    const transaction = makeTransaction({ destinationNetwork: 99, status: 'READY_TO_CLAIM' });
+    const { container, queryByText } = render(
+      <TransactionListItem transaction={transaction} claimStep="idle" />
+    );
+
+    const dest = container.querySelector('[data-test-id="destination-network-disabled"]');
+    expect(dest).toHaveTextContent('Network 99 (disabled)');
+    expect(queryByText('Devnet L1')).toBeInTheDocument();
+    const row = container.querySelector(
+      `[data-test-id="transaction-row-${transaction.transactionHash}"]`
+    );
+    expect(row).toHaveClass('bg-surface-muted');
+    // Can't be claimed from here: the destination chain isn't available.
+    expect(container.querySelector('[data-test-id="claim-tokens-button"]')).toBeNull();
+  });
+
+  it('does not mark the row disabled when the destination network is an enabled chain', () => {
+    const { container } = render(<TransactionListItem transaction={makeTransaction()} />);
+    expect(container.querySelector('[data-test-id="destination-network-disabled"]')).toBeNull();
+    expect(container.querySelector('[data-dest-disabled]')).toBeNull();
+  });
 });
