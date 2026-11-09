@@ -253,6 +253,17 @@ The haproxy proxy (`agglayer-dev-ui-proxy-00X`) routes RPC calls by path:
 
 The dev-ui app automatically constructs these paths from the configured chains and `appModes.configs.devnet.chainKeys`; no manual URL construction is needed.
 
+## Logo badge: `logoBadge`
+
+```json
+{
+  "logoBadge": "MAINNET"
+}
+```
+
+Optional text for the small badge shown next to the Agglayer logo in the header (max 16
+characters). If omitted it defaults to `DEV`; set it to an empty string to hide the badge.
+
 ## External Links
 
 ```json
