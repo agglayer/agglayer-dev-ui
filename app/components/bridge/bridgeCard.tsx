@@ -180,6 +180,7 @@ const BridgeCardContent = () => {
           onAmountChange={actions.setAmount}
           rawBalance={balance.raw}
           balancesLoading={status.isLoadingBalance}
+          balanceError={balance.error}
           selectedToken={form.selectedToken}
           onOpenTokenSelector={() => setTokenModalOpen(true)}
           maxNativeAmount={balance.maxNativeAmount}

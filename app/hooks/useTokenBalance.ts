@@ -39,7 +39,8 @@ export const useTokenBalance = ({ token, userAddress, enabled = true }: UseToken
   const {
     data: rawBalance,
     isLoading,
-    isError
+    isError,
+    error
   } = useQuery({
     queryKey: ['token-balance', mode, chainId, tokenAddress, userAddress, wethTokenAddress],
     enabled: canFetch,
@@ -66,5 +67,5 @@ export const useTokenBalance = ({ token, userAddress, enabled = true }: UseToken
     }
   });
 
-  return { rawBalance, isLoading, isError };
+  return { rawBalance, isLoading, isError, error };
 };

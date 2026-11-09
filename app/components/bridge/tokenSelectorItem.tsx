@@ -3,12 +3,13 @@
 import type { Token } from '@/app/types/token';
 
 import { BadgeImageFallback } from '@/app/components/ui/badgeImageFallback';
+import { Tooltip } from '@/app/components/ui/tooltip';
 import { useAppMode } from '@/app/context/appMode';
 import { useWallet } from '@/app/context/walletContext';
 import { useTokenBalance } from '@/app/hooks/useTokenBalance';
 import { getChainById } from '@/app/utils/chains';
 import { cn } from '@/app/utils/common';
-import { normalize } from '@/app/utils/format';
+import { normalize, summarizeError } from '@/app/utils/format';
 import { formatTokenBalance, getTokenLogoUrl } from '@/app/utils/tokens';
 
 interface TokenSelectorItemProps {
@@ -23,7 +24,7 @@ export const TokenSelectorItem = ({ token, selectedToken, onSelect }: TokenSelec
   const isConnected = status === 'connected';
   const userAddress = isConnected ? address : undefined;
 
-  const { rawBalance, isLoading } = useTokenBalance({
+  const { rawBalance, isLoading, isError, error } = useTokenBalance({
     token,
     userAddress,
     enabled: isConnected
@@ -80,7 +81,19 @@ export const TokenSelectorItem = ({ token, selectedToken, onSelect }: TokenSelec
           )}
         </div>
         <div className="flex items-center gap-2 text-sm text-muted">
-          <span data-test-id={balanceTestId}>{balanceText}</span>
+          {isError ? (
+            <Tooltip content={`Couldn't load balance: ${summarizeError(error)}`}>
+              <span
+                tabIndex={0}
+                className="cursor-help font-semibold text-red"
+                data-test-id={balanceTestId}
+              >
+                Error ⓘ
+              </span>
+            </Tooltip>
+          ) : (
+            <span data-test-id={balanceTestId}>{balanceText}</span>
+          )}
         </div>
       </div>
     </button>
