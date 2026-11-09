@@ -44,7 +44,12 @@ export const TransactionListItem = ({
   const { chains } = useAppMode();
   const sourceChain = getChainByNetworkId(chains, transaction.sourceNetwork);
   const destChain = getChainByNetworkId(chains, transaction.destinationNetwork);
-  const isClaimable = transaction.status === 'READY_TO_CLAIM' && !isPendingClaimConfirmation;
+  // The destination network isn't among the enabled chains of the current app
+  // mode (e.g. a bridge to an L2 this deployment doesn't serve): the row is
+  // still listed, but greyed out and not claimable from here.
+  const isDestDisabled = !destChain;
+  const isClaimable =
+    transaction.status === 'READY_TO_CLAIM' && !isPendingClaimConfirmation && !isDestDisabled;
   const isPending = transaction.status === 'PENDING';
   // Per-route autoclaim grace period: 'no-autoclaim' shows the button now,
   // 'waiting' shows a "claim manually now" hint while autoclaim is expected,
@@ -107,15 +112,23 @@ export const TransactionListItem = ({
       tabIndex={0}
       data-test-id={`transaction-row-${transaction.transactionHash}`}
       className={cn(
-        'rounded-2xl border border-border bg-surface shadow-sm transition hover:border-blue hover:shadow-md cursor-pointer'
+        'rounded-2xl border border-border shadow-sm transition hover:border-blue hover:shadow-md cursor-pointer',
+        isDestDisabled ? 'bg-surface-muted' : 'bg-surface'
       )}
+      data-dest-disabled={isDestDisabled || undefined}
     >
       <div className="p-3 space-y-2">
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap items-center gap-2 text-sm text-black">
             {sourceChain && <span className="font-medium">{sourceChain.name}</span>}
             <ArrowRight size={18} className="text-grey" />
-            {destChain && <span className="font-medium">{destChain.name}</span>}
+            {destChain ? (
+              <span className="font-medium">{destChain.name}</span>
+            ) : (
+              <span className="font-medium text-grey" data-test-id="destination-network-disabled">
+                Network {transaction.destinationNetwork} (disabled)
+              </span>
+            )}
           </div>
           <div className="flex justify-end sm:justify-start">
             <TransactionStatusBadge
@@ -136,7 +149,12 @@ export const TransactionListItem = ({
           </div>
         </div>
         <div className="flex flex-col md:flex-row items-center gap-2">
-          <div className="flex items-center justify-between rounded-lg bg-surface-muted px-3 py-2 text-sm text-grey w-full md:w-1/2">
+          <div
+            className={cn(
+              'flex items-center justify-between rounded-lg px-3 py-2 text-sm text-grey w-full md:w-1/2',
+              isDestDisabled ? 'bg-surface' : 'bg-surface-muted'
+            )}
+          >
             <div className="flex items-center gap-1">
               <span className="uppercase font-medium text-grey">Receiver:</span>
               <span className="font-mono text-black">
@@ -166,7 +184,12 @@ export const TransactionListItem = ({
               )}
             </div>
           </div>
-          <div className="flex items-center justify-between rounded-lg bg-surface-muted px-3 py-2 text-sm text-grey w-full md:w-1/2">
+          <div
+            className={cn(
+              'flex items-center justify-between rounded-lg px-3 py-2 text-sm text-grey w-full md:w-1/2',
+              isDestDisabled ? 'bg-surface' : 'bg-surface-muted'
+            )}
+          >
             <div className="flex items-center gap-1">
               <span className="uppercase font-medium text-grey">Bridge tx:</span>
               <span className="font-mono text-black">
