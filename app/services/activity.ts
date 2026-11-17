@@ -7,6 +7,8 @@ import type {
   AggkitBridgeAggregator
 } from '@agglayer/sdk';
 
+import { isAggkitClaimedStatus } from '@agglayer/sdk';
+
 // Thin wrapper over `AggkitBridgeAggregator.getActivity`, which itself wraps
 // aggkit's bridgetracker GET {basePath}/activity/from/{from_address}
 // (basePath "/tracker/v1"), see
@@ -67,12 +69,17 @@ import type {
 // the SDK's `AggkitActivityItem.claim_status` doc, resolved server-side even
 // without `includeTracking`), so no `tracking` lookup is needed here at all
 // anymore.
+//
+// Since tracker `api_revision` 7 a claimed bridge reads `'claimed'` only
+// until its claim's block is final, and `'claimed_finalized'` from then on --
+// the normal end state of every claimed bridge. Both are CLAIMED here
+// (`isAggkitClaimedStatus`); whether the claim can still change is
+// isClaimFinal's job, below.
 export const deriveStatus = (
   item: Pick<AggkitActivityItem, 'claim_status' | 'errors'>
 ): { status: TransactionStatus; statusError?: string } => {
+  if (isAggkitClaimedStatus(item.claim_status)) return { status: 'CLAIMED' };
   switch (item.claim_status) {
-    case 'claimed':
-      return { status: 'CLAIMED' };
     case 'error':
       return { status: 'ERROR', statusError: item.errors?.claim };
     case 'readyToClaim':
@@ -81,6 +88,22 @@ export const deriveStatus = (
       return { status: 'PENDING' };
   }
 };
+
+// Whether a claimed bridge is done for good, i.e. no later poll can report it
+// as anything else. Only meaningful for a claimed item.
+//  - `'claimed_finalized'` (tracker `api_revision` 7): the claim's block is
+//    final. Always final.
+//  - `'claimed'` from a tracker at `api_revision` 6, which sends no
+//    `finalized` field: final, as it has always been there.
+//  - `'claimed'` with a `finalized` field (`api_revision` 7): NOT final,
+//    whatever the field's value -- a reorg can still remove the claim and
+//    send the bridge back to `'readyToClaim'`/`'pending'`. The field is only
+//    read for its presence, which is what tells the two revisions apart.
+export const isClaimFinal = (
+  item: Pick<AggkitActivityItem, 'claim_status' | 'finalized'>
+): boolean =>
+  item.claim_status === 'claimed_finalized' ||
+  (item.claim_status === 'claimed' && item.finalized === undefined);
 
 // leaf_type 1 is a message, 0 is an asset -- same convention
 // types.ClaimResponse.is_message documents on the claim side.
@@ -138,6 +161,7 @@ export const toTransaction = (item: AggkitActivityItem): Transaction => {
     amount: bridge.amount,
     status,
     statusError,
+    isClaimFinal: status === 'CLAIMED' ? isClaimFinal(item) : undefined,
     lastUpdatedAt: item.last_updated_timestamp,
     bridgeHash: bridge.bridge_hash,
     metadata: bridge.metadata,

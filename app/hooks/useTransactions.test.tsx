@@ -22,7 +22,7 @@ import { useAggkitAggregator } from '@/app/context/aggLayerSdk';
 import { useAppMode } from '@/app/context/appMode';
 import { PendingBridgesProvider, usePendingBridges } from '@/app/context/pendingBridges';
 
-import { useTransactions } from './useTransactions';
+import { hasNonTerminalTransaction, useTransactions } from './useTransactions';
 
 const wrapper = ({ children }: { children: ReactNode }) => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -113,6 +113,37 @@ const renderTransactions = (fromAddress = '0xabc') =>
     }),
     { wrapper }
   );
+
+// Drives the poll cadence: fast while anything loaded can still change.
+describe('hasNonTerminalTransaction', () => {
+  const row = (overrides: Partial<Transaction>) => makePendingBridge(overrides);
+
+  it('is false with nothing loaded, or with only settled CLAIMED rows', () => {
+    expect(hasNonTerminalTransaction(undefined)).toBe(false);
+    expect(hasNonTerminalTransaction([])).toBe(false);
+    // No isClaimFinal at all (e.g. a row not built from the activity feed).
+    expect(hasNonTerminalTransaction([row({ status: 'CLAIMED' })])).toBe(false);
+    // 'claimed' from an api_revision 6 tracker, or 'claimed_finalized'.
+    expect(hasNonTerminalTransaction([row({ status: 'CLAIMED', isClaimFinal: true })])).toBe(false);
+  });
+
+  it('is true while any row is not CLAIMED', () => {
+    expect(hasNonTerminalTransaction([row({ status: 'PENDING' })])).toBe(true);
+    expect(hasNonTerminalTransaction([row({ status: 'READY_TO_CLAIM' })])).toBe(true);
+    expect(hasNonTerminalTransaction([row({ status: 'ERROR' })])).toBe(true);
+  });
+
+  // 'claimed' from an api_revision 7 tracker: a reorg can still send it back
+  // to READY_TO_CLAIM/PENDING, so it must keep being refreshed.
+  it('is true for a CLAIMED row whose claim is not final yet', () => {
+    expect(
+      hasNonTerminalTransaction([
+        row({ status: 'CLAIMED', isClaimFinal: true }),
+        row({ status: 'CLAIMED', isClaimFinal: false })
+      ])
+    ).toBe(true);
+  });
+});
 
 describe('useTransactions -- pending bridge placeholders', () => {
   beforeEach(() => {
