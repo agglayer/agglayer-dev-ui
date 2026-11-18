@@ -624,7 +624,8 @@ export const confirmClaimedRows = async (
     rows.map(async (row): Promise<ObservedRow> => {
       if (row.status !== 'CLAIMED' || row.claimTransactionHash !== undefined) return row;
       const confirmed = await isClaimedOnChain(row).catch(() => false);
-      return confirmed ? row : { ...row, status: 'PENDING' };
+      // isClaimFinal only applies to a CLAIMED row, so it goes with the status.
+      return confirmed ? row : { ...row, status: 'PENDING', isClaimFinal: undefined };
     })
   );
 

@@ -1020,4 +1020,14 @@ describe('confirmClaimedRows (issue #53)', () => {
     expect(no[0]?.status).toBe('PENDING');
     expect(yes[0]?.status).toBe('CLAIMED');
   });
+
+  it('drops isClaimFinal from a demoted row and keeps it on a confirmed one', async () => {
+    const rows = [makeRow('CLAIMED', { isClaimFinal: true })];
+    const [no, yes] = await Promise.all([
+      confirmClaimedRows(rows, async () => false),
+      confirmClaimedRows(rows, async () => true)
+    ]);
+    expect(no[0]?.isClaimFinal).toBeUndefined();
+    expect(yes[0]?.isClaimFinal).toBe(true);
+  });
 });
