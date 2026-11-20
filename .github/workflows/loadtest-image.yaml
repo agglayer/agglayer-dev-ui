@@ -27,7 +27,8 @@
 #
 # Mirrors docker-publish.yaml's auth/login/permissions pattern: GHCR login
 # via docker/login-action with the workflow's own GITHUB_TOKEN (packages:
-# write), QEMU + Buildx for a multi-arch (amd64/arm64) push.
+# write), QEMU + Buildx for a multi-arch (amd64/arm64) push, and the same
+# provenance/SBOM/attestation steps (id-token + attestations: write).
 name: Build and Publish Loadtest Image
 
 on:
@@ -50,9 +51,9 @@ concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false
 
-permissions:
-  contents: read
-  packages: write
+# Nothing at workflow level, same as docker-publish.yaml: the publish job
+# declares exactly what it needs.
+permissions: {}
 
 env:
   REGISTRY_IMAGE: ghcr.io/agglayer/agglayer-dev-ui-loadtest
@@ -62,6 +63,11 @@ jobs:
     name: Build, publish, and verify
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read # actions/checkout
+      packages: write # push the image and its attestation to GHCR
+      id-token: write # OIDC token the build provenance is signed with (Sigstore)
+      attestations: write # store the signed attestation on the repository
     steps:
       - name: Checkout agglayer-dev-ui
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -123,6 +129,20 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ env.REGISTRY_IMAGE }}:${{ steps.meta.outputs.built_sha }}
+          # SLSA provenance + SBOM attached to the image index, same as
+          # docker-publish.yaml (see its comments).
+          provenance: mode=max
+          sbom: true
+
+      - name: Attest build provenance
+        # Same as docker-publish.yaml; verify with
+        #   gh attestation verify oci://ghcr.io/agglayer/agglayer-dev-ui-loadtest@<digest> --owner agglayer
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.REGISTRY_IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+          create-storage-record: false
 
       - name: Verify published manifest
         run: docker buildx imagetools inspect "${{ env.REGISTRY_IMAGE }}@${{ steps.build.outputs.digest }}"

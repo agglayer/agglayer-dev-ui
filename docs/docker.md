@@ -35,6 +35,22 @@ semver tag or with `latest` — see the workflow's header comment
 (`.github/workflows/docker-publish.yaml:29-44`) for why this is a structural guarantee,
 not just a runtime check (the workflow also asserts it at runtime as defense in depth).
 
+### Provenance and SBOM
+
+Images pushed by the workflow carry a SLSA provenance statement and an SBOM (attached to the
+image index by BuildKit) and a signed GitHub build-provenance attestation for the index
+digest. Check that an image was built by this repo's workflow (needs `gh` 2.49 or newer):
+
+```bash
+gh attestation verify oci://ghcr.io/agglayer/agglayer-dev-ui@sha256:<digest> --owner agglayer
+```
+
+Add `--signer-workflow agglayer/agglayer-dev-ui/.github/workflows/docker-publish.yaml` to also
+pin the workflow. Resolve `<digest>` for a tag with `docker buildx imagetools inspect
+ghcr.io/agglayer/agglayer-dev-ui:<tag>`. In the GHCR package page the provenance and SBOM
+show up as extra `unknown/unknown` entries of the image; `docker pull`/`run` ignore them.
+The same applies to `ghcr.io/agglayer/agglayer-dev-ui-loadtest`.
+
 ## Ports
 
 The container listens on port **80** (`Dockerfile:111` `EXPOSE 80`, matching

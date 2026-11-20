@@ -26,6 +26,16 @@
 #     pre-release build)
 #   workflow_dispatch                            -> dispatch-<ref>-<sha>-<run_id>
 #
+# Provenance and SBOM
+#   Every image pushed here carries a BuildKit SLSA provenance statement and
+#   an SBOM (attached to the image index), plus a signed GitHub artifact
+#   attestation for the index digest (actions/attest-build-provenance, also
+#   stored in GHCR). Verify a pulled or deployed image with
+#     gh attestation verify oci://ghcr.io/agglayer/agglayer-dev-ui@sha256:<digest> --owner agglayer
+#   add `--signer-workflow agglayer/agglayer-dev-ui/.github/workflows/docker-publish.yaml`
+#   to also pin which workflow built it. Signing needs `id-token: write` and
+#   `attestations: write`, granted to the publish job only (see `permissions`).
+#
 # Collision guard (this is the deliberate X-1 attack target -- see
 # plans/dev-ui-docker-ghcr-plan.md's X-1 item 7, "can a dispatch-built tag
 # overwrite a release semver tag, or move latest?"):
@@ -69,9 +79,9 @@ concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false
 
-permissions:
-  contents: read
-  packages: write
+# Nothing at workflow level: the only job below declares exactly what it needs,
+# so a job added to this file later does not inherit package or signing rights.
+permissions: {}
 
 env:
   REGISTRY_IMAGE: ghcr.io/${{ github.repository }}
@@ -81,6 +91,11 @@ jobs:
     name: Build, publish, and verify
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read # actions/checkout
+      packages: write # push the image and its attestation to GHCR
+      id-token: write # OIDC token the build provenance is signed with (Sigstore)
+      attestations: write # store the signed attestation on the repository
     steps:
       - name: Checkout agglayer-dev-ui
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -205,6 +220,14 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.tags.outputs.tags }}
+          # BuildKit attaches a SLSA provenance statement (mode=max also
+          # records the build args and the Dockerfile source -- fine here:
+          # the repo is public and the only build args are the commit and
+          # the version) and an SPDX SBOM to the image index, one set per
+          # platform. They show up in GHCR as extra `unknown/unknown`
+          # entries of the image; `docker pull`/`run` ignore them.
+          provenance: mode=max
+          sbom: true
           # Threads the commit/version this job already resolved (for
           # image tagging) into the baked public/version.json, via the
           # Dockerfile's DEV_UI_BUILD_COMMIT/DEV_UI_BUILD_VERSION args --
@@ -213,6 +236,27 @@ jobs:
           build-args: |
             DEV_UI_BUILD_COMMIT=${{ steps.meta.outputs.built_sha }}
             DEV_UI_BUILD_VERSION=${{ steps.tags.outputs.version }}
+
+      - name: Attest build provenance
+        # Signed, GitHub-issued attestation for the manifest digest just
+        # pushed (the digest of the image index, i.e. what `docker pull
+        # <image>@<digest>` resolves). push-to-registry stores it next to
+        # the image in GHCR as well, so it travels with the image. Consumers
+        # check it with:
+        #   gh attestation verify oci://ghcr.io/agglayer/agglayer-dev-ui@<digest> --owner agglayer
+        # Runs right after the push and before the checks below: the image
+        # is already published at this point, so it should never be left
+        # without its attestation because a later step failed.
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.REGISTRY_IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+          # Off on purpose: the storage record needs `artifact-metadata:
+          # write`, and without it the action only logs a warning on every
+          # run. Turn it on together with that permission if the org wants
+          # the image listed under "Linked artifacts".
+          create-storage-record: false
 
       - name: Verify published manifest
         run: docker buildx imagetools inspect "${{ env.REGISTRY_IMAGE }}@${{ steps.build.outputs.digest }}"
