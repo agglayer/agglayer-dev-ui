@@ -145,10 +145,13 @@ jobs:
           create-storage-record: false
 
       - name: Verify published manifest
-        run: docker buildx imagetools inspect "${{ env.REGISTRY_IMAGE }}@${{ steps.build.outputs.digest }}"
+        env:
+          IMAGE_REF: ${{ env.REGISTRY_IMAGE }}@${{ steps.build.outputs.digest }}
+        run: docker buildx imagetools inspect "$IMAGE_REF"
 
       - name: Smoke test pushed image
+        env:
+          IMAGE_REF: ${{ env.REGISTRY_IMAGE }}@${{ steps.build.outputs.digest }}
         run: |
           set -euo pipefail
-          IMAGE_REF="${{ env.REGISTRY_IMAGE }}@${{ steps.build.outputs.digest }}"
           docker run --rm "$IMAGE_REF" pnpm loadtest

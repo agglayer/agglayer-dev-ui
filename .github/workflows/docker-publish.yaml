@@ -333,12 +333,19 @@ jobs:
           create-storage-record: false
 
       - name: Verify published manifest
-        run: docker buildx imagetools inspect "${{ env.REGISTRY_IMAGE }}@${{ steps.build.outputs.digest }}"
+        env:
+          IMAGE_REF: ${{ env.REGISTRY_IMAGE }}@${{ steps.build.outputs.digest }}
+        run: docker buildx imagetools inspect "$IMAGE_REF"
 
       - name: Smoke test pushed image
+        env:
+          # Via env, not `${{ }}` inside the script, so no expression value
+          # is ever expanded into shell code.
+          IMAGE_REF: ${{ env.REGISTRY_IMAGE }}@${{ steps.build.outputs.digest }}
+          EXPECTED_COMMIT: ${{ steps.meta.outputs.built_sha }}
+          EXPECTED_VERSION: ${{ steps.tags.outputs.version }}
         run: |
           set -euo pipefail
-          IMAGE_REF="${{ env.REGISTRY_IMAGE }}@${{ steps.build.outputs.digest }}"
 
           docker run -d --name devui-smoke -p 8080:80 "$IMAGE_REF"
 
@@ -374,13 +381,11 @@ jobs:
           # build-args above silently regressing back to the Dockerfile's
           # "unknown" / package.json fallback -- assert the baked
           # /version.json actually carries the values this job resolved.
-          expected_commit="${{ steps.meta.outputs.built_sha }}"
-          expected_version="${{ steps.tags.outputs.version }}"
           version_json="$(curl -fsS http://localhost:8080/version.json)"
           actual_commit="$(echo "$version_json" | jq -r '.commit')"
           actual_version="$(echo "$version_json" | jq -r '.version')"
-          if [ "$actual_commit" != "$expected_commit" ] || [ "$actual_version" != "$expected_version" ]; then
-            echo "::error::published /version.json does not match this build -- expected commit=$expected_commit version=$expected_version, got $version_json" >&2
+          if [ "$actual_commit" != "$EXPECTED_COMMIT" ] || [ "$actual_version" != "$EXPECTED_VERSION" ]; then
+            echo "::error::published /version.json does not match this build -- expected commit=$EXPECTED_COMMIT version=$EXPECTED_VERSION, got $version_json" >&2
             docker logs devui-smoke >&2 || true
             exit 1
           fi
