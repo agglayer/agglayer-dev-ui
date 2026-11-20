@@ -19,6 +19,6 @@ permissions:
 
 jobs:
   claude:
-    uses: 0xPolygon/pipelines/.github/workflows/apps-claude.yml@main
+    uses: 0xPolygon/pipelines/.github/workflows/apps-claude.yml@04f6373c6a0197562386116d2c1b0f4139be18e7 # main 2026-11-17
     secrets:
       CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}

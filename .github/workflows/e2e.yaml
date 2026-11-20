@@ -53,7 +53,7 @@ jobs:
       # step below runs with `working-directory: dev-ui`, and the image
       # build below passes `context: dev-ui`.
       - name: Checkout agglayer-dev-ui
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           path: dev-ui
           fetch-depth: 0
@@ -65,11 +65,11 @@ jobs:
       # package.json (packageManager: pnpm@10.30.3) so version detection
       # works. Same subdir pattern as actions/setup-node's
       # node-version-file: dev-ui/.nvmrc below.
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
         with:
           package_json_file: dev-ui/package.json
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: dev-ui/.nvmrc
           cache: pnpm
@@ -105,7 +105,7 @@ jobs:
       # for the full analysis.
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       # Reuses docker-pr.yaml's exact context/cache pattern
       # (context: dev-ui because this job's checkout lives there), and its
@@ -114,7 +114,7 @@ jobs:
       # branch/PR. `push: false` / `load: true`: never publish, just load the
       # image into this runner's local daemon for the container suite below.
       - name: Build image for container suite (single-arch, push false)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: dev-ui
           platforms: linux/amd64
@@ -254,7 +254,7 @@ jobs:
       # CANCELS the job, and `!cancelled()` would then skip this upload --
       # throwing away the devnet logs collected precisely for that case.
       - name: Upload Playwright artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: playwright-report-${{ github.run_id }}
