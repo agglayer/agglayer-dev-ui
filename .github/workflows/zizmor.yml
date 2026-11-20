@@ -1,0 +1,20 @@
+name: Workflow lint
+
+# Polygon CI security standard (0xPolygon/pipelines, "Security gates"): lints the workflows and
+# the Dependabot config with zizmor and reports to code scanning. No path filter on purpose, so
+# it can be a required check.
+on:
+  pull_request:
+  schedule:
+    - cron: '41 6 * * 1' # Mondays
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  zizmor:
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    uses: 0xPolygon/pipelines/.github/workflows/security-zizmor.yml@04f6373c6a0197562386116d2c1b0f4139be18e7 # main 2026-11-17
