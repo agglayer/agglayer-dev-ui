@@ -1,0 +1,57 @@
+name: Dependency review
+
+# Polygon CI security standard (0xPolygon/pipelines, "Security gates"): fails the PR when it
+# adds a dependency with a high-severity advisory or a licence outside the shared allowlist.
+on:
+  pull_request:
+
+permissions: {}
+
+jobs:
+  dependency-review:
+    permissions:
+      contents: read
+      pull-requests: write
+    uses: 0xPolygon/pipelines/.github/workflows/security-dependency-review.yml@04f6373c6a0197562386116d2c1b0f4139be18e7 # main 2026-11-17
+    with:
+      # Packages already in the tree whose licence data falls outside the shared allowlist, so
+      # that bumping them does not fail the check (a NEW dependency under such a licence still
+      # does). Found by evaluating the dependency-graph SBOM against the allowlist (2026-11-20).
+      # None of them has an open advisory (the check on advisories is not affected by this list):
+      #   - LGPL-3.0-or-later: @img/sharp-libvips-* and @img/sharp-* (pulled in by next)
+      #   - licence data GitHub cannot parse ("see licence in LICENSE.md"): @reown/*, @walletconnect/*
+      #   - flagged proprietary by scancode: @metamask/sdk, @metamask/sdk-install-modal-web
+      #   - source-available: @agglayer/sdk
+      allow-dependencies-licenses: >-
+        pkg:npm/@agglayer/sdk,
+        pkg:npm/@img/sharp-libvips-darwin-arm64,
+        pkg:npm/@img/sharp-libvips-darwin-x64,
+        pkg:npm/@img/sharp-libvips-linux-arm,
+        pkg:npm/@img/sharp-libvips-linux-arm64,
+        pkg:npm/@img/sharp-libvips-linux-ppc64,
+        pkg:npm/@img/sharp-libvips-linux-riscv64,
+        pkg:npm/@img/sharp-libvips-linux-s390x,
+        pkg:npm/@img/sharp-libvips-linux-x64,
+        pkg:npm/@img/sharp-libvips-linuxmusl-arm64,
+        pkg:npm/@img/sharp-libvips-linuxmusl-x64,
+        pkg:npm/@img/sharp-wasm32,
+        pkg:npm/@img/sharp-win32-arm64,
+        pkg:npm/@img/sharp-win32-ia32,
+        pkg:npm/@img/sharp-win32-x64,
+        pkg:npm/@metamask/sdk,
+        pkg:npm/@metamask/sdk-install-modal-web,
+        pkg:npm/@reown/appkit,
+        pkg:npm/@reown/appkit-adapter-wagmi,
+        pkg:npm/@reown/appkit-common,
+        pkg:npm/@reown/appkit-controllers,
+        pkg:npm/@reown/appkit-pay,
+        pkg:npm/@reown/appkit-polyfills,
+        pkg:npm/@reown/appkit-scaffold-ui,
+        pkg:npm/@reown/appkit-ui,
+        pkg:npm/@reown/appkit-utils,
+        pkg:npm/@reown/appkit-wallet,
+        pkg:npm/@walletconnect/core,
+        pkg:npm/@walletconnect/sign-client,
+        pkg:npm/@walletconnect/types,
+        pkg:npm/@walletconnect/universal-provider,
+        pkg:npm/@walletconnect/utils
