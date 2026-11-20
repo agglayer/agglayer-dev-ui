@@ -11,7 +11,10 @@
 # =============================================================================
 # Stage: app-builder
 # =============================================================================
-FROM node:24-slim AS app-builder
+# Both base images (app-builder and runtime) are pinned by digest, the
+# multi-arch index, so linux/amd64 and linux/arm64 both resolve. Dependabot's
+# docker ecosystem bumps tag and digest together.
+FROM node:24-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54 AS app-builder
 
 # Pin to pnpm 10.30.3 per package.json's packageManager field, on Node 24 per
 # .nvmrc / package.json engines.node -- do not mirror whatever Node version
@@ -65,7 +68,7 @@ RUN pnpm run build:production
 # =============================================================================
 # Stage: runtime
 # =============================================================================
-FROM nginx:alpine AS runtime
+FROM nginx:1.31.9-alpine@sha256:fb4658584bd9a916ffb6f6e365f97c25cfdb2923801f551ea08356e695f14ff7 AS runtime
 
 # jq is used by entrypoint.sh for a structural (non-schema) validation check
 # of a mounted config.json. This runtime image has no Node, so the app's own

@@ -12,7 +12,7 @@ jobs:
     name: CI - lint / typecheck / test
     runs-on: ubuntu-latest
     steps:
-      - uses: 0xPolygon/pipelines/.github/actions/ci@main
+      - uses: 0xPolygon/pipelines/.github/actions/ci@04f6373c6a0197562386116d2c1b0f4139be18e7 # main 2026-11-17
 
       # The runtime E2E key override (app/context/e2eAccount.ts) is only safe
       # while NEXT_PUBLIC_E2E_ENABLED stays out of every production build

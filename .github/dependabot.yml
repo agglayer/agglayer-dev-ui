@@ -1,0 +1,44 @@
+# Polygon CI security standard (0xPolygon/pipelines, "Security gates"): weekly updates with a
+# 7-day cooldown, minor and patch updates grouped per ecosystem, majors as separate PRs.
+version: 2
+updates:
+  # pnpm is handled by the npm ecosystem (it reads pnpm-lock.yaml).
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 10
+    groups:
+      npm:
+        patterns: ['*']
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    groups:
+      actions:
+        patterns: ['*']
+        update-types: [minor, patch]
+
+  # Dockerfile and Dockerfile.loadtest, both in the repository root.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    groups:
+      docker:
+        patterns: ['*']
+        update-types: [minor, patch]
