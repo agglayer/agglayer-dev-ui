@@ -22,6 +22,12 @@ export interface Transaction {
   // isClaimed() check itself failed (e.g. no bridge address configured for
   // that network) -- see app/services/activity.ts's deriveStatus.
   statusError?: string;
+  // Set only when status is CLAIMED and the row came from the activity
+  // endpoint. `false` means a later poll can still move the row back to
+  // READY_TO_CLAIM/PENDING (tracker `api_revision` 7, claim's block not final
+  // yet), so it must keep being refreshed; `true` or absent means it won't
+  // change again -- see app/services/activity.ts's isClaimFinal.
+  isClaimFinal?: boolean;
   lastUpdatedAt: number;
   bridgeHash: string;
   metadata: string;

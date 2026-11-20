@@ -8,9 +8,10 @@
 // §9.2's mandatory parity rules:
 //  - `toTransaction` (app/services/activity.ts) — the exact PENDING/
 //    READY_TO_CLAIM/CLAIMED/ERROR status derivation the UI itself uses. A
-//    pure function with no React/Next dependency (its `@/app/...`/
-//    `@agglayer/sdk` imports are `import type`, erased at compile time) —
-//    safe to import standalone. The big-int-safe text parse is NOT reusable
+//    pure function with no React/Next dependency (its `@/app/...` imports are
+//    `import type`, erased at compile time; its one runtime import is
+//    `@agglayer/sdk`'s `isAggkitClaimedStatus`, a package this worker
+//    already loads) — safe to import standalone. The big-int-safe text parse is NOT reusable
 //    any more: the UI now gets parsed rows from the SDK's
 //    `AggkitBridgeAggregator.getActivity`, whose `quoteGlobalIndex` helper is
 //    not exported, so `parseActivityText` below mirrors it byte for byte.
@@ -591,6 +592,7 @@ export const mapActivityResponseText = (text: string): MappedActivity => {
       rowKey: toRowKey(transactionHash, tx.depositCount),
       status: tx.status,
       statusError: tx.statusError,
+      isClaimFinal: tx.isClaimFinal,
       transactionHash,
       depositCount: tx.depositCount,
       sourceNetwork: tx.sourceNetwork,
@@ -622,7 +624,8 @@ export const confirmClaimedRows = async (
     rows.map(async (row): Promise<ObservedRow> => {
       if (row.status !== 'CLAIMED' || row.claimTransactionHash !== undefined) return row;
       const confirmed = await isClaimedOnChain(row).catch(() => false);
-      return confirmed ? row : { ...row, status: 'PENDING' };
+      // isClaimFinal only applies to a CLAIMED row, so it goes with the status.
+      return confirmed ? row : { ...row, status: 'PENDING', isClaimFinal: undefined };
     })
   );
 
@@ -637,10 +640,13 @@ export const confirmClaimedRows = async (
  * highest-volume endpoint class in the whole test, in exactly the
  * direction (less load than a real user) DESIGN §9.4's closing rule
  * ("anything else that differs between the two modes is a defect") does
- * not allow to go undeclared. Matches the UI's predicate exactly now.
+ * not allow to go undeclared. Matches the UI's predicate exactly now,
+ * including its `isClaimFinal === false` case (a CLAIMED row whose claim is
+ * not final yet against a tracker at `api_revision` 7 keeps the 5000ms
+ * interval).
  */
 export const anyRowNonTerminal = (rows: readonly ObservedRow[]): boolean =>
-  rows.some((row) => row.status !== 'CLAIMED');
+  rows.some((row) => row.status !== 'CLAIMED' || row.isClaimFinal === false);
 
 // ---------------------------------------------------------------------------
 // isClaimed post-throw / post-revert retry loop — DESIGN P14, finding C3.

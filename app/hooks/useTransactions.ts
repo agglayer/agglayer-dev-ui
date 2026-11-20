@@ -26,8 +26,12 @@ export const TOTAL_REFETCH_TIME = REFETCH_INTERVALS.reduce((acc, curr) => acc + 
 const PENDING_POLL_INTERVAL = 5000;
 const IDLE_POLL_INTERVAL = 10000;
 
-const hasNonTerminalTransaction = (transactions: Transaction[] | undefined): boolean =>
-  (transactions ?? []).some((tx) => tx.status !== 'CLAIMED');
+// A CLAIMED row is terminal unless it says its claim isn't final yet
+// (`isClaimFinal === false`, only ever set against a tracker at
+// `api_revision` 7): that one can still go back to READY_TO_CLAIM/PENDING
+// after a reorg, so it keeps the fast cadence until it reads final.
+export const hasNonTerminalTransaction = (transactions: Transaction[] | undefined): boolean =>
+  (transactions ?? []).some((tx) => tx.status !== 'CLAIMED' || tx.isClaimFinal === false);
 
 // Status filtering and ordering are server-side now (`filterBridges`, newest
 // first), so this only has to cover what the endpoint can't: the date range

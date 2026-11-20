@@ -1352,7 +1352,11 @@ Reported, not silently corrected. Each is falsifiable at the cited line.
   (`activity.ts:91-94`). There is no state for it in a plain phase list; §3.2's T16
   adds `activity_status_error`. Tracker `api_revision` 5 drops `claimed` for a
   string `claim_status`; `deriveStatus` also maps `claim_status: "claimed"` to
-  `CLAIMED` (no other `claim_status` value is evidenced yet).
+  `CLAIMED`. Tracker `api_revision` 7 adds `claim_status: "claimed_finalized"`
+  (claimed, and the claim's block is final), also `CLAIMED`; there a bare
+  `"claimed"` can still go back to ready-to-claim or pending after a reorg,
+  so such a row stays non-terminal for the P1 cadence (`isClaimFinal` in
+  `activity.ts`). A hop still completes on the first verified `CLAIMED`.
 - **C13 — the activity response can carry per-network `warnings`.**
   `activity.ts:109-120`: one entry per upstream bridge service that failed, so
   the list may be an incomplete picture for that `network_id` while the

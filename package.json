@@ -27,7 +27,7 @@
     "loadtest:test": "vitest run loadtest"
   },
   "dependencies": {
-    "@agglayer/sdk": "1.0.0-beta.33",
+    "@agglayer/sdk": "1.0.0-beta.34",
     "@reown/appkit": "^1.8.15",
     "@reown/appkit-adapter-wagmi": "^1.8.15",
     "@tanstack/react-query": "^5.90.16",

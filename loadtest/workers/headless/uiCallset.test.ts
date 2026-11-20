@@ -31,9 +31,13 @@ import {
   TtlCache
 } from './uiCallset';
 
-const makeRow = (status: ObservedRow['status']): ObservedRow => ({
+const makeRow = (
+  status: ObservedRow['status'],
+  overrides: Partial<ObservedRow> = {}
+): ObservedRow => ({
   rowKey: `0xabc:1`,
   status,
+  ...overrides,
   transactionHash: '0xabc',
   depositCount: 1,
   sourceNetwork: 0,
@@ -197,6 +201,30 @@ describe('mapActivityResponseText (DESIGN §9.2)', () => {
   it('derives CLAIMED from claim_status:"claimed"', () => {
     const { rows } = mapActivityResponseText(rawActivityFixture());
     expect(rows[0].status).toBe('CLAIMED');
+  });
+
+  // Tracker api_revision 7: `claimed_finalized` is CLAIMED too, and a bare
+  // `claimed` is final only when the row carries no `finalized` field
+  // (api_revision 6) -- same rule as the UI, via toTransaction.
+  it('derives CLAIMED from claim_status:"claimed_finalized", and isClaimFinal for both revisions', () => {
+    const withClaim = (claimStatus: string, finalized?: boolean): string => {
+      const raw = JSON.parse(rawActivityFixture()) as { bridges: Record<string, unknown>[] };
+      raw.bridges[0].claim_status = claimStatus;
+      if (finalized !== undefined) raw.bridges[0].finalized = finalized;
+      return JSON.stringify(raw);
+    };
+
+    const revision6 = mapActivityResponseText(withClaim('claimed')).rows[0];
+    expect(revision6.status).toBe('CLAIMED');
+    expect(revision6.isClaimFinal).toBe(true);
+
+    const notFinal = mapActivityResponseText(withClaim('claimed', false)).rows[0];
+    expect(notFinal.status).toBe('CLAIMED');
+    expect(notFinal.isClaimFinal).toBe(false);
+
+    const final = mapActivityResponseText(withClaim('claimed_finalized', true)).rows[0];
+    expect(final.status).toBe('CLAIMED');
+    expect(final.isClaimFinal).toBe(true);
   });
 
   it('derives ERROR (never a falsy \'not claimed\') from claim_status:"error", carrying statusError', () => {
@@ -866,6 +894,14 @@ describe('anyRowNonTerminal — parity with the real UI (R20, loadtest/REVIEW.md
 
   it('a CLAIMED-only set of rows is terminal', () => {
     expect(anyRowNonTerminal([makeRow('CLAIMED')])).toBe(false);
+    expect(anyRowNonTerminal([makeRow('CLAIMED', { isClaimFinal: true })])).toBe(false);
+  });
+
+  it('a CLAIMED row whose claim is not final yet (tracker api_revision 7) is non-terminal', () => {
+    expect(anyRowNonTerminal([makeRow('CLAIMED', { isClaimFinal: false })])).toBe(true);
+    expect(
+      anyRowNonTerminal([makeRow('CLAIMED'), makeRow('CLAIMED', { isClaimFinal: false })])
+    ).toBe(true);
   });
 
   it('PENDING / READY_TO_CLAIM are non-terminal, as before', () => {
@@ -983,5 +1019,15 @@ describe('confirmClaimedRows (issue #53)', () => {
     ]);
     expect(no[0]?.status).toBe('PENDING');
     expect(yes[0]?.status).toBe('CLAIMED');
+  });
+
+  it('drops isClaimFinal from a demoted row and keeps it on a confirmed one', async () => {
+    const rows = [makeRow('CLAIMED', { isClaimFinal: true })];
+    const [no, yes] = await Promise.all([
+      confirmClaimedRows(rows, async () => false),
+      confirmClaimedRows(rows, async () => true)
+    ]);
+    expect(no[0]?.isClaimFinal).toBeUndefined();
+    expect(yes[0]?.isClaimFinal).toBe(true);
   });
 });

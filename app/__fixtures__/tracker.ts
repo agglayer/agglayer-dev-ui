@@ -130,6 +130,29 @@ export const l1l2FinishedFixture: AggkitTrackingData = {
   ]
 };
 
+// The two fixtures below are the tracker `api_revision` 7 shapes of a claimed
+// bridge. They are SYNTHETIC (built from the SDK's AggkitTrackingData /
+// getBridgeTracking docs, not captured live: no proxy at `api_revision` 7 is
+// deployed yet). Every other fixture in this file is an `api_revision` 6
+// shape, where `claimed` + `finished` is already the end state.
+
+// L1->L2 claimed but the claim's block is not final yet: every step is done
+// and `claim_status` reads `claimed`, yet `tracking_status` stays `running`
+// -- a reorg can still remove the claim and move the tracking backwards.
+export const l1l2ClaimedNotFinalFixture: AggkitTrackingData = {
+  ...l1l2FinishedFixture,
+  tracking_status: 'running',
+  claim_status: 'claimed',
+  bridge_status: { ...l1l2RunningFixture.bridge_status!, block_finalized: true }
+};
+
+// L1->L2 claimed and final: the only state that never changes again.
+export const l1l2ClaimedFinalizedFixture: AggkitTrackingData = {
+  ...l1l2ClaimedNotFinalFixture,
+  tracking_status: 'finished',
+  claim_status: 'claimed_finalized'
+};
+
 // L2->L1 finished: 6 steps, all done -- carries a certificate id
 // (PendingInclusion/CertificatePending) and a claim tx (WaitingClaim), used
 // to assert the modal detail renders both result shapes.

@@ -23,6 +23,8 @@ vi.mock('@/app/context/appMode', () => ({
 
 import {
   errorGiveupFixture,
+  l1l2ClaimedFinalizedFixture,
+  l1l2ClaimedNotFinalFixture,
   l1l2FinishedFixture,
   l1l2RunningFixture,
   l2l2RunningStepErrorFixture
@@ -145,6 +147,32 @@ describe('useBridgeTracking', () => {
 
       // Well past several poll intervals -- a terminal query must never
       // refetch again.
+      await advance(20000);
+      expect(getBridgeTracking).toHaveBeenCalledTimes(1);
+    });
+
+    // Tracker api_revision 7: claimed is not terminal until the claim is
+    // final, and the tracker itself says so through tracking_status.
+    it("keeps polling a claimed bridge whose claim isn't final yet (running + claimed)", async () => {
+      const getBridgeTracking = vi.fn().mockResolvedValue(l1l2ClaimedNotFinalFixture);
+      mockAggregator(getBridgeTracking);
+
+      renderTracking(makeTransaction({ status: 'CLAIMED' }), { enabled: true });
+      await advance(0);
+      expect(getBridgeTracking).toHaveBeenCalledTimes(1);
+
+      await advance(5000);
+      expect(getBridgeTracking).toHaveBeenCalledTimes(2);
+    });
+
+    it('stops polling once the claim is final (finished + claimed_finalized)', async () => {
+      const getBridgeTracking = vi.fn().mockResolvedValue(l1l2ClaimedFinalizedFixture);
+      mockAggregator(getBridgeTracking);
+
+      const { result } = renderTracking(makeTransaction({ status: 'CLAIMED' }), { enabled: true });
+      await advance(0);
+      expect(result.current.data).toEqual(l1l2ClaimedFinalizedFixture);
+
       await advance(20000);
       expect(getBridgeTracking).toHaveBeenCalledTimes(1);
     });

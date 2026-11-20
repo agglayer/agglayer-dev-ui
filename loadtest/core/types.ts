@@ -291,6 +291,9 @@ export interface ObservedRow {
   rowKey: string;
   status: ActivityRowStatus;
   statusError?: string;
+  // Same field as the UI's `Transaction.isClaimFinal`: `false` on a CLAIMED
+  // row whose claim a reorg can still remove (tracker `api_revision` 7).
+  isClaimFinal?: boolean;
   transactionHash: Hex;
   depositCount: number;
   sourceNetwork: number;

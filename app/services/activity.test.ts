@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { AggkitBridgeAggregator } from '@agglayer/sdk';
 
-import { deriveStatus, fetchActivity, toTransaction } from './activity';
+import { deriveStatus, fetchActivity, isClaimFinal, toTransaction } from './activity';
 
 const baseBridge = {
   tx_hash: '0xabc',
@@ -33,6 +33,12 @@ describe('deriveStatus', () => {
     expect(deriveStatus({ claim_status: 'claimed' })).toEqual({ status: 'CLAIMED' });
   });
 
+  // Tracker api_revision 7: the end state of every claimed bridge. It used to
+  // fall into the switch's default and show as PENDING.
+  it('maps claim_status "claimed_finalized" to CLAIMED', () => {
+    expect(deriveStatus({ claim_status: 'claimed_finalized' })).toEqual({ status: 'CLAIMED' });
+  });
+
   it('maps claim_status "error" to ERROR, surfacing errors.claim', () => {
     expect(
       deriveStatus({ claim_status: 'error', errors: { claim: 'no bridge contract configured' } })
@@ -48,6 +54,32 @@ describe('deriveStatus', () => {
 
   it('maps claim_status "pending" to PENDING', () => {
     expect(deriveStatus({ claim_status: 'pending' })).toEqual({ status: 'PENDING' });
+  });
+});
+
+// A tracker at api_revision 6 never sends `finalized`; one at api_revision 7
+// always does. That presence is what tells whether a bare 'claimed' can still
+// be undone by a reorg.
+describe('isClaimFinal', () => {
+  it('is final for "claimed_finalized", whatever `finalized` reads', () => {
+    expect(isClaimFinal({ claim_status: 'claimed_finalized' })).toBe(true);
+    expect(isClaimFinal({ claim_status: 'claimed_finalized', finalized: true })).toBe(true);
+  });
+
+  it('is final for "claimed" without a `finalized` field (api_revision 6)', () => {
+    expect(isClaimFinal({ claim_status: 'claimed' })).toBe(true);
+  });
+
+  it('is not final for "claimed" with a `finalized` field (api_revision 7)', () => {
+    expect(isClaimFinal({ claim_status: 'claimed', finalized: false })).toBe(false);
+    // Only the field's presence is read, never its value.
+    expect(isClaimFinal({ claim_status: 'claimed', finalized: true })).toBe(false);
+  });
+
+  it('is not final for a bridge that is not claimed', () => {
+    expect(isClaimFinal({ claim_status: 'pending' })).toBe(false);
+    expect(isClaimFinal({ claim_status: 'readyToClaim', finalized: true })).toBe(false);
+    expect(isClaimFinal({ claim_status: 'error' })).toBe(false);
   });
 });
 
@@ -95,6 +127,39 @@ describe('toTransaction', () => {
     expect(tx.depositCount).toBe(5);
     expect(tx.claimTransactionHash).toBe('0xclaim');
     expect(tx.claimBlockNumber).toBe(20);
+  });
+
+  describe('isClaimFinal', () => {
+    const item = {
+      bridge: baseBridge,
+      bridge_network_id: 0,
+      creation_timestamp: 50,
+      last_updated_timestamp: 200
+    };
+
+    it('shows a "claimed_finalized" bridge as CLAIMED and final', () => {
+      const tx = toTransaction({ ...item, claim_status: 'claimed_finalized', finalized: true });
+      expect(tx.status).toBe('CLAIMED');
+      expect(tx.isClaimFinal).toBe(true);
+    });
+
+    it('treats "claimed" from an api_revision 6 tracker (no `finalized`) as final', () => {
+      const tx = toTransaction({ ...item, claim_status: 'claimed' });
+      expect(tx.status).toBe('CLAIMED');
+      expect(tx.isClaimFinal).toBe(true);
+    });
+
+    it('treats "claimed" from an api_revision 7 tracker (`finalized` sent) as not final', () => {
+      const tx = toTransaction({ ...item, claim_status: 'claimed', finalized: false });
+      expect(tx.status).toBe('CLAIMED');
+      expect(tx.isClaimFinal).toBe(false);
+    });
+
+    it('leaves it unset on a row that is not CLAIMED', () => {
+      const tx = toTransaction({ ...item, claim_status: 'readyToClaim', finalized: true });
+      expect(tx.status).toBe('READY_TO_CLAIM');
+      expect(tx.isClaimFinal).toBeUndefined();
+    });
   });
 
   it('maps leaf_type 1 to "message" and 0 to "asset"', () => {
