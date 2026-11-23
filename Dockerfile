@@ -14,7 +14,7 @@
 # Both base images (app-builder and runtime) are pinned by digest, the
 # multi-arch index, so linux/amd64 and linux/arm64 both resolve. Dependabot's
 # docker ecosystem bumps tag and digest together.
-FROM node:24-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54 AS app-builder
+FROM node:26-slim@sha256:e6bedef217677b276c591795e169840edd9096dbf13f29df8ef8d1856b8820bc AS app-builder
 
 # Pin to pnpm 10.30.3 per package.json's packageManager field, on Node 24 per
 # .nvmrc / package.json engines.node -- do not mirror whatever Node version
