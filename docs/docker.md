@@ -35,6 +35,22 @@ semver tag or with `latest` — see the workflow's header comment
 (`.github/workflows/docker-publish.yaml:29-44`) for why this is a structural guarantee,
 not just a runtime check (the workflow also asserts it at runtime as defense in depth).
 
+### Provenance and SBOM
+
+Images pushed by the workflow carry a SLSA provenance statement and an SBOM (attached to the
+image index by BuildKit) and a signed GitHub build-provenance attestation for the index
+digest. Check that an image was built by this repo's workflow (needs `gh` 2.49 or newer):
+
+```bash
+gh attestation verify oci://ghcr.io/agglayer/agglayer-dev-ui@sha256:<digest> --owner agglayer
+```
+
+Add `--signer-workflow agglayer/agglayer-dev-ui/.github/workflows/docker-publish.yaml` to also
+pin the workflow. Resolve `<digest>` for a tag with `docker buildx imagetools inspect
+ghcr.io/agglayer/agglayer-dev-ui:<tag>`. In the GHCR package page the provenance and SBOM
+show up as extra `unknown/unknown` entries of the image; `docker pull`/`run` ignore them.
+The same applies to `ghcr.io/agglayer/agglayer-dev-ui-loadtest`.
+
 ## Ports
 
 The container listens on port **80** (`Dockerfile:111` `EXPOSE 80`, matching
@@ -269,18 +285,28 @@ and pushes the image with the tag set described above. Mark the release as a Git
 for either path" above. Publishing a GitHub Release while the workflow file exists only
 on a feature branch will not trigger a build.
 
-### Building an arbitrary branch via dispatch
+### Publishing by hand via dispatch
 
-You can also build and publish an image from any branch, tag, or full commit SHA that is
-**already reachable in the repository** by running the workflow via
-`workflow_dispatch`, passing the desired revision as the `ref` input.
+You can also publish an image by hand with `workflow_dispatch`, passing the revision to
+build as the `ref` input. Manual publishes are restricted: the `ref` input must be exactly
+
+- `main`;
+- a release tag `vX.Y.Z` (optionally with a `-prerelease` suffix) that exists in the repo; or
+- the full 40-character SHA of a commit that is already on `main`.
+
+Anything else (another branch, a short SHA, a commit that is not on `main`) makes the
+"Validate dispatch ref" step fail before anything is built or pushed. To publish a commit
+that is not released yet, merge it to `main` (or tag it `vX.Y.Z`) first; PRs are already
+built, without pushing, by `docker-pr.yaml`. This is a guard against publishing an
+unreviewed branch by mistake, not an access-control boundary; see the workflow header for
+what it does and does not enforce.
 
 **Documented limitation: `workflow_dispatch` requires `docker-publish.yaml` to already be
 merged to `main`.** See "Prerequisite for either path" above — this is a separate
 constraint from the bare-SHA one below, and it is the one that actually blocked the
 first real dispatch attempt (`HTTP 404: workflow docker-publish.yaml not found on the
 default branch`). Merging the workflow file to `main` is required before any dispatch
-can be fired at all, regardless of which branch/tag/SHA you intend to pass as the `ref`
+can be fired at all, regardless of which revision you intend to pass as the `ref`
 input.
 
 **Documented limitation: `workflow_dispatch` cannot target a bare commit SHA.** The ref
@@ -288,18 +314,16 @@ you pick when firing the dispatch event itself (the branch selector in the "Run 
 button, or `--ref` on `gh workflow run` / the REST API) must be an existing branch or
 tag — GitHub uses that ref to decide which version of the workflow file to run, and its
 API rejects a bare SHA there. This is a separate thing from the workflow's own `ref`
-input, which **is** just a string forwarded to `actions/checkout` and does accept a full
-commit SHA (the checkout uses `fetch-depth: 0` so an arbitrary SHA is resolvable). See
-`.github/workflows/docker-publish.yaml:9-19` for the full explanation.
+input, which is a string forwarded to `actions/checkout` and does accept a full commit SHA
+(the checkout uses `fetch-depth: 0` so it is resolvable), within the policy above. See
+the header comment of `.github/workflows/docker-publish.yaml` for the full explanation.
 
-**Net effect:** to publish an unreleased commit that has no branch or tag yet, push it to
-a branch (or tag it) first, then dispatch the workflow against that branch/tag, passing
-whichever revision you actually want built (branch name, tag, or full SHA) as the `ref`
-input.
+**Net effect:** to publish a specific commit of `main`, dispatch the workflow against
+`main` (or a tag) and pass that commit's full SHA as the `ref` input.
 
 ```bash
-git push origin HEAD:my-temp-branch
-gh workflow run docker-publish.yaml --ref my-temp-branch -f ref=my-temp-branch
+gh workflow run docker-publish.yaml --ref main -f ref=main
+gh workflow run docker-publish.yaml --ref main -f ref=<full 40-character sha on main>
 ```
 
 Dispatch builds are tagged `dispatch-<ref>-<sha>-<run_id>` and can never collide with a

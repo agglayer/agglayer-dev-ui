@@ -2,9 +2,34 @@
 #
 # Triggers
 #   - `release: published`      -> semver tags (see "Tagging scheme" below).
-#   - `workflow_dispatch`       -> a single namespaced tag for an arbitrary
-#                                  branch/tag/sha, never touching semver or
-#                                  `latest`.
+#   - `workflow_dispatch`       -> a single namespaced tag for `main`, a
+#                                  release tag or a commit already on `main`
+#                                  (see "Manual publish policy" below), never
+#                                  touching semver or `latest`.
+#
+# Manual publish policy (workflow_dispatch only; the release path is
+# unchanged)
+#   This workflow writes to the production package, so the `ref` input is
+#   checked right after checkout ("Validate dispatch ref" step) and the job
+#   fails before anything is tagged, built or pushed unless it is exactly:
+#     - `main`;
+#     - a release tag `vX.Y.Z` (optionally `-prerelease`) that exists in the
+#       repository;
+#     - a full 40-character lowercase commit SHA that is an ancestor of
+#       `origin/main`, i.e. a commit that has already been merged.
+#   Branches other than `main`, short SHAs, `refs/...` names and commits that
+#   are not on `main` are rejected. The step also requires that what
+#   actions/checkout left checked out is the commit the ref resolves to (a
+#   branch and a tag can share a name, and checkout prefers the branch).
+#   To publish a not-yet-released commit, merge it to `main` (or tag it
+#   `vX.Y.Z`) first; PRs are already built, without pushing, by
+#   docker-pr.yaml.
+#   This is a guard against publishing an unreviewed branch by mistake, not an
+#   access-control boundary: a dispatch runs the copy of this file that lives
+#   on the ref the event is fired against, so someone who can push a branch
+#   can also push an edited copy of the file. Who may dispatch, create tags
+#   and publish releases is controlled by repository settings (rulesets,
+#   environments), not by this file.
 #
 # Limitation (documented per plan acceptance criteria): the workflow_dispatch
 # *event itself* -- i.e. which ref you pick in the "Run workflow" button, or
@@ -13,10 +38,10 @@
 # workflow file to execute, and its API rejects a bare commit SHA there. This
 # is independent of the `ref` input below, which IS just a plain string
 # forwarded to `actions/checkout` and therefore does accept a full commit SHA
-# (as long as it is reachable with `fetch-depth: 0`, set below). Net effect:
-# to publish an arbitrary unreleased commit, push it to a branch or tag
-# first, dispatch the workflow against that ref, and pass whatever revision
-# you want built (branch, tag, or full SHA) as the `ref` input.
+# (as long as it is reachable with `fetch-depth: 0`, set below) -- within the
+# manual publish policy above. Net effect: to publish a specific commit of
+# `main`, dispatch the workflow against `main` (or a tag) and pass that full
+# SHA as the `ref` input.
 #
 # Tagging scheme
 #   release, non-prerelease `vX.Y.Z` / `X.Y.Z`  -> X.Y.Z, X.Y, latest
@@ -25,6 +50,16 @@
 #     (never X.Y, never latest -- neither tag should ever point at a
 #     pre-release build)
 #   workflow_dispatch                            -> dispatch-<ref>-<sha>-<run_id>
+#
+# Provenance and SBOM
+#   Every image pushed here carries a BuildKit SLSA provenance statement and
+#   an SBOM (attached to the image index), plus a signed GitHub artifact
+#   attestation for the index digest (actions/attest-build-provenance, also
+#   stored in GHCR). Verify a pulled or deployed image with
+#     gh attestation verify oci://ghcr.io/agglayer/agglayer-dev-ui@sha256:<digest> --owner agglayer
+#   add `--signer-workflow agglayer/agglayer-dev-ui/.github/workflows/docker-publish.yaml`
+#   to also pin which workflow built it. Signing needs `id-token: write` and
+#   `attestations: write`, granted to the publish job only (see `permissions`).
 #
 # Collision guard (this is the deliberate X-1 attack target -- see
 # plans/dev-ui-docker-ghcr-plan.md's X-1 item 7, "can a dispatch-built tag
@@ -51,10 +86,12 @@ on:
     inputs:
       ref:
         description: >-
-          Branch, tag, or full commit SHA to build and publish (forwarded
-          verbatim to actions/checkout). See the workflow file header for
-          why this is NOT the same as the ref the workflow_dispatch event
-          itself must be fired against (which cannot be a bare SHA).
+          What to build and publish: `main`, a release tag `vX.Y.Z`, or the
+          full 40-character SHA of a commit that is already on `main`
+          (anything else is rejected). Forwarded to actions/checkout. See
+          the workflow file header for the policy and for why this is NOT
+          the same as the ref the workflow_dispatch event itself must be
+          fired against (which cannot be a bare SHA).
         required: true
         default: main
         type: string
@@ -69,9 +106,9 @@ concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false
 
-permissions:
-  contents: read
-  packages: write
+# Nothing at workflow level: the only job below declares exactly what it needs,
+# so a job added to this file later does not inherit package or signing rights.
+permissions: {}
 
 env:
   REGISTRY_IMAGE: ghcr.io/${{ github.repository }}
@@ -81,6 +118,11 @@ jobs:
     name: Build, publish, and verify
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read # actions/checkout
+      packages: write # push the image and its attestation to GHCR
+      id-token: write # OIDC token the build provenance is signed with (Sigstore)
+      attestations: write # store the signed attestation on the repository
     steps:
       - name: Checkout agglayer-dev-ui
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -91,6 +133,53 @@ jobs:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || '' }}
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Validate dispatch ref
+        # Manual publishes only; see "Manual publish policy" in the header.
+        # All branches and tags are present here (fetch-depth: 0), so every
+        # check below is local. Runs before anything is tagged, built or
+        # pushed.
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          # Via env and quoted below, never `${{ }}` inside the script: the
+          # input is free text.
+          DISPATCH_REF: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+
+          # Printable copy of the input for log messages: strip anything that
+          # could smuggle a workflow command or a newline into the log.
+          shown="$(printf '%s' "$DISPATCH_REF" | tr -c 'A-Za-z0-9._/-' '?' | cut -c1-80)"
+
+          fail() {
+            echo "::error::dispatch ref '$shown' is not allowed: $1. Manual publishes accept only 'main', an existing release tag vX.Y.Z, or the full 40-character SHA of a commit already on main (see the header of this workflow)." >&2
+            exit 1
+          }
+
+          main_sha="$(git rev-parse --verify --quiet 'refs/remotes/origin/main^{commit}')" || {
+            echo "::error::cannot resolve origin/main in the checkout; refusing to publish" >&2
+            exit 1
+          }
+          head_sha="$(git rev-parse HEAD)"
+
+          if [ "$DISPATCH_REF" = "main" ]; then
+            want="$main_sha"
+          elif [[ "$DISPATCH_REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            want="$(git rev-parse --verify --quiet "refs/tags/${DISPATCH_REF}^{commit}")" \
+              || fail "tag does not exist"
+          elif [[ "$DISPATCH_REF" =~ ^[0-9a-f]{40}$ ]]; then
+            git merge-base --is-ancestor "$DISPATCH_REF" "$main_sha" \
+              || fail "commit is not on main"
+            want="$DISPATCH_REF"
+          else
+            fail "not main, a vX.Y.Z tag or a full commit SHA"
+          fi
+
+          if [ "$head_sha" != "$want" ]; then
+            fail "the checkout is at ${head_sha:0:12} but the ref resolves to ${want:0:12}"
+          fi
+
+          echo "Dispatch ref '$shown' is allowed (commit $head_sha)."
 
       - name: Resolve build metadata
         id: meta
@@ -205,6 +294,14 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.tags.outputs.tags }}
+          # BuildKit attaches a SLSA provenance statement (mode=max also
+          # records the build args and the Dockerfile source -- fine here:
+          # the repo is public and the only build args are the commit and
+          # the version) and an SPDX SBOM to the image index, one set per
+          # platform. They show up in GHCR as extra `unknown/unknown`
+          # entries of the image; `docker pull`/`run` ignore them.
+          provenance: mode=max
+          sbom: true
           # Threads the commit/version this job already resolved (for
           # image tagging) into the baked public/version.json, via the
           # Dockerfile's DEV_UI_BUILD_COMMIT/DEV_UI_BUILD_VERSION args --
@@ -214,13 +311,41 @@ jobs:
             DEV_UI_BUILD_COMMIT=${{ steps.meta.outputs.built_sha }}
             DEV_UI_BUILD_VERSION=${{ steps.tags.outputs.version }}
 
+      - name: Attest build provenance
+        # Signed, GitHub-issued attestation for the manifest digest just
+        # pushed (the digest of the image index, i.e. what `docker pull
+        # <image>@<digest>` resolves). push-to-registry stores it next to
+        # the image in GHCR as well, so it travels with the image. Consumers
+        # check it with:
+        #   gh attestation verify oci://ghcr.io/agglayer/agglayer-dev-ui@<digest> --owner agglayer
+        # Runs right after the push and before the checks below: the image
+        # is already published at this point, so it should never be left
+        # without its attestation because a later step failed.
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.REGISTRY_IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+          # Off on purpose: the storage record needs `artifact-metadata:
+          # write`, and without it the action only logs a warning on every
+          # run. Turn it on together with that permission if the org wants
+          # the image listed under "Linked artifacts".
+          create-storage-record: false
+
       - name: Verify published manifest
-        run: docker buildx imagetools inspect "${{ env.REGISTRY_IMAGE }}@${{ steps.build.outputs.digest }}"
+        env:
+          IMAGE_REF: ${{ env.REGISTRY_IMAGE }}@${{ steps.build.outputs.digest }}
+        run: docker buildx imagetools inspect "$IMAGE_REF"
 
       - name: Smoke test pushed image
+        env:
+          # Via env, not `${{ }}` inside the script, so no expression value
+          # is ever expanded into shell code.
+          IMAGE_REF: ${{ env.REGISTRY_IMAGE }}@${{ steps.build.outputs.digest }}
+          EXPECTED_COMMIT: ${{ steps.meta.outputs.built_sha }}
+          EXPECTED_VERSION: ${{ steps.tags.outputs.version }}
         run: |
           set -euo pipefail
-          IMAGE_REF="${{ env.REGISTRY_IMAGE }}@${{ steps.build.outputs.digest }}"
 
           docker run -d --name devui-smoke -p 8080:80 "$IMAGE_REF"
 
@@ -256,13 +381,11 @@ jobs:
           # build-args above silently regressing back to the Dockerfile's
           # "unknown" / package.json fallback -- assert the baked
           # /version.json actually carries the values this job resolved.
-          expected_commit="${{ steps.meta.outputs.built_sha }}"
-          expected_version="${{ steps.tags.outputs.version }}"
           version_json="$(curl -fsS http://localhost:8080/version.json)"
           actual_commit="$(echo "$version_json" | jq -r '.commit')"
           actual_version="$(echo "$version_json" | jq -r '.version')"
-          if [ "$actual_commit" != "$expected_commit" ] || [ "$actual_version" != "$expected_version" ]; then
-            echo "::error::published /version.json does not match this build -- expected commit=$expected_commit version=$expected_version, got $version_json" >&2
+          if [ "$actual_commit" != "$EXPECTED_COMMIT" ] || [ "$actual_version" != "$EXPECTED_VERSION" ]; then
+            echo "::error::published /version.json does not match this build -- expected commit=$EXPECTED_COMMIT version=$EXPECTED_VERSION, got $version_json" >&2
             docker logs devui-smoke >&2 || true
             exit 1
           fi
